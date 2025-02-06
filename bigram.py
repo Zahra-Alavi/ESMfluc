@@ -111,36 +111,26 @@ def feature_extraction(sequences, neq_values, version="LR1.0"):
         # Prepare data
         batch_size = 16  # Adjust based on available memory
         seq_embedding = []
-
-        for i in range(0, len(sequences), batch_size):
-            batch_data = [(f"protein_{j}", sequences[j]) for j in range(i, min(i + batch_size, len(sequences)))]
-            batch_labels, batch_strs, batch_tokens = batch_converter(batch_data)
-            
-            with torch.no_grad():
-                results = model(batch_tokens, repr_layers=[6])
-                token_embedding = results["representations"][6]
-            
-            for j, seq in enumerate(batch_data):
-                seq_len = len(seq[1])
-                seq_embedding.append(token_embedding[j, 1:seq_len - 1].mean(dim=0))  # Ignore [CLS] and [EOS]
-
-        seq_embedding = torch.stack(seq_embedding).numpy()
-
+        
         # Move the model to the GPU if available
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
         batch_tokens = batch_tokens.to(device)
 
-        # Extract per-residue representations (on CPU)
-        with torch.no_grad():
-            results = model(batch_tokens, repr_layers=[6])
-            token_embedding = results["representations"][6]
-        
-        # Generate per-sequence representations via averaging (mean-pooling)
-        seq_embedding = []
-        for i, seq in enumerate(sequences):
-            seq_len = len(seq)
-            seq_embedding.append(token_embedding[i, 1:seq_len - 1].mean(dim=0))   # Ignore [CLS] and [EOS]
+        for i in range(0, len(sequences), batch_size):
+            batch_data = [(f"protein_{j}", sequences[j]) for j in range(i, min(i + batch_size, len(sequences)))]
+            batch_labels, batch_strs, batch_tokens = batch_converter(batch_data)
+
+            # Extract per-residue representations (on CPU)
+            with torch.no_grad():
+                results = model(batch_tokens, repr_layers=[6])
+                token_embedding = results["representations"][6]
+            
+            # Generate per-sequence representations via averaging (mean-pooling)
+            seq_embedding = []
+            for i, seq in enumerate(sequences):
+                seq_len = len(seq)
+                seq_embedding.append(token_embedding[i, 1:seq_len - 1].mean(dim=0))   # Ignore [CLS] and [EOS]
         seq_embedding = torch.stack(seq_embedding).numpy()
         features = seq_embedding
         print("Features shape:", features.shape)
