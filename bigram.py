@@ -99,7 +99,8 @@ def feature_extraction(sequences, neq_values, version="LR1.0"):
 
     # Create a dictionary where the key is the amino acid and the value is a list of its characteristics.
     amino_acids_characteristics_dict = {row['Amino Acids']: [row['Charges'], row['Polar'], row['Hydrophobic']] for _, row in amino_acids_characteristics.iterrows()}
-    
+    sequences = sequences.reset_index(drop=True)
+
     if version == "1.3":
         import psutil
         print("Available Memory:", psutil.virtual_memory().available / (1024**3), "GB")
@@ -111,26 +112,32 @@ def feature_extraction(sequences, neq_values, version="LR1.0"):
         # Prepare data
         batch_size = 16  # Adjust based on available memory
         seq_embedding = []
-
         for i in range(0, len(sequences), batch_size):
-            batch_data = [(f"protein_{j}", sequences[j]) for j in range(i, min(i + batch_size, len(sequences)))]
-            batch_labels, batch_strs, batch_tokens = batch_converter(batch_data)
+            #batch_data = [(f"protein_{j}", sequences[j]) for j in range(i, min(i + batch_size, len(sequences)))]
+            print(min(i+batch_size, len(sequences)))
+            batch_data = []
+            for j in range (i, min(i+batch_size, len(sequences))):
+                batch_data.append((f"protein_{j}", sequences[j]))
+                batch_labels, batch_strs, batch_tokens = batch_converter(batch_data)
+                print("Batch token", batch_tokens)
+                print(batch_tokens.shape)
             
-            # Move the model to the GPU if available
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            model.to(device)
-            batch_tokens = batch_tokens.to(device)
+            
+                # Move the model to the GPU if available
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+	        model.to(device)
+	        batch_tokens = batch_tokens.to(device)
 
-            # Extract per-residue representations (on CPU)
-            with torch.no_grad():
-                results = model(batch_tokens, repr_layers=[6])
-                token_embedding = results["representations"][6]
-            
-            # Generate per-sequence representations via averaging (mean-pooling)
-            for i, seq in enumerate(batch_data):
-                seq_len = len(seq)
-                seq_embedding.append(token_embedding[i, 1:seq_len - 1].mean(dim=0))   # Ignore [CLS] and [EOS]
-        seq_embedding = torch.stack(seq_embedding).numpy()
+	        # Extract per-residue representations (on CPU)
+	        with torch.no_grad():
+	            results = model(batch_tokens, repr_layers=[6])
+	            token_embedding = results["representations"][6]
+	    
+	        # Generate per-sequence representations via averaging (mean-pooling)
+	        for i, seq in enumerate(batch_data):
+	            seq_len = len(seq)
+	            seq_embedding.append(token_embedding[i, 1:seq_len - 1].mean(dim=0))   # Ignore [CLS] and [EOS]
+        seq_embedding = torch.stack(seq_embedding).cpu().numpy()
         features = seq_embedding
         print("Features shape:", features.shape)
         print("Feautres:", features)
