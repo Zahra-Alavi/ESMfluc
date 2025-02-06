@@ -101,6 +101,7 @@ def feature_extraction(sequences, neq_values, version="LR1.0"):
     # Create a dictionary where the key is the amino acid and the value is a list of its characteristics.
     amino_acids_characteristics_dict = {row['Amino Acids']: [row['Charges'], row['Polar'], row['Hydrophobic']] for _, row in amino_acids_characteristics.iterrows()}
     sequences = sequences.reset_index(drop=True)
+    neq_values = neq_values.reset_index(drop=True)
 
     if version == "1.3":
         # Load ESM model
@@ -113,37 +114,19 @@ def feature_extraction(sequences, neq_values, version="LR1.0"):
         model.to(device)
 
         # Batch Processing
-        batch_size = 16  # Adjust based on available memory
         seq_embedding = []
-
-        for i in range(0, len(sequences), batch_size):
-            batch_data = [(f"protein_{j}", sequences[j]) for j in range(i, min(i + batch_size, len(sequences)))]
+        
+        for i in range(0, len(sequences), 1):
+            data = [(f"protein_{i}", sequences[i])]
+            labels, strs, tokens = batch_converter(data)
             
-            # Convert batch to tensor
-            batch_labels, batch_strs, batch_tokens = batch_converter(batch_data)
-            
-            batch_tokens = batch_tokens.to(device)
-
-            # Extract per-residue representations
             with torch.no_grad():
-                results = model(batch_tokens, repr_layers=[6])
+                results = model(tokens.to(device), repr_layers=[6])
                 token_embedding = results["representations"][6]
-
-            # Generate per-sequence representations via mean-pooling
-            for j, (_, seq) in enumerate(batch_data):
-                seq_len = len(seq)  # Actual sequence length (excluding special tokens)
-                
-                # Ignore [CLS] and [EOS] tokens
-                seq_repr = token_embedding[j, 1:seq_len + 1].mean(dim=0)  
-                seq_embedding.append(seq_repr)
-
-        # Convert to numpy array
-        seq_embedding = torch.stack(seq_embedding).cpu().numpy()
+                residue_embeddings = token_embedding[0, 1:-1]
+                seq_embedding.extend(residue_embeddings.cpu().numpy())
+                targets.extend(neq_values[i])
         features = seq_embedding
-        targets = np.array(neq_values)
-
-        print("Features shape:", features.shape)
-        print("Targets shape:", targets.shape)
     else:
         for seq, neq_seq in zip(sequences, neq_values):
             for i, aa in enumerate(seq):
