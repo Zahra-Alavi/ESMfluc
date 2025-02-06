@@ -111,15 +111,15 @@ def feature_extraction(sequences, neq_values, version="LR1.0"):
         # Prepare data
         batch_size = 16  # Adjust based on available memory
         seq_embedding = []
-        
-        # Move the model to the GPU if available
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.to(device)
-        batch_tokens = batch_tokens.to(device)
 
         for i in range(0, len(sequences), batch_size):
             batch_data = [(f"protein_{j}", sequences[j]) for j in range(i, min(i + batch_size, len(sequences)))]
             batch_labels, batch_strs, batch_tokens = batch_converter(batch_data)
+            
+            # Move the model to the GPU if available
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model.to(device)
+            batch_tokens = batch_tokens.to(device)
 
             # Extract per-residue representations (on CPU)
             with torch.no_grad():
