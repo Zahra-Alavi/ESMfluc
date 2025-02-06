@@ -127,8 +127,7 @@ def feature_extraction(sequences, neq_values, version="LR1.0"):
                 token_embedding = results["representations"][6]
             
             # Generate per-sequence representations via averaging (mean-pooling)
-            seq_embedding = []
-            for i, seq in enumerate(sequences):
+            for i, seq in enumerate(batch_data):
                 seq_len = len(seq)
                 seq_embedding.append(token_embedding[i, 1:seq_len - 1].mean(dim=0))   # Ignore [CLS] and [EOS]
         seq_embedding = torch.stack(seq_embedding).numpy()
