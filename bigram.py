@@ -101,15 +101,36 @@ def feature_extraction(sequences, neq_values, version="LR1.0"):
     amino_acids_characteristics_dict = {row['Amino Acids']: [row['Charges'], row['Polar'], row['Hydrophobic']] for _, row in amino_acids_characteristics.iterrows()}
     
     if version == "1.3":
-        model, alphabet = esm.pretrained.esm2_t12_35M_UR50D()
+        import psutil
+        print("Available Memory:", psutil.virtual_memory().available / (1024**3), "GB")
+
+        model, alphabet = esm.pretrained.esm2_t6_8M_UR50D()
         batch_converter = alphabet.get_batch_converter()
         model.eval()
         
         # Prepare data
-        data = [(f"protein_{i}", seq) for i, seq in enumerate(sequences)]
-        batch_labels, batch_strs, batch_tokens = batch_converter(data)
-        batch_lens = (batch_tokens != alphabet.padding_idx).sum(1)
-        
+        batch_size = 16  # Adjust based on available memory
+        seq_embedding = []
+
+        for i in range(0, len(sequences), batch_size):
+            batch_data = [(f"protein_{j}", sequences[j]) for j in range(i, min(i + batch_size, len(sequences)))]
+            batch_labels, batch_strs, batch_tokens = batch_converter(batch_data)
+            
+            with torch.no_grad():
+                results = model(batch_tokens, repr_layers=[6])
+                token_embedding = results["representations"][6]
+            
+            for j, seq in enumerate(batch_data):
+                seq_len = len(seq[1])
+                seq_embedding.append(token_embedding[j, 1:seq_len - 1].mean(dim=0))  # Ignore [CLS] and [EOS]
+
+        seq_embedding = torch.stack(seq_embedding).numpy()
+
+        # Move the model to the GPU if available
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+        batch_tokens = batch_tokens.to(device)
+
         # Extract per-residue representations (on CPU)
         with torch.no_grad():
             results = model(batch_tokens, repr_layers=[6])
