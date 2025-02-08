@@ -1,0 +1,36 @@
+"""
+Description: This file contains the DataLoader class which is used to load the data from the csv file and split it into training, validation and test sets.
+Date: 2025-02-07
+Author: Ngoc Kim Ngan Tran
+"""
+
+import pandas as pd
+from decimal import Decimal
+from sklearn.model_selection import train_test_split
+from features import *
+
+class DataLoader:
+    def __init__(self, file_path, feature_engineering_version, binary_classification=False):
+        self.data = pd.read_csv(file_path)
+        self.sequences = self.data['sequence']
+        self.neq_values = self.data['neq'].apply(lambda x: x.replace('[', '').replace(']', '').split(','))
+        self.neq_values = self.neq_values.apply(lambda x: [Decimal(i) for i in x])
+        self.binary_classification = binary_classification
+        
+        # Feature extraction
+        feature_extractor_class = globals().get(f"FeatureExtraction{feature_engineering_version.replace('.', '_')}", None)
+        if feature_extractor_class is None:
+            raise ValueError(f"Invalid feature engineering version: {feature_engineering_version}")
+
+        self.feature_extractor = feature_extractor_class()
+        self.features, self.targets = self.feature_extractor.extract_features(self.sequences, self.neq_values)
+
+    def split_data(self, test_size=0.2, val_size=0.5, random_state=42):
+        if self.binary_classification:
+            self.targets = self.classify_neq(self.targets)
+        x_train, x_test, y_train, y_test = train_test_split(self.features, self.targets, test_size=test_size, random_state=random_state)
+        x_val, x_test, y_val, y_test = train_test_split(x_test, y_test, test_size=val_size, random_state=random_state)
+        return x_train, x_val, x_test, y_train, y_val, y_test
+    
+    def classify_neq(self, neq_values):
+        return [0 if neq == Decimal("1.0") else 1 for neq in neq_values]
