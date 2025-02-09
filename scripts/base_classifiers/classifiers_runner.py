@@ -45,7 +45,7 @@ def main():
     args = parser.parse_args()
     if not (args.all or args.data_learning or args.model):
         print("No task specified. Use --help for usage information.")
-    data_loader = DataLoader("data/neq_training_data.csv", args.feature_engineering_version, binary_classification=True)
+    data_loader = DataLoader("../../data/neq_training_data.csv", args.feature_engineering_version, binary_classification=True)
     X_train, X_val, X_test, y_train, y_val, y_test = data_loader.split_data()
     if args.all:
         print("Running all tasks...")
