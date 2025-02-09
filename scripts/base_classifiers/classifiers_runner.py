@@ -32,8 +32,14 @@ def main():
     parser.add_argument(
         "--feature_engineering_version",
         type=str,
-        default="1.0",
-        help="Optional version number for feature engineering (default: 1.0)."
+        default="1.1",
+        help="Optional version number for feature engineering (default: 1.1)."
+    )
+    parser.add_argument(
+        "--hyperameter_tuning",
+        type=bool,
+        default=False,
+        help="Optional hyperparameter tuning for logistic regression/random forest model (default: False)."
     )
 
     args = parser.parse_args()
@@ -44,9 +50,9 @@ def main():
     if args.all:
         print("Running all tasks...")
         DataLearning(data_loader.sequences, data_loader.neq_values).analyze_data()
-        rf = RandomForestClassifierModel(X_train, y_train, X_test, y_test)
+        rf = RandomForestClassifierModel(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
         print(rf.evaluate(rf.predict()))
-        lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test)
+        lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
         print(lr.evaluate(lr.predict()))
     else:
         if args.data_learning:
@@ -56,13 +62,13 @@ def main():
 
         if args.model == "RandomForestClassifier":
             print("Running Random Forest classifier...")
-            rf = RandomForestClassifierModel(X_train, y_train, X_test, y_test)
+            rf = RandomForestClassifierModel(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
             rf.fit()
             print(rf.evaluate(rf.predict()))
 
         elif args.model == "LogisticRegressionClassifier":
             print("Running Logistic Regression classifier...")
-            lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test)
+            lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
             lr.fit()
             print(lr.evaluate(lr.predict()))
 

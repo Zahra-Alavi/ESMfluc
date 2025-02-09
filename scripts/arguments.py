@@ -17,7 +17,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Train a flexible ESM-based classification model.")
 
     # Data and basic setup
-    parser.add_argument("--csv_path", type=str, default="data/neq_training_data.csv",
+    parser.add_argument("--csv_path", type=str, default="../data/neq_training_data.csv",
                         help="Path to the input CSV containing sequences and Neq values.default=neq_training_data.csv")
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size. default=4")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs. default=20")
