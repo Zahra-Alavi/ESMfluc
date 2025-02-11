@@ -29,7 +29,7 @@ class BaseClassifier:
     
     def evaluate(self, y_pred):
         """Evaluate the model using classification report."""
-        return classification_report(self.y_test, y_pred, output_dict=True)
+        print(classification_report(self.y_test, y_pred, output_dict=True))
 
 class BaselineClassifier(BaseClassifier):
     def fit(self):
@@ -44,7 +44,7 @@ class BaselineClassifier(BaseClassifier):
     
     def evaluate(self, y_pred):
         """Computes simple accuracy for baseline model."""
-        return np.mean(y_pred == self.y_test)
+        print (np.mean(y_pred == self.y_test))
 
 class SklearnClassifier(BaseClassifier):
     def __init__(self, x_train, y_train, x_test, y_test, model):
@@ -67,7 +67,7 @@ class LogisticRegressionClassifier(SklearnClassifier):
             'penalty': ['l1', 'l2'],  # Regularization type
             'tol': [1e-4, 1e-3, 1e-2],  # Tolerance for stopping criteria
             'class_weight': ['balanced', None],  # Weights associated with classes
-            'n_jobs': [-1],
+            #'n_jobs': [-1],
         }
         grid_search = GridSearchCV(LogisticRegression(solver='liblinear', random_state=42), param_grid, cv=5, scoring='accuracy', n_jobs=-1)
         grid_search.fit(x_train, y_train)
