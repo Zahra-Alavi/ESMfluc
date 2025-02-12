@@ -29,7 +29,7 @@ class BaseClassifier:
     
     def evaluate(self, y_pred):
         """Evaluate the model using classification report."""
-        print(classification_report(self.y_test, y_pred, output_dict=True))
+        return classification_report(self.y_test, y_pred, output_dict=True)
 
 class BaselineClassifier(BaseClassifier):
     def fit(self):

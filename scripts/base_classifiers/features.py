@@ -67,10 +67,12 @@ class FeatureExtraction1_2(FeatureExtraction1_1):
     def extract_features(self, sequences, neq_values):
         print("Feature extraction version 1.2")
         features, targets = super().extract_features(sequences, neq_values)
+        features_index = 0
         for i, seq in enumerate(sequences):
             for j, aa in enumerate(seq):
                 if aa in self.characteristics_dict:
-                    features[i * len(seq) + j] += self.characteristics_dict[aa]
+                    features[features_index] += self.characteristics_dict[aa]
+                features_index += 1
         return features, targets
 
 class FeatureExtraction1_3(BaseFeatureExtraction):

@@ -51,9 +51,9 @@ def main():
         print("Running all tasks...")
         DataLearning(data_loader.sequences, data_loader.neq_values).analyze_data()
         rf = RandomForestClassifierModel(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
-        rf.evaluate(rf.predict())
+        print(rf.evaluate(rf.predict()))
         lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
-        lr.evaluate(lr.predict())
+        print(lr.evaluate(lr.predict()))
     else:
         if args.data_learning:
             print("Running data learning...")
@@ -64,13 +64,12 @@ def main():
             print("Running Random Forest classifier...")
             rf = RandomForestClassifierModel(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
             rf.fit()
-            rf.evaluate(rf.predict())
-
+            print(rf.evaluate(rf.predict()))
         elif args.model == "LogisticRegressionClassifier":
             print("Running Logistic Regression classifier...")
             lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
             lr.fit()
-            lr.evaluate(lr.predict())
+            print(lr.evaluate(lr.predict()))
 
 
 if __name__ == "__main__":
