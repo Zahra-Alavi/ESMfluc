@@ -51,7 +51,6 @@ def extract_features(sequence, window_size=2, characteristics_dict=None, selecte
 
     return features
 
-# Function to classify Neq values
 def classify_neq(neq_values):
     return ["0" if Decimal(neq) == Decimal("1.0") else "1" for neq in neq_values]
 
@@ -65,19 +64,14 @@ def parse_args():
     return parser.parse_args()
 
 def main():
-    # Parse command-line arguments
     args = parse_args()
 
-    # Read in amino acid characteristics
     amino_acids_characteristics = pd.read_csv(args.amino_acids_file)
-
-    # Build a dictionary for amino acid characteristics
     characteristics_dict = {
         row['Amino Acids']: [row['Charges'], row['Polar'], row['Hydrophobic'], row['Molecular Weight'], row['Molecular Formula'], row['Residue Formula'], row['Residue Weight'], row['pKa'], row['pKb'], row['pKx'], row['pI']]
         for _, row in amino_acids_characteristics.iterrows()
     }
 
-    # Load training data
     data = pd.read_csv(args.training_data_file)
     sequences = data["sequence"].tolist()
 
@@ -87,9 +81,8 @@ def main():
 
     # Extract features for each sequence
     selected_features = args.features.split(",")  # List of features user wants to use
-    X = [extract_features(seq, window_size=args.window_size, characteristics_dict=characteristics_dict, selected_features=selected_features) for seq in sequences]
 
-    # Create labels
+    X = [extract_features(seq, window_size=args.window_size, characteristics_dict=characteristics_dict, selected_features=selected_features) for seq in sequences]
     y = labels.tolist()
 
     # Split the data into training and testing sets
@@ -107,7 +100,6 @@ def main():
     crf.fit(X_train, y_train)
     y_pred = crf.predict(X_test)
 
-    # Flatten y_test and y_pred (i.e., turn the list of lists into a single list)
     y_test_flat = [item for sublist in y_test for item in sublist]
     y_pred_flat = [item for sublist in y_pred for item in sublist]
 
