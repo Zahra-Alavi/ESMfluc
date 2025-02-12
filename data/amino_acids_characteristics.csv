@@ -1,4 +1,4 @@
-Name,Amino Acids,Charges,Polar,Hydrophobic,Molecular Weight,Molecular Formula,Residue Formula,Residue Weight,pKa,pKb,pKx,pI
+name,amino_acids,charges,polar,hydrophobic,molecular_weight,molecular_formula,residue_Formula,residue_weight,pka,pkb,pkx,pi
 Alanine,A,0,0,1,89.1,C3H7NO2,C3H5NO,71.08,2.34,9.69,–,6
 Cysteine,C,0,1,1,121.16,C3H7NO2S,C3H5NOS,103.15,1.96,10.28,8.18,5.07
 Aspartic acid,D,-1,1,0,133.11,C4H7NO4,C4H5NO3,115.09,1.88,9.6,3.65,2.77

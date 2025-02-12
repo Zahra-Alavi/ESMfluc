@@ -44,7 +44,7 @@ class BaselineClassifier(BaseClassifier):
     
     def evaluate(self, y_pred):
         """Computes simple accuracy for baseline model."""
-        print (np.mean(y_pred == self.y_test))
+        return (np.mean(y_pred == self.y_test))
 
 class SklearnClassifier(BaseClassifier):
     def __init__(self, x_train, y_train, x_test, y_test, model):

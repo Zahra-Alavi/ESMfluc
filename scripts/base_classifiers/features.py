@@ -35,7 +35,6 @@ class FeatureExtraction1_0(BaseFeatureExtraction):
                 next_neq = float(neq_seq[i + 1]) if i < len(seq) - 1 else 0.0
                 features.append(aa_encoded + [prev_neq, next_neq, position])
                 targets.append(float(neq_seq[i]))
-        print("targets", targets)
         return features, targets
 
 class FeatureExtraction1_1(BaseFeatureExtraction):
