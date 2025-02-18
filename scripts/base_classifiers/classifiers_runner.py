@@ -8,7 +8,7 @@ import argparse
 from data_loader import DataLoader
 from classifiers_models import *
 from data_learning import DataLearning
-
+from esm_models_learning import ESMModelLearning
 def main():
     parser = argparse.ArgumentParser(description="Run data analysis, feature engineering, regression, or classification tasks.")
 
@@ -48,36 +48,45 @@ def main():
         default="esm2_t6_8M_UR50D",
         help="Optional ESM model to use for feature extraction (default: esm2_t6_8M_UR50D)."
     )
+    
+    parser.add_argument(
+        "--esm_model_learning",
+        type=bool,
+        default=False,
+        help="Optional ESM model learning to find the best model for the task (default: False)."
+    )
 
     args = parser.parse_args()
-    if not (args.all or args.data_learning or args.model):
+    if not (args.all or args.data_learning or args.model or args.esm_model_learning):
         print("No task specified. Use --help for usage information.")
-    data_loader = DataLoader("../../data/neq_training_data.csv", args.feature_engineering_version, args.esm_model, binary_classification=True)
-    X_train, X_val, X_test, y_train, y_val, y_test = data_loader.split_data()
-    if args.all:
-        print("Running all tasks...")
-        DataLearning(data_loader.sequences, data_loader.neq_values).analyze_data()
-        rf = RandomForestClassifierModel(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
-        print(rf.evaluate(rf.predict()))
-        lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
-        print(lr.evaluate(lr.predict()))
+        
+    if args.esm_model_learning:
+        ESMModelLearning().run()
     else:
-        if args.data_learning:
-            print("Running data learning...")
+        data_loader = DataLoader("../../data/neq_training_data.csv", args.feature_engineering_version, args.esm_model, binary_classification=True)
+        X_train, X_val, X_test, y_train, y_val, y_test = data_loader.split_data()
+        if args.all:
+            print("Running all tasks...")
             DataLearning(data_loader.sequences, data_loader.neq_values).analyze_data()
-            print("Data learning complete.")
-
-        if args.model == "RandomForestClassifier":
-            print("Running Random Forest classifier...")
             rf = RandomForestClassifierModel(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
-            rf.fit()
             print(rf.evaluate(rf.predict()))
-        elif args.model == "LogisticRegressionClassifier":
-            print("Running Logistic Regression classifier...")
             lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
-            lr.fit()
             print(lr.evaluate(lr.predict()))
+        else:
+            if args.data_learning:
+                print("Running data learning...")
+                DataLearning(data_loader.sequences, data_loader.neq_values).analyze_data()
+                print("Data learning complete.")
 
-
+            if args.model == "RandomForestClassifier":
+                print("Running Random Forest classifier...")
+                rf = RandomForestClassifierModel(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
+                rf.fit()
+                print(rf.evaluate(rf.predict()))
+            elif args.model == "LogisticRegressionClassifier":
+                print("Running Logistic Regression classifier...")
+                lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
+                lr.fit()
+                print(lr.evaluate(lr.predict()))
 if __name__ == "__main__":
     main()
