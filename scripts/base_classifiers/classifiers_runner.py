@@ -45,14 +45,14 @@ def main():
     parser.add_argument(
         "--esm_model",
         type=str,
-        default="esm1_t6_43M_UR50S",
+        default="esm2_t6_8M_UR50D",
         help="Optional ESM model to use for feature extraction (default: esm2_t6_8M_UR50D)."
     )
 
     args = parser.parse_args()
     if not (args.all or args.data_learning or args.model):
         print("No task specified. Use --help for usage information.")
-    data_loader = DataLoader("../../data/neq_training_data.csv", args.feature_engineering_version, args.esm_model_name, binary_classification=True)
+    data_loader = DataLoader("../../data/neq_training_data.csv", args.feature_engineering_version, args.esm_model, binary_classification=True)
     X_train, X_val, X_test, y_train, y_val, y_test = data_loader.split_data()
     if args.all:
         print("Running all tasks...")
