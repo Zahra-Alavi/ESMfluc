@@ -78,6 +78,7 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
     def __init__(self, model_name):
         super().__init__()
         print("ESM embedding with ESM model:", model_name)
+        self.model_name = model_name
         self._load_esm_model(model_name)
 
     def _load_esm_model(self, model_name):
@@ -98,7 +99,11 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
             with torch.no_grad():
                 results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
                 token_embedding = results["representations"][self.repr_layers]
-                residue_embeddings = token_embedding[0, 1:-1]
+                # If model is ESM 2 then token embedding is 1:-1 for second dimension, else 1: for esm 1
+                if self.model_name.startswith("esm1"):
+                    residue_embeddings = token_embedding[0, 1:]
+                else:
+                    residue_embeddings = token_embedding[0, 1:-1]
                 seq_embedding.extend(residue_embeddings.cpu().numpy())
                 targets.extend(neq_values[i])
         return seq_embedding, targets
