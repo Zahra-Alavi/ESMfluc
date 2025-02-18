@@ -41,6 +41,13 @@ def main():
         default=False,
         help="Optional hyperparameter tuning for logistic regression/random forest model (default: False)."
     )
+    
+    parser.add_argument(
+        "--esm_model",
+        type=str,
+        default="esm1_t6_43M_UR50S",
+        help="Optional ESM model to use for feature extraction (default: esm2_t6_8M_UR50D)."
+    )
 
     args = parser.parse_args()
     if not (args.all or args.data_learning or args.model):

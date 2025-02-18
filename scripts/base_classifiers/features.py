@@ -75,12 +75,13 @@ class FeatureExtraction1_2(FeatureExtraction1_1):
         return features, targets
 
 class FeatureExtraction1_3(BaseFeatureExtraction):
-    def __init__(self):
+    def __init__(self, model_name):
         super().__init__()
-        self._load_esm_model()
+        print("ESM embedding with ESM model:", model_name)
+        self._load_esm_model(model_name)
 
-    def _load_esm_model(self):
-        self.model, self.alphabet = esm.pretrained.esm2_t6_8M_UR50D()
+    def _load_esm_model(self, model_name):
+        self.model, self.alphabet = esm.pretrained.load_model_and_alphabet(model_name)
         self.batch_converter = self.alphabet.get_batch_converter()
         self.model.eval()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
