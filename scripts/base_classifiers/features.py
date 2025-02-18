@@ -86,6 +86,7 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         self.model.eval()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
+        self.repr_layers = int(model_name.split("_")[1].replace("t", ""))
     
     def extract_features(self, sequences, neq_values):
         print("Feature extraction version 1.3")
@@ -95,8 +96,8 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
             labels, strs, tokens = self.batch_converter(data)
             
             with torch.no_grad():
-                results = self.model(tokens.to(self.device), repr_layers=[6])
-                token_embedding = results["representations"][6]
+                results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
+                token_embedding = results["representations"][self.repr_layers]
                 residue_embeddings = token_embedding[0, 1:-1]
                 seq_embedding.extend(residue_embeddings.cpu().numpy())
                 targets.extend(neq_values[i])
