@@ -89,21 +89,56 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         self.model.to(self.device)
         self.repr_layers = int(model_name.split("_")[1].replace("t", ""))
     
-    def extract_features(self, sequences, neq_values):
-        print("Feature extraction version 1.3")
-        seq_embedding, targets = [], []
-        for i, seq in enumerate(sequences):
-            data = [(f"protein_{i}", seq)]
-            labels, strs, tokens = self.batch_converter(data)
+    # def extract_features(self, sequences, neq_values):
+    #     print("Feature extraction version 1.3")
+    #     seq_embedding, targets = [], []
+    #     for i, seq in enumerate(sequences):
+    #         data = [(f"protein_{i}", seq)]
+    #         labels, strs, tokens = self.batch_converter(data)
             
-            with torch.no_grad():
-                results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
-                token_embedding = results["representations"][self.repr_layers]
-                # If model is ESM 2 then token embedding is 1:-1 for second dimension, else 1: for esm 1
-                if self.model_name.startswith("esm1"):
-                    residue_embeddings = token_embedding[0, 1:]
-                else:
-                    residue_embeddings = token_embedding[0, 1:-1]
-                seq_embedding.extend(residue_embeddings.cpu().numpy())
-                targets.extend(neq_values[i])
+    #         with torch.no_grad():
+    #             results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
+    #             token_embedding = results["representations"][self.repr_layers]
+    #             # If model is ESM 2 then token embedding is 1:-1 for second dimension, else 1: for esm 1
+    #             if self.model_name.startswith("esm1"):
+    #                 residue_embeddings = token_embedding[0, 1:]
+    #             else:
+    #                 residue_embeddings = token_embedding[0, 1:-1]
+    #             seq_embedding.extend(residue_embeddings.cpu().numpy())
+    #             targets.extend(neq_values[i])
+    #     return seq_embedding, targets
+    def extract_features(self, sequences, neq_values):
+        print("Feature extraction version 1.3 using two GPUs")
+        
+        seq_embedding, targets = [], []
+        num_gpus = torch.cuda.device_count()
+        device0 = torch.device("cuda:0")
+        device1 = torch.device("cuda:1") if num_gpus > 1 else device0  # Use one or two GPUs
+
+        # Split sequences across GPUs
+        split_idx = len(sequences) // 2
+        seq_batches = [(sequences[:split_idx], neq_values[:split_idx], device0),
+                    (sequences[split_idx:], neq_values[split_idx:], device1)]
+        
+        for seqs, neqs, device in seq_batches:
+            self.model.to(device)  # Move model to the correct GPU
+            print(f"Processing {len(seqs)} sequences on {device}")
+            
+            for i, seq in enumerate(seqs):
+                data = [(f"protein_{i}", seq)]
+                labels, strs, tokens = self.batch_converter(data)
+                
+                with torch.no_grad():
+                    results = self.model(tokens.to(device), repr_layers=[self.repr_layers])
+                    token_embedding = results["representations"][self.repr_layers]
+                    
+                    # Adjust embedding extraction for ESM1 vs ESM2
+                    if self.model_name.startswith("esm1"):
+                        residue_embeddings = token_embedding[0, 1:]
+                    else:
+                        residue_embeddings = token_embedding[0, 1:-1]
+
+                    seq_embedding.extend(residue_embeddings.cpu().numpy())
+                    targets.extend(neqs[i])
+
         return seq_embedding, targets
