@@ -114,7 +114,10 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         num_gpus = torch.cuda.device_count()
         device0 = torch.device("cuda:0")
         device1 = torch.device("cuda:1") if num_gpus > 1 else device0  # Use one or two GPUs
-
+        print("Len sequences", len(sequences))
+        print("Len neq_values", len(neq_values))
+        print("Totat amino acids in all sequences:", sum([len(seq) for seq in sequences]))
+        print("Total neq values:", sum([len(neq) for neq in neq_values]))
         # Split sequences across GPUs
         split_idx = len(sequences) // 2
         seq_batches = [(sequences[:split_idx], neq_values[:split_idx], device0),
@@ -139,6 +142,8 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
                         residue_embeddings = token_embedding[0, 1:-1]
 
                     seq_embedding.extend(residue_embeddings.cpu().numpy())
-                    targets.extend(neqs[i])
+                    torch.cuda.empty_cache()
+            for neq in neqs:
+                targets.extend(neq)
 
         return seq_embedding, targets
