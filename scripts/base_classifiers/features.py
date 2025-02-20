@@ -89,24 +89,6 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         self.model.to(self.device)
         self.repr_layers = int(model_name.split("_")[1].replace("t", ""))
     
-    # def extract_features(self, sequences, neq_values):
-    #     print("Feature extraction version 1.3")
-    #     seq_embedding, targets = [], []
-    #     for i, seq in enumerate(sequences):
-    #         data = [(f"protein_{i}", seq)]
-    #         labels, strs, tokens = self.batch_converter(data)
-            
-    #         with torch.no_grad():
-    #             results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
-    #             token_embedding = results["representations"][self.repr_layers]
-    #             # If model is ESM 2 then token embedding is 1:-1 for second dimension, else 1: for esm 1
-    #             if self.model_name.startswith("esm1"):
-    #                 residue_embeddings = token_embedding[0, 1:]
-    #             else:
-    #                 residue_embeddings = token_embedding[0, 1:-1]
-    #             seq_embedding.extend(residue_embeddings.cpu().numpy())
-    #             targets.extend(neq_values[i])
-    #     return seq_embedding, targets
     def extract_features(self, sequences, neq_values):
         print("Feature extraction version 1.3 using two GPUs")
         
@@ -114,10 +96,6 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         num_gpus = torch.cuda.device_count()
         device0 = torch.device("cuda:0")
         device1 = torch.device("cuda:1") if num_gpus > 1 else device0  # Use one or two GPUs
-        print("Len sequences", len(sequences))
-        print("Len neq_values", len(neq_values))
-        print("Totat amino acids in all sequences:", sum([len(seq) for seq in sequences]))
-        print("Total neq values:", sum([len(neq) for neq in neq_values]))
         # Split sequences across GPUs
         split_idx = len(sequences) // 2
         seq_batches = [(sequences[:split_idx], neq_values[:split_idx], device0),
