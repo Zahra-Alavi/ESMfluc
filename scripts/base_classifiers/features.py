@@ -90,6 +90,7 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
             # offload the model to CPU to reduce GPU memory usage. Ex: https://github.com/facebookresearch/esm/blob/main/examples/esm2_infer_fairscale_fsdp_cpu_offloading.py
 
             # init the distributed world with world_size 1
+            print("Offload the model to CPU to reduce GPU memory usage")
             url = "tcp://localhost:23456"
             torch.distributed.init_process_group(backend="nccl", init_method=url, world_size=1, rank=0)
             
@@ -117,6 +118,7 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
                             wrapped_layer = wrap(layer)
                             setattr(child, layer_name, wrapped_layer)
                 self.model = wrap(model)
+                print("Model wrapped with FSDP")
         else:
             self.model, alphabet = esm.pretrained.load_model_and_alphabet(model_name)
             self.batch_converter = alphabet.get_batch_converter()
@@ -130,6 +132,7 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         for i, seq in enumerate(sequences):
             data = [(f"protein_{i}", seq)]
             labels, strs, tokens = self.batch_converter(data)
+            print("Self.device:", self.device)
             with torch.no_grad():
                 results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
                 token_embedding = results["representations"][self.repr_layers]

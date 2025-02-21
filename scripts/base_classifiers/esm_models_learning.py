@@ -9,8 +9,8 @@ class ESMModelLearning:
     
     def run(self):
         print("Running ESM model learning for different ESM models...")
-        # "esm1_t6_43M_UR50S", "esm1_t12_85M_UR50S", "esm1_t34_670M_UR100", "esm1_t34_670M_UR50D", "esm1_t34_670M_UR50S", "esm1b_t33_650M_UR50S", "esm_msa1_t12_100M_UR50S", "esm_msa1b_t12_100M_UR50S", "esm1v_t33_650M_UR90S_[1-5]", "esm_if1_gvp4_t16_142M_UR50", "esmfold_v0", "esmfold_v1",
-        esm_models = ["esm1_t6_43M_UR50S", "esm1_t12_85M_UR50S", "esm1_t34_670M_UR100", "esm1_t34_670M_UR50D", "esm1_t34_670M_UR50S","esm2_t6_8M_UR50D", "esm2_t12_35M_UR50D", "esm2_t30_150M_UR50D", "esm2_t33_650M_UR50D", "esm2_t36_3B_UR50D", "esm2_t48_15B_UR50D"]
+        # esm_models = ["esm1_t6_43M_UR50S", "esm1_t12_85M_UR50S", "esm1_t34_670M_UR100", "esm1_t34_670M_UR50D", "esm1_t34_670M_UR50S","esm2_t6_8M_UR50D", "esm2_t12_35M_UR50D", "esm2_t30_150M_UR50D", "esm2_t33_650M_UR50D", "esm2_t36_3B_UR50D", "esm2_t48_15B_UR50D"]
+        esm_models = ["esm2_t48_15B_UR50D"]
         results = []
         if not os.path.exists("../../results"):
             os.makedirs("../../results")
