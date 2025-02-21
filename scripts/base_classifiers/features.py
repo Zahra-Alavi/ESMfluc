@@ -84,6 +84,8 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         self._load_esm_model(model_name)
 
     def _load_esm_model(self, model_name):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.repr_layers = int(model_name.split("_")[1].replace("t", ""))
         if model_name == "esm2_t48_15B_UR50D":
             # offload the model to CPU to reduce GPU memory usage. Ex: https://github.com/facebookresearch/esm/blob/main/examples/esm2_infer_fairscale_fsdp_cpu_offloading.py
 
@@ -120,8 +122,6 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
             self.batch_converter = alphabet.get_batch_converter()
             self.model.eval()
             self.model.to(self.device)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.repr_layers = int(model_name.split("_")[1].replace("t", ""))
     
     def extract_features(self, sequences, neq_values):
         print("Feature extraction version 1.3")
