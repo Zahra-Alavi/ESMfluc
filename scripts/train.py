@@ -81,6 +81,11 @@ def evaluate_model_and_save_plots(model, data_loader, device, fold, num_classes,
     cm = confusion_matrix(all_labels, all_preds)
     print(f"\nFold {fold} Classification Report:\n{report}")
     print(f"Fold {fold} Confusion Matrix:\n{cm}")
+    
+    # Save classification report to a text file
+    with open(f'classification_report_fold_{fold}.txt', 'w') as f:
+        f.write(f"Fold {fold} Classification Report:\n{report}\n")
+        f.write(f"Fold {fold} Confusion Matrix:\n{cm}\n")
 
     disp = ConfusionMatrixDisplay(confusion_matrix=cm)
     disp.plot(cmap='Blues')
