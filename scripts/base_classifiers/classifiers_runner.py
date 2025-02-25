@@ -64,7 +64,7 @@ def main():
         ESMModelLearning().run()
     else:
         data_loader = DataLoader("../../data/neq_training_data.csv", args.feature_engineering_version, args.esm_model, binary_classification=True)
-        X_train, X_val, X_test, y_train, y_val, y_test = data_loader.split_data()
+        X_train, X_test, y_train, y_test = data_loader.split_data()
         if args.all:
             print("Running all tasks...")
             DataLearning(data_loader.sequences, data_loader.neq_values).analyze_data()

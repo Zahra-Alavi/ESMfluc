@@ -21,7 +21,7 @@ class ESMModelLearning:
             f.write(tabulate([], headers=["Model", "Class", "Accuracy", "Macro F1", "Weighted F1"], tablefmt="github"))
         for model in esm_models:
             data_loader = DataLoader("../../data/neq_training_data.csv", "1.3", model, binary_classification=True)
-            X_train, X_val, X_test, y_train, y_val, y_test = data_loader.split_data()
+            X_train, X_test, y_train, y_test = data_loader.split_data()
             lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test, False)
             lr.fit()
             stats = lr.evaluate(lr.predict())

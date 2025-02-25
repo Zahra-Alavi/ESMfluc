@@ -61,7 +61,7 @@ class FeatureExtraction1_2(FeatureExtraction1_1):
         self.amino_acids_characteristics = pd.read_csv('../../data/amino_acids_characteristics.csv')
         self.amino_acids_characteristics.columns = self.amino_acids_characteristics.columns.str.strip()
         self.characteristics_dict = {
-            row['Amino Acids']: [row['Charges'], row['Polar'], row['Hydrophobic']] 
+            row['amino_acids']: [row['charges'], row['polar'], row['hydrophobic']] 
             for _, row in self.amino_acids_characteristics.iterrows()
         }
     

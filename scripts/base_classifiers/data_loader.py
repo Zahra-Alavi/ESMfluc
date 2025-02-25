@@ -32,8 +32,7 @@ class DataLoader:
         if self.binary_classification:
             self.targets = self.classify_neq(self.targets)
         x_train, x_test, y_train, y_test = train_test_split(self.features, self.targets, test_size=test_size, random_state=random_state)
-        x_val, x_test, y_val, y_test = train_test_split(x_test, y_test, test_size=val_size, random_state=random_state)
-        return x_train, x_val, x_test, y_train, y_val, y_test
+        return x_train, x_test, y_train, y_test
     
     def classify_neq(self, neq_values):
         return [0 if neq == Decimal("1.0") else 1 for neq in neq_values]
