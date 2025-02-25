@@ -77,10 +77,12 @@ def parse_arguments():
 #                         help="Enable oversampling of minority classes at sequence level. action='store_true")
 # 
 # =============================================================================
-    # Cross-validation
-    parser.add_argument("--cv_type", type=str, default="standard",
-                        choices=["stratified", "standard"],
-                        help="Use 'stratified' (StratifiedKFold) or 'standard' (KFold). default=stratified")
+# =============================================================================
+#     # Cross-validation
+#     parser.add_argument("--cv_type", type=str, default="standard",
+#                         choices=["stratified", "standard"],
+#                         help="Use 'stratified' (StratifiedKFold) or 'standard' (KFold). default=stratified")
+# =============================================================================
     parser.add_argument("--n_splits", type=int, default=5, help="Number of folds for cross-validation.default=5")
 
     # Layer freezing
