@@ -23,7 +23,7 @@ This repository provides a pipeline for training a **BiLSTM** or **BiLSTM + Self
    python scripts/main.py [options...]
 
 4. **EXample**
-  `python main.py   --csv_path ../neq_training_data.csv   --esm_model esm2_t12_35M_UR50D   --architecture bilstm_attention   --hidden_size 512   --num_layers 3   --dropout 0.3   --loss_function focal   --num_classes 2   --neq_thresholds 1.0   --mixed_precision   --freeze_layers "5-11"   --lr_scheduler reduce_on_plateau   --epochs 20   --patience 5   --batch_size 4   --n_splits 5`
+  `python main.py   --csv_path ../neq_training_data.csv   --esm_model esm2_t12_35M_UR50D   --architecture bilstm_attention   --hidden_size 512   --num_layers 3   --dropout 0.3   --loss_function focal   --num_classes 2   --neq_thresholds 1.0   --mixed_precision   --freeze_layers "0-4"   --lr_scheduler reduce_on_plateau   --epochs 20   --patience 5   --batch_size 4   --n_splits 5`
 
 ## Arguments
 
@@ -77,6 +77,7 @@ This repository provides a pipeline for training a **BiLSTM** or **BiLSTM + Self
 
 - **`--freeze_layers [str]`** (default: `None`)  
   E.g. `"0-5"` means freeze layers 0..5 in ESM.
+  note: all layer norms are kept unfrozen. 
 
 - **`--mixed_precision`** (flag)  
   Enable torch.cuda.amp mixed precision if set.
