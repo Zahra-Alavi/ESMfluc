@@ -115,16 +115,18 @@ def run_training(args):
     training_data = load_and_preprocess_data(args.csv_path, classify_neq)
     
     
-    # Sequence-majority label for stratification
-    sequence_majority_labels = []
-    for labels in training_data['neq_class']:
-        counts = np.bincount(labels)
-        majority_label = np.argmax(counts)
-        sequence_majority_labels.append(majority_label)
+# =============================================================================
+#     # Sequence-majority label for stratification: to be changed to a better label for each sequence
+#     sequence_majority_labels = []
+#     for labels in training_data['neq_class']:
+#         counts = np.bincount(labels)
+#         majority_label = np.argmax(counts)
+#         sequence_majority_labels.append(majority_label)
+# =============================================================================
 
     # Tokenizer
 
-    tokenizer = EsmTokenizer.from_pretrained("facebook/esm2_t12_35M_UR50D")
+    tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
 
     # Tokenize
     encoded_inputs = [
@@ -133,13 +135,15 @@ def run_training(args):
     ]
     labels_list = training_data['neq_class'].tolist()
     
-    # Choose cross-validation
-    if args.cv_type == "stratified":
-        kfold = StratifiedKFold(n_splits=args.n_splits, shuffle=True, random_state=42)
-        splits = kfold.split(training_data, sequence_majority_labels)
-    else:
-        kfold = KFold(n_splits=args.n_splits, shuffle=True, random_state=42)
-        splits = kfold.split(training_data)
+# =============================================================================
+#     # Choose cross-validation: stratified is disabled since sequence majority label was not good.
+#     if args.cv_type == "stratified":
+#         kfold = StratifiedKFold(n_splits=args.n_splits, shuffle=True, random_state=42)
+#         splits = kfold.split(training_data, sequence_majority_labels)
+#     else:
+# =============================================================================
+    kfold = KFold(n_splits=args.n_splits, shuffle=True, random_state=42)
+    splits = kfold.split(training_data)
         
     scaler = GradScaler() if args.mixed_precision else None
      
@@ -158,35 +162,37 @@ def run_training(args):
          train_dataset = SequenceClassificationDataset(train_enc, train_lbls)
          val_dataset = SequenceClassificationDataset(val_enc, val_lbls)
 
-         # Oversampling
-         if args.oversampling:
-             train_majority_labels = [sequence_majority_labels[i] for i in train_ids]
-             train_df = pd.DataFrame({
-                 'encoded_inputs': train_enc,
-                 'labels': train_lbls,
-                 'majority_label': train_majority_labels
-             })
-             class_counts = train_df['majority_label'].value_counts()
-             max_count = class_counts.max()
-
-             oversampled_dfs = []
-             for cls_ in class_counts.index:
-                 subset_df = train_df[train_df['majority_label'] == cls_]
-                 n_samples = max_count - len(subset_df)
-                 if n_samples > 0:
-                     oversampled_subset = subset_df.sample(n=n_samples, replace=True, random_state=42)
-                     oversampled_dfs.append(oversampled_subset)
-
-             if oversampled_dfs:
-                 oversampled_df = pd.concat([train_df] + oversampled_dfs, ignore_index=True)
-             else:
-                 oversampled_df = train_df
-
-             oversampled_df = oversampled_df.sample(frac=1, random_state=42).reset_index(drop=True)
-             train_dataset = SequenceClassificationDataset(
-                 list(oversampled_df['encoded_inputs']),
-                 list(oversampled_df['labels'])
-             )
+# =============================================================================
+#          # Oversampling
+#          if args.oversampling:
+#              train_majority_labels = [sequence_majority_labels[i] for i in train_ids]
+#              train_df = pd.DataFrame({
+#                  'encoded_inputs': train_enc,
+#                  'labels': train_lbls,
+#                  'majority_label': train_majority_labels
+#              })
+#              class_counts = train_df['majority_label'].value_counts()
+#              max_count = class_counts.max()
+# 
+#              oversampled_dfs = []
+#              for cls_ in class_counts.index:
+#                  subset_df = train_df[train_df['majority_label'] == cls_]
+#                  n_samples = max_count - len(subset_df)
+#                  if n_samples > 0:
+#                      oversampled_subset = subset_df.sample(n=n_samples, replace=True, random_state=42)
+#                      oversampled_dfs.append(oversampled_subset)
+# 
+#              if oversampled_dfs:
+#                  oversampled_df = pd.concat([train_df] + oversampled_dfs, ignore_index=True)
+#              else:
+#                  oversampled_df = train_df
+# 
+#              oversampled_df = oversampled_df.sample(frac=1, random_state=42).reset_index(drop=True)
+#              train_dataset = SequenceClassificationDataset(
+#                  list(oversampled_df['encoded_inputs']),
+#                  list(oversampled_df['labels'])
+#              )
+# =============================================================================
 
          # DataLoaders
          train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
@@ -219,7 +225,7 @@ def run_training(args):
          # -----------------------------
          # Initialize Embedding Model
          # -----------------------------
-         embedding_model = EsmModel.from_pretrained("facebook/esm2_t12_35M_UR50D")
+         embedding_model = EsmModel.from_pretrained(f"facebook/{args.esm_model}")
          embedding_model.to(device)
          embedding_model.train()
 
@@ -262,7 +268,7 @@ def run_training(args):
          model.to(device)
 
          # -----------------------------
-         # Optimizer & (Optional) Scheduler
+         # Optimizer & Scheduler
          # -----------------------------
          optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 

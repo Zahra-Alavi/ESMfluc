@@ -19,6 +19,28 @@ def parse_arguments():
     # Data and basic setup
     parser.add_argument("--csv_path", type=str, default="neq_training_data.csv",
                         help="Path to the input CSV containing sequences and Neq values.default=neq_training_data.csv")
+    
+    
+    esm_models = [
+        "esm1_t6_43M_UR50S",
+        "esm1_t12_85M_UR50S",
+        "esm1_t34_670M_UR100",
+        "esm1_t34_670M_UR50D",
+        "esm1_t34_670M_UR50S",
+        "esm2_t6_8M_UR50D",
+        "esm2_t12_35M_UR50D",
+        "esm2_t30_150M_UR50D",
+        "esm2_t33_650M_UR50D",
+        "esm2_t36_3B_UR50D",
+        "esm2_t48_15B_UR50D"]
+    
+    parser.add_argument("--esm_model", type=str, default="esm2_t12_35M_UR50D",
+    choices=esm_models,
+    help=("Choose the ESM checkpoint to use."
+          "Supported values include: " + ",".join(esm_models)+ ". Default is 'esm2_t12_35M_UR50D'."
+    ),
+)
+    
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size. default=4")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs. default=20")
     parser.add_argument("--patience", type=int, default=5, help="Early stopping patience. default=5")
@@ -49,12 +71,14 @@ def parse_arguments():
     parser.add_argument("--focal_class_weights", action="store_true",
                         help="If using focal loss, use class weights (alpha) computed from data.")
 
-    # Oversampling
-    parser.add_argument("--oversampling", action="store_true",
-                        help="Enable oversampling of minority classes at sequence level. action='store_true")
-
+# =============================================================================
+#     # Oversampling
+#     parser.add_argument("--oversampling", action="store_true",
+#                         help="Enable oversampling of minority classes at sequence level. action='store_true")
+# 
+# =============================================================================
     # Cross-validation
-    parser.add_argument("--cv_type", type=str, default="stratified",
+    parser.add_argument("--cv_type", type=str, default="standard",
                         choices=["stratified", "standard"],
                         help="Use 'stratified' (StratifiedKFold) or 'standard' (KFold). default=stratified")
     parser.add_argument("--n_splits", type=int, default=5, help="Number of folds for cross-validation.default=5")
