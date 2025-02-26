@@ -19,15 +19,28 @@ def main():
         help="Perform data learning, including histograms and amino acid analysis."
     )
     parser.add_argument(
+        "--data_learning_file",
+        type=str,
+        default="../../data/neq_original_data.csv",
+        help="Optional path to the data file for data learning (default: ../../data/neq_original_data.csv)."
+    )
+    parser.add_argument(
+        "--train_data_file",
+        type=str,
+        default="../../data/train_data.csv",
+        help="Optional path to the training data file (default: ../../data/train_data.csv)."
+    )
+    parser.add_argument(
+        "--test_data_file",
+        type=str,
+        default="../../data/test_data.csv",
+        help="Optional path to the test data file (default: ../../data/test_data.csv)."
+    )
+    parser.add_argument(
         "--model",
         type=str,
         choices=["RandomForestClassifier", "LogisticRegressionClassifier"],
         help="Choose the model to run."
-    )
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        help="Run all tasks sequentially."
     )
     parser.add_argument(
         "--feature_engineering_version",
@@ -37,8 +50,7 @@ def main():
     )
     parser.add_argument(
         "--hyperameter_tuning",
-        type=bool,
-        default=False,
+        action="store_true",
         help="Optional hyperparameter tuning for logistic regression/random forest model (default: False)."
     )
     
@@ -51,42 +63,29 @@ def main():
     
     parser.add_argument(
         "--esm_model_learning",
-        type=bool,
-        default=False,
+        action="store_true",
         help="Optional ESM model learning to find the best model for the task (default: False)."
     )
 
     args = parser.parse_args()
-    if not (args.all or args.data_learning or args.model or args.esm_model_learning):
+    if not (args.data_learning or args.model or args.esm_model_learning):
         print("No task specified. Use --help for usage information.")
-        
-    if args.esm_model_learning:
-        ESMModelLearning().run()
-    else:
-        data_loader = DataLoader("../../data/neq_training_data.csv", args.feature_engineering_version, args.esm_model, binary_classification=True)
-        X_train, X_test, y_train, y_test = data_loader.split_data()
-        if args.all:
-            print("Running all tasks...")
-            DataLearning(data_loader.sequences, data_loader.neq_values).analyze_data()
-            rf = RandomForestClassifierModel(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
-            print(rf.evaluate(rf.predict()))
-            lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
-            print(lr.evaluate(lr.predict()))
-        else:
-            if args.data_learning:
-                print("Running data learning...")
-                DataLearning(data_loader.sequences, data_loader.neq_values).analyze_data()
-                print("Data learning complete.")
+    
+    if args.data_learning:
+        data_loader = DataLoader(args.data_learning_file, args.feature_engineering_version, args.esm_model, binary_classification=True)
+        DataLearning(data_loader.sequences, data_loader.neq_values).analyze_data()
 
-            if args.model == "RandomForestClassifier":
-                print("Running Random Forest classifier...")
-                rf = RandomForestClassifierModel(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
-                rf.fit()
-                print(rf.evaluate(rf.predict()))
-            elif args.model == "LogisticRegressionClassifier":
-                print("Running Logistic Regression classifier...")
-                lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test, args.hyperameter_tuning)
-                lr.fit()
-                print(lr.evaluate(lr.predict()))
+    if args.esm_model_learning:
+        ESMModelLearning(args).run()
+    
+    if args.model:
+        data_loader = DataLoader(args.train_data_file, args.feature_engineering_version, args.esm_model, binary_classification=True)
+        X_train, y_train = data_loader.get_data()
+        X_test, y_test = DataLoader(args.test_data_file, args.feature_engineering_version, args.esm_model, binary_classification=True).get_data()
+
+        classifier = ClassifierFactory.get_classifier(args.model, X_train, y_train, X_test, y_test, args.hyperameter_tuning)
+        classifier.fit()
+        print(classifier.evaluate(classifier.predict()))
+
 if __name__ == "__main__":
     main()
