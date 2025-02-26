@@ -96,6 +96,13 @@ def evaluate_model_and_save_plots(model, data_loader, device, fold, num_classes,
 
     return report, cm
 
+def tokenize(dataset, tokenizer):
+    # Tokenize
+    return [
+        tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False)
+        for seq in dataset['sequence']
+    ]
+
 # =============================================================================
 # Training
 # =============================================================================        
@@ -106,7 +113,7 @@ def run_training(args):
     # Create run folder
     import datetime
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    run_folder = f"run_{timestamp}"
+    run_folder = f"../../results/run_{timestamp}"
     os.makedirs(run_folder, exist_ok=True)
 
     # Save args to text
@@ -117,38 +124,34 @@ def run_training(args):
      # Load data
     from data_utils import create_classification_func
     classify_neq = create_classification_func(args.num_classes, args.neq_thresholds)
-    training_data = load_and_preprocess_data(args.csv_path, classify_neq)
-    
+    train_data = load_and_preprocess_data(args.train_data_file, classify_neq)
+    test_data = load_and_preprocess_data(args.test_data_file, classify_neq)
     
 # =============================================================================
 #     # Sequence-majority label for stratification: to be changed to a better label for each sequence
 #     sequence_majority_labels = []
-#     for labels in training_data['neq_class']:
+#     for labels in train_data['neq_class']:
 #         counts = np.bincount(labels)
 #         majority_label = np.argmax(counts)
 #         sequence_majority_labels.append(majority_label)
 # =============================================================================
 
-    # Tokenizer
-
+    # Set up data
     tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
-
-    # Tokenize
-    encoded_inputs = [
-        tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False)
-        for seq in training_data['sequence']
-    ]
-    labels_list = training_data['neq_class'].tolist()
+    X_train = tokenize(train_data, tokenizer)
+    X_test = tokenize(test_data, tokenizer)
+    y_train = train_data['neq_class'].tolist()
+    y_test = test_data['neq_class'].tolist()
     
 # =============================================================================
 #     # Choose cross-validation: stratified is disabled since sequence majority label was not good.
 #     if args.cv_type == "stratified":
 #         kfold = StratifiedKFold(n_splits=args.n_splits, shuffle=True, random_state=42)
-#         splits = kfold.split(training_data, sequence_majority_labels)
+#         splits = kfold.split(train_data, sequence_majority_labels)
 #     else:
 # =============================================================================
     kfold = KFold(n_splits=args.n_splits, shuffle=True, random_state=42)
-    splits = kfold.split(training_data)
+    splits = kfold.split(train_data)
         
     scaler = GradScaler() if args.mixed_precision else None
      
@@ -159,10 +162,10 @@ def run_training(args):
          print(f"\n========== Fold {fold_index} ==========")
 
          # Build subsets
-         train_enc = [encoded_inputs[i] for i in train_ids]
-         train_lbls = [labels_list[i] for i in train_ids]
-         val_enc = [encoded_inputs[j] for j in test_ids]
-         val_lbls = [labels_list[j] for j in test_ids]
+         train_enc = [X_train[i] for i in train_ids]
+         train_lbls = [y_train[i] for i in train_ids]
+         val_enc = [X_train[j] for j in test_ids]
+         val_lbls = [y_train[j] for j in test_ids]
 
          train_dataset = SequenceClassificationDataset(train_enc, train_lbls)
          val_dataset = SequenceClassificationDataset(val_enc, val_lbls)
@@ -364,7 +367,10 @@ def run_training(args):
 
          # Load best model and evaluate
          model.load_state_dict(torch.load(os.path.join(run_folder, f'best_model_fold_{fold_index}.pt')))
-         evaluate_model_and_save_plots(model, val_loader, device, fold_index, args.num_classes, run_folder)
+         test_dataset = SequenceClassificationDataset(X_test, y_test)
+         test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
+                                 collate_fn=lambda b: collate_fn_sequence(b, tokenizer))
+         evaluate_model_and_save_plots(model, test_loader, device, fold_index, args.num_classes, run_folder)
 
     print("\nTraining and evaluation complete.")
     print(f"All outputs saved in folder: {run_folder}")
