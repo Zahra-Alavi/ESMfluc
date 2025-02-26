@@ -17,6 +17,7 @@ class DataLearning:
             os.makedirs("plot/data/neq")
 
     def analyze_data(self):
+        print("Analyzing data...")
         lengths = [len(seq) for seq in self.sequences]
         plot_histogram(lengths, bins=50, title="Histogram of Sequence Lengths", xlabel="Sequence Length", ylabel="Frequency", save_as="plot/data/sequence_lengths.png")
         
