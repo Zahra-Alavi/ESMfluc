@@ -132,7 +132,6 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         for i, seq in enumerate(sequences):
             data = [(f"protein_{i}", seq)]
             labels, strs, tokens = self.batch_converter(data)
-            print("Self.device:", self.device)
             with torch.no_grad():
                 results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
                 token_embedding = results["representations"][self.repr_layers]

@@ -4,13 +4,15 @@ import os
 from tabulate import tabulate
 
 class ESMModelLearning:
-    def __init__(self):
-        pass
+    def __init__(self, args):
+        self.args = args
     
     def run(self):
         print("Running ESM model learning for different ESM models...")
-        # esm_models = ["esm1_t6_43M_UR50S", "esm1_t12_85M_UR50S", "esm1_t34_670M_UR100", "esm1_t34_670M_UR50D", "esm1_t34_670M_UR50S","esm2_t6_8M_UR50D", "esm2_t12_35M_UR50D", "esm2_t30_150M_UR50D", "esm2_t33_650M_UR50D", "esm2_t36_3B_UR50D", "esm2_t48_15B_UR50D"]
-        esm_models = ["esm2_t48_15B_UR50D"]
+        esm_models = [
+            "esm1_t6_43M_UR50S", "esm1_t12_85M_UR50S", "esm1_t34_670M_UR100", "esm1_t34_670M_UR50D", "esm1_t34_670M_UR50S","esm2_t6_8M_UR50D", "esm2_t12_35M_UR50D", "esm2_t30_150M_UR50D", "esm2_t33_650M_UR50D", "esm2_t36_3B_UR50D", "esm2_t48_15B_UR50D"
+        ]
+        # esm_models = ["esm2_t48_15B_UR50D"]
         results = []
         if not os.path.exists("../../results"):
             os.makedirs("../../results")
@@ -20,8 +22,8 @@ class ESMModelLearning:
             f.write("ESM Model Results\n")
             f.write(tabulate([], headers=["Model", "Class", "Accuracy", "Macro F1", "Weighted F1"], tablefmt="github"))
         for model in esm_models:
-            data_loader = DataLoader("../../data/neq_training_data.csv", "1.3", model, binary_classification=True)
-            X_train, X_test, y_train, y_test = data_loader.split_data()
+            X_train, y_train = DataLoader(self.args.train_data_file, self.args.feature_engineering_version, model, binary_classification=True).get_data() 
+            X_test, y_test = DataLoader(self.args.test_data_file, self.args.feature_engineering_version, model, binary_classification=True).get_data()
             lr = LogisticRegressionClassifier(X_train, y_train, X_test, y_test, False)
             lr.fit()
             stats = lr.evaluate(lr.predict())

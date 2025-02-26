@@ -111,3 +111,13 @@ class RandomForestClassifierModel(SklearnClassifier):
         with open('../../models/best_random_forest_params.txt', 'w') as f:
             f.write(str(grid_search.best_params_))
         return grid_search.best_estimator_
+
+class ClassifierFactory:
+    @staticmethod
+    def get_classifier(model_name, x_train, y_train, x_test, y_test, tune_hyperparameters=False):
+        if model_name == "RandomForestClassifier":
+            return RandomForestClassifierModel(x_train, y_train, x_test, y_test, tune_hyperparameters)
+        elif model_name == "LogisticRegressionClassifier":
+            return LogisticRegressionClassifier(x_train, y_train, x_test, y_test, tune_hyperparameters)
+        else:
+            raise ValueError(f"Unknown model: {model_name}")
