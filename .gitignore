@@ -1,3 +1,17 @@
-DL_store
+# Ignore macOS system files
 .DS_Store
 **/.DS_Store
+DL_store
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore virtual environment
+venv/
+
+# Ignore output directories
+plot/
+results/
