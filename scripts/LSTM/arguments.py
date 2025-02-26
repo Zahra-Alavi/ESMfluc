@@ -17,8 +17,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Train a flexible ESM-based classification model.")
 
     # Data and basic setup
-    parser.add_argument("--csv_path", type=str, default="../neq_training_data.csv",
-                        help="Path to the input CSV containing sequences and Neq values.default=neq_training_data.csv")
+    parser.add_argument("--csv_path", type=str, default="../../data/neq_original_data.csv",
+                        help="Path to the input CSV containing sequences and Neq values.default=../../data/neq_original_data.csv")
     
     
     esm_models = [
@@ -92,7 +92,7 @@ def parse_arguments():
 
     # Mixed precision
     parser.add_argument("--mixed_precision", action="store_true",
-                        help="Enable mixed precision training via torch.cuda.amp. action='store_true")
+                        help="Enable mixed precision original via torch.cuda.amp. action='store_true")
     
     # Learning Rate Scheduler
     parser.add_argument("--lr_scheduler", type=str, default="reduce_on_plateau",
