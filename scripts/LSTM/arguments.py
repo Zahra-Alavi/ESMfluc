@@ -17,8 +17,11 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Train a flexible ESM-based classification model.")
 
     # Data and basic setup
-    parser.add_argument("--csv_path", type=str, default="../../data/neq_original_data.csv",
-                        help="Path to the input CSV containing sequences and Neq values.default=../../data/neq_original_data.csv")
+    parser.add_argument("--train_data_file", type=str, default="../../data/train_data.csv",
+                        help="Path to the training data CSV file.default=../../data/train_data.csv")
+
+    parser.add_argument("--test_data_file", type=str, default="../../data/test_data.csv",
+                        help="Path to the test data CSV file.default=../../data/test_data.csv")
     
     
     esm_models = [
