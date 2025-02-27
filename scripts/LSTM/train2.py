@@ -77,7 +77,7 @@ def evaluate(model, data_loader, loss_fn, device):
 
 def create_run_folder():
     now = datetime.datetime.now()
-    folder_name = now.strftime("%Y-%m-%d-%H-%M-%S")
+    folder_name = "../../results/" + now.strftime("%Y-%m-%d-%H-%M-%S")
     os.makedirs(folder_name)
     return folder_name
 
@@ -210,7 +210,8 @@ def train(args):
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0
-        losses = []
+        val_losses = []
+        train_losses = []
         for i, batch in enumerate(train_loader):
             input_ids = batch['input_ids'].to(args.device)
             attention_mask = batch['attention_mask'].to(args.device)
@@ -237,10 +238,11 @@ def train(args):
             
             total_loss += loss.item()
         avg_loss = total_loss / len(train_loader)
-        losses.append(avg_loss)
+        train_losses.append(avg_loss)
         
         if scheduler:
             val_loss = compute_validation_loss(model, val_loader, loss_fn, args.device)
+            val_losses.append(val_loss)
             scheduler.step(val_loss)
         
         # Early stopping check
@@ -256,10 +258,13 @@ def train(args):
             
     # Plot loss curve
     run_folder = create_run_folder()
-    pd.Series(losses).plot()
+    plt.figure()
+    plt.plot(len(total_loss), train_losses, label="Training loss")
+    plt.plot(len(val_losses), val_losses, label="Validation loss")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.title("Loss curve")
+    plt.title("Loss Curve")
+    plt.legend()
     plt.savefig(f"{run_folder}/loss_curve.png")
     
     # Evaluation
