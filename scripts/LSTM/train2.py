@@ -71,9 +71,9 @@ def evaluate(model, data_loader, loss_fn, device):
             all_preds.extend(y_preds.cpu().numpy())
             all_targets.extend(y.cpu().numpy())
 
-        classification_report = classification_report(all_targets, all_preds, output_dict=True)
-        confusion_matrix = confusion_matrix(all_targets, all_preds)
-        return classification_report, confusion_matrix
+        report = classification_report(all_targets, all_preds, output_dict=True)
+        conf_matrix = confusion_matrix(all_targets, all_preds)
+        return report, conf_matrix
 
 def create_run_folder():
     now = datetime.datetime.now()
@@ -263,15 +263,15 @@ def train(args):
     plt.savefig(f"{run_folder}/loss_curve.png")
     
     # Evaluation
-    classification_report, confusion_matrix = evaluate(model, test_loader, loss_fn, args.device)
-    print(classification_report)
-    print(confusion_matrix)
+    cls_report, conf_matrix = evaluate(model, test_loader, loss_fn, args.device)
+    print(cls_report)
+    print(conf_matrix)
     # Save classification report and confusion matrix
     # Save args to text
     with open(f"{run_folder}/args.txt", "w") as f:
         f.write(str(args))
     with open(f"{run_folder}/classification_report.txt", "w") as f:
-        f.write(str(classification_report))
-    np.save(f"{run_folder}/confusion_matrix.npy", confusion_matrix)
+        f.write(str(cls_report))
+    np.save(f"{run_folder}/confusion_matrix.npy", conf_matrix)
     
     print("Training completed")
