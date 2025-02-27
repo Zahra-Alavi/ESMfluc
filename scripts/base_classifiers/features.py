@@ -84,7 +84,13 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         self._load_esm_model(model_name)
 
     def _load_esm_model(self, model_name):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            gpu_memory = [torch.cuda.memory_allocated(i) for i in range(torch.cuda.device_count())]
+            least_used_gpu = gpu_memory.index(min(gpu_memory))  # Choose GPU with least memory usage
+            device = f"cuda:{least_used_gpu}"
+        else:
+            device = "cpu"
+        self.device = torch.device(device)
         self.repr_layers = int(model_name.split("_")[1].replace("t", ""))
         if model_name == "esm2_t48_15B_UR50D":
             # offload the model to CPU to reduce GPU memory usage. Ex: https://github.com/facebookresearch/esm/blob/main/examples/esm2_infer_fairscale_fsdp_cpu_offloading.py
