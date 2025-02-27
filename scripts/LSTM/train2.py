@@ -19,7 +19,7 @@ from torch.amp import GradScaler
 
 
 from sklearn.utils.class_weight import compute_class_weight
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
 from data_utils import create_classification_func, load_and_preprocess_data, SequenceClassificationDataset
 
@@ -277,6 +277,10 @@ def train(args):
         f.write(str(args))
     with open(f"{run_folder}/classification_report.txt", "w") as f:
         f.write(str(cls_report))
-    np.save(f"{run_folder}/confusion_matrix.npy", conf_matrix)
+    disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix)
+    disp.plot()
+    plt.title("Confusion Matrix")
+    plt.savefig(f"{run_folder}/confusion_matrix.png")
+    plt.close()
     
     print("Training completed")
