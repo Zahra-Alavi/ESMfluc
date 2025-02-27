@@ -255,6 +255,7 @@ def train(args):
         print(f"Epoch {epoch}: Loss = {avg_loss}")
             
     # Plot loss curve
+    run_folder = create_run_folder()
     pd.Series(losses).plot()
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
@@ -266,7 +267,6 @@ def train(args):
     print(classification_report)
     print(confusion_matrix)
     # Save classification report and confusion matrix
-    run_folder = create_run_folder()
     # Save args to text
     with open(f"{run_folder}/args.txt", "w") as f:
         f.write(str(args))
