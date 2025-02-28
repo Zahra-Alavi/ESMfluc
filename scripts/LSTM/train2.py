@@ -259,8 +259,8 @@ def train(args):
     # Plot loss curve
     run_folder = create_run_folder()
     plt.figure()
-    plt.plot(len(train_losses), train_losses, label="Training loss")
-    plt.plot(len(val_losses), val_losses, label="Validation loss")
+    plt.plot(range(len(train_losses)), train_losses, label="Training loss")
+    plt.plot(range(len(val_losses)), val_losses, label="Validation loss")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Loss Curve")
