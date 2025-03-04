@@ -101,5 +101,8 @@ def parse_arguments():
     parser.add_argument("--lr_scheduler", type=str, default="reduce_on_plateau",
                         choices=["none", "reduce_on_plateau"],
                         help="Use no scheduler ('none') or 'reduce_on_plateau' (PyTorch's ReduceLROnPlateau). default=reduce_on_plateau")
+    
+    parser.add_argument("--hyperparameter_search", action="store_true",
+                        help="Enable hyperparameter search action='store_true")
 
     return parser

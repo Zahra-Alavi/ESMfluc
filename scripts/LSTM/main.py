@@ -11,10 +11,37 @@ import logging
 from arguments import parse_arguments
 from train import run_training
 from train2 import train
+import itertools
+import copy
+
+def hyperparameter_search(args):
+    param_grid = {
+        "epochs": [10, 20, 30, 40, 50],
+        "lr": [1e-5, 1e-4, 1e-3],
+        "weight_decay": [1e-2, 1e-3, 1e-4],
+        "esm_model": ["esm2_t6_8M_UR50D"],
+        "dropout": [0.3, 0.5],
+        "num_layers": range(1,10),
+    }
+    
+    keys, values = zip(*param_grid.items())
+    combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
+    
+    for idx, combo in enumerate(combinations):
+        print(f"\nRunning hyperparameter search {idx + 1}/{len(combinations)} with settings:")
+        print(combo)
+        
+        new_args = copy.deepcopy(args)
+        for key, value in combo.items():
+            setattr(new_args, key, value)
 
 def main():
     parser = parse_arguments()
     args = parser.parse_args()
+    
+    if args.hyperparameter_search:
+        hyperparameter_search(args)
+        return
 
     logging.basicConfig(level=logging.INFO)
     # run_training(args)

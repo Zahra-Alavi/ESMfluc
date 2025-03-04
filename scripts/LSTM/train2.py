@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 import torch 
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
@@ -159,31 +159,66 @@ def set_up_classification_model(args):
         raise ValueError(f"Invalid architecture: {args.architecture}")
     model.to(args.device)
     return model
-     
-def train(args):
-    args.device = "cuda" if torch.cuda.is_available() else "cpu"
-        
-    model = set_up_classification_model(args)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-        
-    if args.lr_scheduler == "reduce_on_plateau":
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3, verbose=True)
-        print("Using ReduceLROnPlateau scheduler")
-    else:
-        scheduler = None
-        print("Not using any scheduler")
+
+def save_results(args, reports, conf_matrices, train_losses, val_losses, run_type):
+    run_folder = create_run_folder()
+    with open(f"{run_folder}/args.txt", "w") as f:
+        f.write(str(args))
     
-    # Load data
+    for i, (report, matrix) in enumerate(zip(reports, conf_matrices)):
+        pd.DataFrame(report).transpose().to_csv(f"{run_folder}/classification_report_fold_{i}.csv")
+        pd.DataFrame(matrix).to_csv(f"{run_folder}/confusion_matrix_fold_{i}.csv", index=False, header=False)
+    
+    for i, (train_loss, val_loss) in enumerate(zip(train_losses, val_losses)):
+        plt.figure()
+        plt.plot(range(len(train_loss)), train_loss, label="Training loss")
+        plt.plot(range(len(val_loss)), val_loss, label="Validation loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.title(f"Loss Curve - Fold {i}" if run_type == "cross_validation" else "Loss Curve")
+        plt.legend()
+        plt.savefig(f"{run_folder}/loss_curve_fold_{i}.png")
+
+def cross_validate(args, tokenizer):
+    kf = StratifiedKFold(n_splits=args.n_splits, shuffle=True, random_state=42)
+    all_reports, all_conf_matrices, all_train_losses, all_val_losses = [], [], [], []
+    
     labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
     train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
-    test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
+    sequences, labels = train_data['sequence'], train_data['neq_class']
+    
+    for fold, (train_idx, val_idx) in enumerate(kf.split(sequences, labels)):
+        print(f"Fold {fold}")
+        train_fold, val_fold = train_data.iloc[train_idx], train_data.iloc[val_idx]
+        
+        cls_report, conf_matrix, train_losses, val_losses = train(train_fold, val_fold, tokenizer, args)
+        all_reports.append(cls_report)
+        all_conf_matrices.append(conf_matrix)
+        all_train_losses.append(train_losses)
+        all_val_losses.append(val_losses)
+    
+    save_results(args, all_reports, all_conf_matrices, all_train_losses, all_val_losses, "cross_validation")
+    print("Cross-validation completed")
 
-    # Preprocessing data
+def train(args):
+    args.device = "cuda" if torch.cuda.is_available() else "cpu"
     tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
-    X_train = tokenize(train_data['sequence'], tokenizer) # [input_ids, attention_mask]
+    
+    if args.hyperparameter_search:
+        cross_validate(args, tokenizer)
+    else:
+        labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
+        train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
+        test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
+        
+        cls_report, conf_matrix, train_losses, val_losses = train(train_data, test_data, tokenizer, args)
+        save_results(args, [cls_report], [conf_matrix], [train_losses], [val_losses], "training")
+
+
+def train(train_data, test_data, tokenizer, args):
+    X_train = tokenize(train_data['sequence'], tokenizer)
     X_test = tokenize(test_data['sequence'], tokenizer)
-    y_train = train_data['neq_class'].tolist()
-    y_test = test_data['neq_class'].tolist()
+    y_train, y_test = train_data['neq_class'].tolist(), test_data['neq_class'].tolist()
     
     train_dataset = SequenceClassificationDataset(X_train, y_train)
     test_dataset = SequenceClassificationDataset(X_test, y_test)
@@ -191,52 +226,43 @@ def train(args):
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
     
-    # If having scheduler as ReduceLROnPlateau, split the data into train and validation
+    model = set_up_classification_model(args)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    loss_fn = get_loss_fn(args, train_dataset)
+    scaler = GradScaler(device=args.device) if args.mixed_precision else None
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3, verbose=True) if args.lr_scheduler == "reduce_on_plateau" else None
+    
     val_loader = None
     if scheduler:
         X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2)
         val_dataset = SequenceClassificationDataset(X_val, y_val)
         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
     
-    loss_fn = get_loss_fn(args, train_dataset)
-        
-    # -------------------------
-    # Training loop
-    # -------------------------
-    scaler = GradScaler(device=args.device) if args.mixed_precision else None
+    best_val_loss, epochs_no_improve = float('inf'), 0
+    train_losses, val_losses = [], []
     
-    best_val_loss = float('inf')
-    epochs_no_improve = 0
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0
-        val_losses = []
-        train_losses = []
-        for i, batch in enumerate(train_loader):
-            input_ids = batch['input_ids'].to(args.device)
-            attention_mask = batch['attention_mask'].to(args.device)
-            y = batch['labels'].to(args.device)
-            
+        
+        for batch in train_loader:
+            input_ids, attention_mask, y = batch['input_ids'].to(args.device), batch['attention_mask'].to(args.device), batch['labels'].to(args.device)
             optimizer.zero_grad()
             
+            with torch.amp.autocast(device_type=args.device):
+                y_preds = model(input_ids, attention_mask)
+                loss = loss_fn(y_preds.view(-1, args.num_classes), y.view(-1))
+            
             if scaler and args.mixed_precision:
-                with torch.amp.autocast(device_type=args.device):
-                    y_preds = model(input_ids, attention_mask)
-                    y_preds_flat = y_preds.view(-1, args.num_classes)
-                    y_flat = y.view(-1)
-                    loss = loss_fn(y_preds_flat, y_flat)
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
             else:
-                y_preds = model(input_ids, attention_mask)
-                y_preds_flat = y_preds.view(-1, args.num_classes)
-                y_flat = y.view(-1)
-                loss = loss_fn(y_preds_flat, y_flat)
                 loss.backward()
                 optimizer.step()
             
             total_loss += loss.item()
+        
         avg_loss = total_loss / len(train_loader)
         train_losses.append(avg_loss)
         
@@ -245,7 +271,6 @@ def train(args):
             val_losses.append(val_loss)
             scheduler.step(val_loss)
         
-        # Early stopping check
         if avg_loss < best_val_loss:
             best_val_loss = avg_loss
             epochs_no_improve = 0
@@ -254,7 +279,9 @@ def train(args):
             if epochs_no_improve == args.patience:
                 print(f"Early stopping at epoch {epoch}")
                 break
+        
         print(f"Epoch {epoch}: Loss = {avg_loss}")
+<<<<<<< Updated upstream
             
     # Plot loss curve
     run_folder = create_run_folder()
@@ -266,9 +293,11 @@ def train(args):
     plt.title("Loss Curve")
     plt.legend()
     plt.savefig(f"{run_folder}/loss_curve.png")
+=======
+>>>>>>> Stashed changes
     
-    # Evaluation
     cls_report, conf_matrix = evaluate(model, test_loader, loss_fn, args.device)
+<<<<<<< Updated upstream
     print(cls_report)
     print(conf_matrix)
     # Save classification report and confusion matrix
@@ -282,5 +311,300 @@ def train(args):
     plt.title("Confusion Matrix")
     plt.savefig(f"{run_folder}/confusion_matrix.png")
     plt.close()
+=======
+    return cls_report, conf_matrix, train_losses, val_losses
+
+# def cross_validate(args, tokenizer):
+#     # Cross-validation
+#     kf = StratifiedKFold(n_splits=args.n_splits, shuffle=True, random_state=42)
+#     all_reports = []
+#     all_conf_matrices = []
+#     all_train_losses = []
+#     all_val_losses = []
+>>>>>>> Stashed changes
     
-    print("Training completed")
+#     labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
+#     train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
+#     sequences = train_data['sequence']
+#     labels = train_data['neq_class']
+    
+#     for fold, (train_index, val_index) in enumerate(kf.split(sequences, labels)):
+#         print(f"Fold {fold}")
+#         train_data = train_data.iloc[train_index]
+#         val_data = train_data.iloc[val_index]
+        
+#         cls_report, conf_matrix, train_losses, val_losses = train(train_data, val_data, tokenizer, args)
+#         all_reports.append(cls_report)
+#         all_conf_matrices.append(conf_matrix)
+#         all_train_losses.append(train_losses)
+#         all_val_losses.append(val_losses)
+    
+#     # Save classification reports and confusion matrices
+#     run_folder = create_run_folder()
+#     for i, (cls_report, conf_matrix) in enumerate(zip(all_reports, all_conf_matrices)):
+#         cls_report_file = f"{run_folder}/classification_report_fold_{i}.csv"
+#         df_cls_report = pd.DataFrame(cls_report).transpose()
+#         df_cls_report.to_csv(cls_report_file)
+#         conf_matrix_file = f"{run_folder}/confusion_matrix_fold_{i}.csv"
+#         df_conf_matrix = pd.DataFrame(conf_matrix)
+#         df_conf_matrix.to_csv(conf_matrix_file, index=False, header=False)
+        
+#     # Plot loss curves
+#     for i, (train_losses, val_losses) in enumerate(zip(all_train_losses, all_val_losses)):
+#         plt.figure()
+#         plt.plot(range(len(train_losses)), train_losses, label="Training loss")
+#         plt.plot(range(len(val_losses)), val_losses, label="Validation loss")
+#         plt.xlabel("Epoch")
+#         plt.ylabel("Loss")
+#         plt.title(f"Loss Curve - Fold {i}")
+#         plt.legend()
+#         plt.savefig(f"{run_folder}/loss_curve_fold_{i}.png")
+    
+#     print("Cross-validation completed")
+        
+
+# def train2(args):
+#     args.device = "cuda" if torch.cuda.is_available() else "cpu"
+#     tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
+    
+#     if args.hyperparameter_search:
+#         cross_validate(args, tokenizer)
+#     else:
+#         labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
+#         train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
+#         test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
+        
+#         cls_report, conf_matrix, train_losses, val_losses = train(train_data, test_data, tokenizer, args)
+    
+#         # Save classification report and confusion matrix
+#         run_folder = create_run_folder()
+#         # Save args to text
+#         with open(f"{run_folder}/args.txt", "w") as f:
+#             f.write(str(args))
+#         cls_report_file = f"{run_folder}/classification_report.csv"
+#         df_cls_report = pd.DataFrame(cls_report).transpose()
+#         df_cls_report.to_csv(cls_report_file)
+#         conf_matrix_file = f"{run_folder}/confusion_matrix.csv"
+#         df_conf_matrix = pd.DataFrame(conf_matrix)
+#         df_conf_matrix.to_csv(conf_matrix_file, index=False, header=False)
+        
+#         # Plot loss curve
+#         plt.figure()
+#         plt.plot(range(len(train_losses)), train_losses, label="Training loss")
+#         plt.plot(range(len(val_losses)), val_losses, label="Validation loss")
+#         plt.xlabel("Epoch")
+#         plt.ylabel("Loss")
+#         plt.title("Loss Curve")
+#         plt.legend()
+#         plt.savefig(f"{run_folder}/loss_curve.png")
+        
+    
+# def train(train_data, test_data, tokenizer, args):
+#     X_train = tokenize(train_data['sequence'], tokenizer) # [input_ids, attention_mask]
+#     X_test = tokenize(test_data['sequence'], tokenizer)
+#     y_train = train_data['neq_class'].tolist()
+#     y_test = test_data['neq_class'].tolist()
+    
+#     train_dataset = SequenceClassificationDataset(X_train, y_train)
+#     test_dataset = SequenceClassificationDataset(X_test, y_test)
+    
+#     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+#     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+    
+#     model = set_up_classification_model(args)
+#     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+#     loss_fn = get_loss_fn(args, train_dataset)
+#     scaler = GradScaler(device=args.device) if args.mixed_precision else None
+    
+#     if args.lr_scheduler == "reduce_on_plateau":
+#         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3, verbose=True)
+#         print("Using ReduceLROnPlateau scheduler")
+#     else:
+#         scheduler = None
+#         print("Not using any scheduler")
+        
+#     val_loader = None
+#     if scheduler:
+#         X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2)
+#         val_dataset = SequenceClassificationDataset(X_val, y_val)
+#         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+    
+#     best_val_loss = float('inf')
+#     epochs_no_improve = 0
+#     for epoch in range(args.epochs):
+#         model.train()
+#         total_loss = 0
+#         val_losses = []
+#         train_losses = []
+#         for i, batch in enumerate(train_loader):
+#             input_ids = batch['input_ids'].to(args.device)
+#             attention_mask = batch['attention_mask'].to(args.device)
+#             y = batch['labels'].to(args.device)
+            
+#             optimizer.zero_grad()
+            
+#             with torch.amp.autocast(device_type=args.device):
+#                 y_preds = model(input_ids, attention_mask)
+#                 y_preds_flat = y_preds.view(-1, args.num_classes)
+#                 y_flat = y.view(-1)
+#                 loss = loss_fn(y_preds_flat, y_flat)
+            
+#             if scaler and args.mixed_precision:
+#                 scaler.scale(loss).backward()
+#                 scaler.step(optimizer)
+#                 scaler.update()
+#             else:
+#                 loss.backward()
+#                 optimizer.step()
+#             total_loss += loss.item()
+#         avg_loss = total_loss / len(train_loader)
+#         train_losses.append(avg_loss)
+        
+#         if scheduler:
+#             val_loss = compute_validation_loss(model, val_loader, loss_fn, args.device)
+#             val_losses.append(val_loss)
+#             scheduler.step(val_loss)
+        
+#         # Early stopping check
+#         if avg_loss < best_val_loss:
+#             best_val_loss = avg_loss
+#             epochs_no_improve = 0
+#         else:
+#             epochs_no_improve += 1
+#             if epochs_no_improve == args.patience:
+#                 print(f"Early stopping at epoch {epoch}")
+#                 break
+#         print(f"Epoch {epoch}: Loss = {avg_loss}")
+    
+#     cls_report, conf_matrix = evaluate(model, test_loader, loss_fn, args.device)
+#     return cls_report, conf_matrix, train_losses, val_losses
+                
+    
+# def train(args):
+#     args.device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+#     model = set_up_classification_model(args)
+#     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        
+#     if args.lr_scheduler == "reduce_on_plateau":
+#         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3, verbose=True)
+#         print("Using ReduceLROnPlateau scheduler")
+#     else:
+#         scheduler = None
+#         print("Not using any scheduler")
+    
+#     # Load data
+#     labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
+#     train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
+#     test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
+
+#     # Preprocessing data
+#     tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
+#     X_train = tokenize(train_data['sequence'], tokenizer) # [input_ids, attention_mask]
+#     X_test = tokenize(test_data['sequence'], tokenizer)
+#     y_train = train_data['neq_class'].tolist()
+#     y_test = test_data['neq_class'].tolist()
+    
+#     train_dataset = SequenceClassificationDataset(X_train, y_train)
+#     test_dataset = SequenceClassificationDataset(X_test, y_test)
+    
+#     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+#     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+    
+#     # If having scheduler as ReduceLROnPlateau, split the data into train and validation
+#     val_loader = None
+#     if scheduler:
+#         X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2)
+#         val_dataset = SequenceClassificationDataset(X_val, y_val)
+#         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+    
+#     loss_fn = get_loss_fn(args, train_dataset)
+        
+#     # -------------------------
+#     # Training loop
+#     # -------------------------
+#     scaler = GradScaler(device=args.device) if args.mixed_precision else None
+    
+#     best_val_loss = float('inf')
+#     epochs_no_improve = 0
+#     for epoch in range(args.epochs):
+#         model.train()
+#         total_loss = 0
+#         val_losses = []
+#         train_losses = []
+#         for i, batch in enumerate(train_loader):
+#             input_ids = batch['input_ids'].to(args.device)
+#             attention_mask = batch['attention_mask'].to(args.device)
+#             y = batch['labels'].to(args.device)
+            
+#             optimizer.zero_grad()
+            
+#             if scaler and args.mixed_precision:
+#                 with torch.amp.autocast(device_type=args.device):
+#                     y_preds = model(input_ids, attention_mask)
+#                     y_preds_flat = y_preds.view(-1, args.num_classes)
+#                     y_flat = y.view(-1)
+#                     loss = loss_fn(y_preds_flat, y_flat)
+#                 scaler.scale(loss).backward()
+#                 scaler.step(optimizer)
+#                 scaler.update()
+#             else:
+#                 y_preds = model(input_ids, attention_mask)
+#                 y_preds_flat = y_preds.view(-1, args.num_classes)
+#                 y_flat = y.view(-1)
+#                 loss = loss_fn(y_preds_flat, y_flat)
+#                 loss.backward()
+#                 optimizer.step()
+            
+#             total_loss += loss.item()
+#         avg_loss = total_loss / len(train_loader)
+#         train_losses.append(avg_loss)
+        
+#         if scheduler:
+#             val_loss = compute_validation_loss(model, val_loader, loss_fn, args.device)
+#             val_losses.append(val_loss)
+#             scheduler.step(val_loss)
+        
+#         # Early stopping check
+#         if avg_loss < best_val_loss:
+#             best_val_loss = avg_loss
+#             epochs_no_improve = 0
+#         else:
+#             epochs_no_improve += 1
+#             if epochs_no_improve == args.patience:
+#                 print(f"Early stopping at epoch {epoch}")
+#                 break
+#         print(f"Epoch {epoch}: Loss = {avg_loss}")
+            
+#     # Plot loss curve
+#     run_folder = create_run_folder()
+#     plt.figure()
+#     plt.plot(range(len(train_losses)), train_losses, label="Training loss")
+#     plt.plot(range(len(val_losses)), val_losses, label="Validation loss")
+#     plt.xlabel("Epoch")
+#     plt.ylabel("Loss")
+#     plt.title("Loss Curve")
+#     plt.legend()
+#     plt.savefig(f"{run_folder}/loss_curve.png")
+    
+#     # Evaluation
+#     cls_report, conf_matrix = evaluate(model, test_loader, loss_fn, args.device)
+#     print(cls_report)
+#     print(conf_matrix)
+#     # Save classification report and confusion matrix
+#     # Save args to text
+#     with open(f"{run_folder}/args.txt", "w") as f:
+#         f.write(str(args))
+#     cls_report_file = f"{run_folder}/classification_report.csv"
+#     df_cls_report = pd.DataFrame(cls_report).transpose()
+#     df_cls_report.to_csv(cls_report_file)
+#     conf_matrix_file = f"{run_folder}/confusion_matrix.csv"
+#     df_conf_matrix = pd.DataFrame(conf_matrix)
+#     df_conf_matrix.to_csv(conf_matrix_file, index=False, header=False)
+#     disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix)
+#     disp.plot()
+#     plt.title("Confusion Matrix")
+#     plt.savefig(f"{run_folder}/confusion_matrix.png")
+#     plt.close()
+    
+#     print("Training completed")
