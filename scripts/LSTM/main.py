@@ -36,6 +36,7 @@ def hyperparameter_search(args):
         new_args = copy.deepcopy(args)
         for key, value in combo.items():
             setattr(new_args, key, value)
+            train(new_args)
 
 def main():
     parser = parse_arguments()

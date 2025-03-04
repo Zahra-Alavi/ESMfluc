@@ -180,18 +180,17 @@ def save_results(args, reports, conf_matrices, train_losses, val_losses, run_typ
         plt.savefig(f"{run_folder}/loss_curve_fold_{i}.png")
 
 def cross_validate(args, tokenizer):
-    kf = StratifiedKFold(n_splits=args.n_splits, shuffle=True, random_state=42)
+    kf = KFold(n_splits=args.n_splits, shuffle=True, random_state=42)
     all_reports, all_conf_matrices, all_train_losses, all_val_losses = [], [], [], []
     
     labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
     train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
-    sequences, labels = train_data['sequence'], train_data['neq_class']
     
-    for fold, (train_idx, val_idx) in enumerate(kf.split(sequences, labels)):
-        print(f"Fold {fold}")
+    for fold, (train_idx, val_idx) in enumerate(kf.split(train_data)):
+        print(f"===============Fold {fold}===============")
         train_fold, val_fold = train_data.iloc[train_idx], train_data.iloc[val_idx]
         
-        cls_report, conf_matrix, train_losses, val_losses = train(train_fold, val_fold, tokenizer, args)
+        cls_report, conf_matrix, train_losses, val_losses = _train(train_fold, val_fold, tokenizer, args)
         all_reports.append(cls_report)
         all_conf_matrices.append(conf_matrix)
         all_train_losses.append(train_losses)
@@ -211,11 +210,11 @@ def train(args):
         train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
         test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
         
-        cls_report, conf_matrix, train_losses, val_losses = train(train_data, test_data, tokenizer, args)
+        cls_report, conf_matrix, train_losses, val_losses = _train(train_data, test_data, tokenizer, args)
         save_results(args, [cls_report], [conf_matrix], [train_losses], [val_losses], "training")
 
 
-def train(train_data, test_data, tokenizer, args):
+def _train(train_data, test_data, tokenizer, args):
     X_train = tokenize(train_data['sequence'], tokenizer)
     X_test = tokenize(test_data['sequence'], tokenizer)
     y_train, y_test = train_data['neq_class'].tolist(), test_data['neq_class'].tolist()
