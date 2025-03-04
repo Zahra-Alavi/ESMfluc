@@ -281,37 +281,8 @@ def train(train_data, test_data, tokenizer, args):
                 break
         
         print(f"Epoch {epoch}: Loss = {avg_loss}")
-<<<<<<< Updated upstream
-            
-    # Plot loss curve
-    run_folder = create_run_folder()
-    plt.figure()
-    plt.plot(len(train_losses), train_losses, label="Training loss")
-    plt.plot(len(val_losses), val_losses, label="Validation loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Loss Curve")
-    plt.legend()
-    plt.savefig(f"{run_folder}/loss_curve.png")
-=======
->>>>>>> Stashed changes
     
     cls_report, conf_matrix = evaluate(model, test_loader, loss_fn, args.device)
-<<<<<<< Updated upstream
-    print(cls_report)
-    print(conf_matrix)
-    # Save classification report and confusion matrix
-    # Save args to text
-    with open(f"{run_folder}/args.txt", "w") as f:
-        f.write(str(args))
-    with open(f"{run_folder}/classification_report.txt", "w") as f:
-        f.write(str(cls_report))
-    disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix)
-    disp.plot()
-    plt.title("Confusion Matrix")
-    plt.savefig(f"{run_folder}/confusion_matrix.png")
-    plt.close()
-=======
     return cls_report, conf_matrix, train_losses, val_losses
 
 # def cross_validate(args, tokenizer):
@@ -321,7 +292,6 @@ def train(train_data, test_data, tokenizer, args):
 #     all_conf_matrices = []
 #     all_train_losses = []
 #     all_val_losses = []
->>>>>>> Stashed changes
     
 #     labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
 #     train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
