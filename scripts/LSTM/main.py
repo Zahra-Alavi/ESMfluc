@@ -22,6 +22,8 @@ def hyperparameter_search(args):
         "esm_model": ["esm2_t6_8M_UR50D"],
         "dropout": [0.3, 0.5],
         "num_layers": range(1,10),
+        "patience": [5, 10, 15],
+        "hidden_size": [64, 128, 256, 512, 1024]
     }
     
     keys, values = zip(*param_grid.items())
