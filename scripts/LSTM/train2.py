@@ -21,7 +21,7 @@ from torch.amp import GradScaler
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
-from data_utils import create_classification_func, load_and_preprocess_data, SequenceClassificationDataset
+from data_utils import create_classification_func, load_and_preprocess_data, SequenceClassificationDataset, collate_fn_sequence
 
 from transformers import EsmModel, EsmTokenizer
 
@@ -81,22 +81,6 @@ def create_run_folder():
     os.makedirs(folder_name)
     return folder_name
 
-def collate_fn_sequence(batch, tokenizer):
-    input_ids = [item['input_ids'] for item in batch]
-    attention_masks = [item['attention_mask'] for item in batch]
-    labels = [item['labels'] for item in batch]
-
-    pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 1
-
-    input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=pad_token_id)
-    attention_masks_padded = pad_sequence(attention_masks, batch_first=True, padding_value=0)
-    labels_padded = pad_sequence(labels, batch_first=True, padding_value=-1)
-
-    return {
-        'input_ids': input_ids_padded,
-        'attention_mask': attention_masks_padded,
-        'labels': labels_padded
-    }
     
 def get_loss_fn(args, train_dataset):
     if args.loss_function == "focal":
