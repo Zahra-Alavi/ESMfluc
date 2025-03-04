@@ -275,8 +275,12 @@ def train(args):
     # Save args to text
     with open(f"{run_folder}/args.txt", "w") as f:
         f.write(str(args))
-    with open(f"{run_folder}/classification_report.txt", "w") as f:
-        f.write(str(cls_report))
+    cls_report_file = f"{run_folder}/classification_report.csv"
+    df_cls_report = pd.DataFrame(cls_report).transpose()
+    df_cls_report.to_csv(cls_report_file)
+    conf_matrix_file = f"{run_folder}/confusion_matrix.csv"
+    df_conf_matrix = pd.DataFrame(conf_matrix)
+    df_conf_matrix.to_csv(conf_matrix_file, index=False, header=False)
     disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix)
     disp.plot()
     plt.title("Confusion Matrix")
