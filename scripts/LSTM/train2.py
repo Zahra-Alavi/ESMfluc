@@ -191,11 +191,14 @@ def train(args):
     
     best_val_loss = float('inf')
     epochs_no_improve = 0
+    
+    val_losses = []
+    train_losses = []
+    
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0
-        val_losses = []
-        train_losses = []
+        
         for i, batch in enumerate(train_loader):
             input_ids = batch['input_ids'].to(args.device)
             attention_mask = batch['attention_mask'].to(args.device)
@@ -221,30 +224,33 @@ def train(args):
                 optimizer.step()
             
             total_loss += loss.item()
-        avg_loss = total_loss / len(train_loader)
-        train_losses.append(avg_loss)
+        avg_train_loss = total_loss / len(train_loader)
+        train_losses.append(avg_train_loss)
+        print(f"[Epoch {epoch}] Training Loss: {avg_train_loss:.4f}")
+        
+        avg_val_loss = compute_validation_loss(model, val_loader, loss_fn, args.device)
+        val_losses.append(avg_val_loss)
+        print(f"[Epoch {epoch}] Validation Loss: {avg_val_loss:.4f}")
         
         if scheduler:
-            val_loss = compute_validation_loss(model, val_loader, loss_fn, args.device)
-            val_losses.append(val_loss)
-            scheduler.step(val_loss)
+            scheduler.step(avg_val_loss)
         
         # Early stopping check
-        if avg_loss < best_val_loss:
-            best_val_loss = avg_loss
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
             epochs_no_improve = 0
         else:
             epochs_no_improve += 1
-            if epochs_no_improve == args.patience:
+            if epochs_no_improve >= args.patience:
                 print(f"Early stopping at epoch {epoch}")
                 break
-        print(f"Epoch {epoch}: Loss = {avg_loss}")
+       
             
     # Plot loss curve
     run_folder = create_run_folder()
     plt.figure()
-    plt.plot(len(train_losses), train_losses, label="Training loss")
-    plt.plot(len(val_losses), val_losses, label="Validation loss")
+    plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss', marker='o')
+    plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss', marker='o')
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Loss Curve")
