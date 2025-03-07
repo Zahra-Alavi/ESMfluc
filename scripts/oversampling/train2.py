@@ -14,14 +14,16 @@ from sklearn.model_selection import train_test_split
 import torch 
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.amp import GradScaler
+
+from collections import Counter
 
 
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
-from data_utils import create_classification_func, load_and_preprocess_data, SequenceClassificationDataset, collate_fn_sequence
+from data_utils import create_classification_func, load_and_preprocess_data, SequenceClassificationDataset, collate_fn_sequence, compute_sampling_weights
 
 from transformers import EsmModel, EsmTokenizer
 
@@ -94,7 +96,7 @@ def get_loss_fn(args, train_dataset):
         else:
             alpha_tensor = None
             print("Using FocalLoss without class weights")
-        loss_fn = FocalLoss(alpha=alpha_tensor, gamma=2, ignore_index=-1)
+        loss_fn = FocalLoss(alpha=alpha_tensor, gamma=3, ignore_index=-1)
     else:
         print("Using CrossEntropyLoss")
         loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
@@ -172,7 +174,49 @@ def train(args):
     train_dataset = SequenceClassificationDataset(X_train, y_train)
     test_dataset = SequenceClassificationDataset(X_test, y_test)
     
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+    # Check original class distribution before oversampling
+    raw_labels = []
+    for i in range(len(train_dataset)):
+        raw_labels.extend(train_dataset.labels[i])
+
+    raw_class_counts = Counter(raw_labels)
+    print("Original Class Distribution:", raw_class_counts)
+    
+    # If oversampling is enabled, compute weights
+    if args.oversampling:
+       print("Applying oversampling using WeightedRandomSampler...")
+       sampling_weights = compute_sampling_weights(
+           train_dataset, 
+           num_classes=args.num_classes,
+           neq_thresholds=args.neq_thresholds,
+           oversampling_threshold=args.oversampling_threshold, 
+           undersampling_threshold=args.undersampling_threshold,
+           undersampling_intensity = args.undersampling_intensity,
+           oversampling_intensity = args.oversampling_intensity
+       )
+       
+       sampler = WeightedRandomSampler(
+           weights=sampling_weights,
+           num_samples=int(len(train_dataset) * 2),
+           replacement=True  # Allows oversampling
+       )
+       
+       train_loader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+       
+       # Collect labels from the sampled data in the DataLoader
+       oversampled_labels = []
+       for batch in train_loader:
+           batch_labels = batch['labels'].cpu().numpy().flatten()
+           batch_labels = batch_labels[batch_labels != -1]  # Remove padding values
+           oversampled_labels.extend(batch_labels)
+
+       oversampled_class_counts = Counter(oversampled_labels)
+       print("Sampled Class Distribution After Oversampling:", oversampled_class_counts)
+
+
+    else:
+       train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+       
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
     
     # If having scheduler as ReduceLROnPlateau, split the data into train and validation
