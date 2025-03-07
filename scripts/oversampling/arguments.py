@@ -60,11 +60,18 @@ def parse_arguments():
 
     # Architecture
     parser.add_argument("--architecture", type=str, default="bilstm",
-                        choices=["bilstm", "bilstm_attention"],
-                        help="Choose between BiLSTM ('bilstm') or BiLSTM+SelfAttention ('bilstm_attention'). default='bilstm")
+                        choices=["bilstm", "bilstm_attention", "transformer"],
+                        help="Model architecture: 'bilstm', 'bilstm_attention', or 'transformer'.")
     parser.add_argument("--hidden_size", type=int, default=512, help="Hidden size of LSTM layers. default=512")
     parser.add_argument("--num_layers", type=int, default=2, help="Number of LSTM layers. default=2")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout rate. default=0.3")
+    
+    parser.add_argument("--transformer_nhead", type=int, default=8,
+                        help="Number of attention heads in the Transformer encoder.")
+    parser.add_argument("--transformer_num_encoder_layers", type=int, default=6,
+                        help="Number of layers in the Transformer encoder.")
+    parser.add_argument("--transformer_dim_feedforward", type=int, default=1024,
+                        help="Dimension of the feedforward layer in the Transformer.")
 
     # Loss function
     parser.add_argument("--loss_function", type=str, default="focal",

@@ -3,7 +3,7 @@ Created on Tue Feb  4 10:00:07 2025
 
 @author: Ngoc Kim Ngan Tran
 """
-
+# train2.py
 import os
 import datetime
 import numpy as np
@@ -30,7 +30,8 @@ from transformers import EsmModel, EsmTokenizer
 from models import (
     FocalLoss, 
     BiLSTMClassificationModel,
-    BiLSTMWithSelfAttentionModel
+    BiLSTMWithSelfAttentionModel,
+    TransformerClassificationModel
 )
 
 def tokenize(sequences, tokenizer):
@@ -96,7 +97,7 @@ def get_loss_fn(args, train_dataset):
         else:
             alpha_tensor = None
             print("Using FocalLoss without class weights")
-        loss_fn = FocalLoss(alpha=alpha_tensor, gamma=3, ignore_index=-1)
+        loss_fn = FocalLoss(alpha=alpha_tensor, gamma=2, ignore_index=-1)
     else:
         print("Using CrossEntropyLoss")
         loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
@@ -141,8 +142,22 @@ def set_up_classification_model(args):
             dropout=args.dropout,
             num_classes=args.num_classes
         )
+    
+    elif args.architecture == "transformer":
+        print("Using Transformer model")
+        model = TransformerClassificationModel(
+            embedding_model=embedding_model,
+            nhead=args.transformer_nhead,
+            num_encoder_layers=args.transformer_num_encoder_layers,
+            dim_feedforward=args.transformer_dim_feedforward,
+            num_classes=args.num_classes,
+            dropout=args.dropout
+        )   
+    
     else:
         raise ValueError(f"Invalid architecture: {args.architecture}")
+        
+        
     model.to(args.device)
     return model
      
@@ -197,7 +212,7 @@ def train(args):
        
        sampler = WeightedRandomSampler(
            weights=sampling_weights,
-           num_samples=int(len(train_dataset) * 2),
+           num_samples=len(train_dataset),
            replacement=True  # Allows oversampling
        )
        

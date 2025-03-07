@@ -146,13 +146,15 @@ def compute_sampling_weights(dataset, num_classes, neq_thresholds, oversampling_
         # Compute fraction of residues belonging to minority classes
         minority_fraction = sum(1 for x in labels if x in minority_classes) / total_residues
 
-        # Assign weights dynamically
-        if minority_fraction == 0:
-            weight = 0  # ignore sequences that only have class 0 & 1
+# =============================================================================
+#         # Assign weights dynamically
+#         if minority_fraction == 0:
+#             weight = 0  # ignore sequences that only have class 0 & 1
+# =============================================================================
         if minority_fraction < undersampling_threshold:
             weight = undersampling_intensity  # Undersample sequences with almost no minority residues
         else:
-           weight = 1.0 + (oversampling_intensity ** 2) * ((minority_fraction - undersampling_threshold) / (1.0 - undersampling_threshold))  # Exponential boost for oversampling  # Oversample minority-rich sequences
+           weight = 1.0 + oversampling_intensity * (minority_fraction / oversampling_threshold) # Oversample minority-rich sequences
 
         weights.append(weight)
 

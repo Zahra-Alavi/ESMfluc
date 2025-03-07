@@ -11,7 +11,7 @@ Created on Tue Feb  4 10:09:40 2025
 
 import torch.nn as nn
 import torch
-
+import math 
 # =============================================================================
 # Model Architecture
 # =============================================================================
@@ -112,4 +112,78 @@ class FocalLoss(nn.Module):
             return -loss.sum()
         else:
             return -loss
+        
+# ---------------------------------------------------------------------
+# Add the Transformer-based model from your v61 approach
+# ---------------------------------------------------------------------
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        super().__init__()
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+
+        pe[:, 0::2] = torch.sin(position * div_term)  # Even indices
+        pe[:, 1::2] = torch.cos(position * div_term)  # Odd indices
+        pe = pe.unsqueeze(0)  # shape [1, max_len, d_model]
+
+        # Register as buffer so it's saved inside the model state_dict
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        """
+        x has shape [batch_size, seq_len, d_model].
+        """
+        seq_len = x.size(1)
+        # The .to(x.device) ensures PE is on same device as input
+        x = x + self.pe[:, :seq_len, :].to(x.device)
+        return x
+
+class TransformerClassificationModel(nn.Module):
+    def __init__(self, embedding_model, nhead=8, num_encoder_layers=6, 
+                 dim_feedforward=1024, num_classes=4, dropout=0.3):
+        super().__init__()
+        self.embedding_model = embedding_model  # ESM or other backbone
+        d_model = embedding_model.config.hidden_size
+
+        self.pos_encoder = PositionalEncoding(d_model)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_encoder_layers
+        )
+        self.fc = nn.Linear(d_model, num_classes)
+
+    def forward(self, input_ids, attention_mask):
+        """
+        input_ids: [batch_size, seq_len]
+        attention_mask: [batch_size, seq_len]
+        """
+        # Generate embeddings from the pretrained ESM model
+        outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
+        embeddings = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
+
+        # Add positional encoding
+        embeddings = self.pos_encoder(embeddings)
+
+        # Create a mask for padding (True where padding is present)
+        src_key_padding_mask = (attention_mask == 0)
+
+        # Pass through the Transformer encoder
+        # batch_first=True => shape remains [batch_size, seq_len, d_model]
+        transformer_output = self.transformer_encoder(
+            embeddings,
+            src_key_padding_mask=src_key_padding_mask
+        )
+
+        # Final classification layer
+        logits = self.fc(transformer_output)   # [batch_size, seq_len, num_classes]
+        return logits
         
