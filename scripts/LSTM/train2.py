@@ -24,6 +24,20 @@ from sklearn.metrics import classification_report, confusion_matrix, ConfusionMa
 from data_utils import create_classification_func, load_and_preprocess_data, SequenceClassificationDataset, collate_fn_sequence
 
 from transformers import EsmModel, EsmTokenizer
+from esm.models.esmc import ESMC
+from esm.sdk.api import ESMProtein, LogitsConfig
+from esm.sdk import client
+from concurrent.futures import ThreadPoolExecutor
+from typing import Sequence
+
+from esm.sdk.api import (
+    ESM3InferenceClient,
+    ESMProtein,
+    ESMProteinError,
+    LogitsConfig,
+    LogitsOutput,
+    ProteinType,
+)
 
 from models import (
     FocalLoss, 
@@ -101,23 +115,28 @@ def get_loss_fn(args, train_dataset):
     return loss_fn
 
 def set_up_embedding_model(args):
-    embedding_model = EsmModel.from_pretrained(f"facebook/{args.esm_model}")
-    embedding_model.to(args.device)
-    embedding_model.train()
-    
-    # Free layers
-    if args.freeze_layers:
-        # Ex: '0-5' means freeze layers 0..5, and unfreeze the rest
-        start_layer, end_layer = map(int, args.freeze_layers.split("-"))
-        freeze_list = range(start_layer, end_layer+1)
-        for name, param in embedding_model.named_parameters():
-            if "encoder.layer" in name:
-                layer_num = int(name.split(".")[2])
-                param.requires_grad = not layer_num in freeze_list
-            else:
-                param.requires_grad = True
-        print(f"Freezing layers {args.freeze_layers}")
-    return embedding_model
+    if args.esm_model.startswith("esmc"):
+        embedding_model = ESMC.load_model(args.esm_model)
+        embedding_model.to(args.device)
+        embedding_model.train()
+    else:
+        embedding_model = EsmModel.from_pretrained(f"facebook/{args.esm_model}")
+        embedding_model.to(args.device)
+        embedding_model.train()
+        
+        # Free layers
+        if args.freeze_layers:
+            # Ex: '0-5' means freeze layers 0..5, and unfreeze the rest
+            start_layer, end_layer = map(int, args.freeze_layers.split("-"))
+            freeze_list = range(start_layer, end_layer+1)
+            for name, param in embedding_model.named_parameters():
+                if "encoder.layer" in name:
+                    layer_num = int(name.split(".")[2])
+                    param.requires_grad = not layer_num in freeze_list
+                else:
+                    param.requires_grad = True
+            print(f"Freezing layers {args.freeze_layers}")
+        return embedding_model
 
 def set_up_classification_model(args):
     embedding_model = set_up_embedding_model(args)
@@ -143,10 +162,72 @@ def set_up_classification_model(args):
         raise ValueError(f"Invalid architecture: {args.architecture}")
     model.to(args.device)
     return model
-     
+
+def embed_sequence(model: ESM3InferenceClient, sequence: str) -> LogitsOutput:
+    EMBEDDING_CONFIG = LogitsConfig(
+        sequence=True, return_embeddings=True, return_hidden_states=True
+    )
+    protein = ESMProtein(sequence=sequence)
+    protein_tensor = model.encode(protein)
+    output = model.logits(protein_tensor, EMBEDDING_CONFIG)
+    return output.embeddings
+
+def batch_embed(
+    model: ESM3InferenceClient, inputs: Sequence[ProteinType]
+) -> Sequence[LogitsOutput]:
+    """Forge supports auto-batching. So batch_embed() is as simple as running a collection
+    of embed calls in parallel using asyncio.
+    """
+    with ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(embed_sequence, model, protein) for protein in inputs
+        ]
+        results = []
+        for future in futures:
+            try:
+                results.append(future.result())
+            except Exception as e:
+                results.append(ESMProteinError(500, str(e)))
+    return results
+
 def train(args):
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    # Load data
+    labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
+    train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
+    test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
+
+    # Preprocessing data
+    if not args.esm_model.startswith("esmc"):
+        tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
+        X_train = tokenize(train_data['sequence'], tokenizer) # [input_ids, attention_mask]
+        X_test = tokenize(test_data['sequence'], tokenizer)
+        y_train = train_data['neq_class'].tolist()
+        y_test = test_data['neq_class'].tolist()
         
+        train_dataset = SequenceClassificationDataset(X_train, y_train)
+        test_dataset = SequenceClassificationDataset(X_test, y_test)
+        
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+    else:
+        # ESMC model
+        
+        # the protein sequence need to switch Protein
+        token = "4cNSB4g1pJ7xgNtvOcrp4Q"
+        model = client(
+            model="esmc-300m-2024-12", url="https://forge.evolutionaryscale.ai", token=token
+        )
+        ESMC_6B_EMBEDDING_CONFIG = LogitsConfig(return_hidden_states=True, ith_hidden_layer=55)
+        #This X_train doesn't have attention_mask or input_ids
+        X_train = batch_embed(model, X_train["sequence"].tolist())
+        X_test = batch_embed(model, X_test["sequence"].tolist())
+        y_train = train_data['neq_class'].tolist()
+        y_test = test_data['neq_class'].tolist()
+        
+        
+    
     model = set_up_classification_model(args)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         
@@ -156,25 +237,7 @@ def train(args):
     else:
         scheduler = None
         print("Not using any scheduler")
-    
-    # Load data
-    labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
-    train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
-    test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
 
-    # Preprocessing data
-    tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
-    X_train = tokenize(train_data['sequence'], tokenizer) # [input_ids, attention_mask]
-    X_test = tokenize(test_data['sequence'], tokenizer)
-    y_train = train_data['neq_class'].tolist()
-    y_test = test_data['neq_class'].tolist()
-    
-    train_dataset = SequenceClassificationDataset(X_train, y_train)
-    test_dataset = SequenceClassificationDataset(X_test, y_test)
-    
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
-    
     # If having scheduler as ReduceLROnPlateau, split the data into train and validation
     val_loader = None
     if scheduler:

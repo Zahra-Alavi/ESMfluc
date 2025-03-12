@@ -19,21 +19,35 @@ import torch
 class BiLSTMClassificationModel(nn.Module):
     def __init__(self, embedding_model, hidden_size, num_layers, num_classes=4, dropout=0.3):
         super().__init__()
+        # Embedding model can be a modle or a input size
         self.embedding_model = embedding_model
-        self.lstm = nn.LSTM(
-            input_size=embedding_model.config.hidden_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            batch_first=True,
-            bidirectional=True,
-            dropout=dropout
-        )
+        if isinstance(embedding_model, int):
+            self.lstm = nn.LSTM(
+                input_size=embedding_model,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                batch_first=True,
+                bidirectional=True,
+                dropout=dropout
+            )
+        else:
+            self.lstm = nn.LSTM(
+                input_size=embedding_model.config.hidden_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                batch_first=True,
+                bidirectional=True,
+                dropout=dropout
+            )
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_size * 2, num_classes)
 
     def forward(self, input_ids, attention_mask):
-        outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
-        embeddings = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
+        if isinstance(self.embedding_model, int):
+            embeddings = input_ids
+        else:
+            outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
+            embeddings = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
         lstm_out, _ = self.lstm(embeddings)     # [batch_size, seq_len, hidden_size*2]
         lstm_out = self.dropout(lstm_out)
         logits = self.fc(lstm_out)              # [batch_size, seq_len, num_classes]
@@ -61,22 +75,36 @@ class SelfAttentionLayer(nn.Module):
 class BiLSTMWithSelfAttentionModel(nn.Module):
     def __init__(self, embedding_model, hidden_size, num_layers, num_classes=4, dropout=0.3):
         super().__init__()
+        # Embedding model can be a modle or a input size
         self.embedding_model = embedding_model
-        self.lstm = nn.LSTM(
-            input_size=embedding_model.config.hidden_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            batch_first=True,
-            bidirectional=True,
-            dropout=dropout
-        )
+        if isinstance(embedding_model, int):
+            self.lstm = nn.LSTM(
+                input_size=embedding_model,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                batch_first=True,
+                bidirectional=True,
+                dropout=dropout
+            )
+        else:
+            self.lstm = nn.LSTM(
+                input_size=embedding_model.config.hidden_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                batch_first=True,
+                bidirectional=True,
+                dropout=dropout
+            )
         self.attention = SelfAttentionLayer(hidden_size)
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_size * 2, num_classes)
 
     def forward(self, input_ids, attention_mask):
-        outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
-        embeddings = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
+        if isinstance(self.embedding_model, int):
+            embeddings = input_ids
+        else:
+            outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
+            embeddings = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
         lstm_out, _ = self.lstm(embeddings)     # [batch_size, seq_len, hidden_size*2]
         context = self.attention(lstm_out)
         context = self.dropout(context)

@@ -35,7 +35,8 @@ def parse_arguments():
         "esm2_t30_150M_UR50D",
         "esm2_t33_650M_UR50D",
         "esm2_t36_3B_UR50D",
-        "esm2_t48_15B_UR50D"]
+        "esm2_t48_15B_UR50D",
+        "esmc-300m-2024-12"]
     
     parser.add_argument("--esm_model", type=str, default="esm2_t12_35M_UR50D",
     choices=esm_models,
