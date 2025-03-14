@@ -85,8 +85,9 @@ def parse_arguments():
 #     parser.add_argument("--cv_type", type=str, default="standard",
 #                         choices=["stratified", "standard"],
 #                         help="Use 'stratified' (StratifiedKFold) or 'standard' (KFold). default=stratified")
+#     parser.add_argument("--n_splits", type=int, default=5, help="Number of folds for cross-validation.default=5")
 # =============================================================================
-    parser.add_argument("--n_splits", type=int, default=5, help="Number of folds for cross-validation.default=5")
+    
 
     # Layer freezing
     parser.add_argument("--freeze_layers", type=str, default=None,
