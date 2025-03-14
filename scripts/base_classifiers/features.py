@@ -10,6 +10,9 @@ import pandas as pd
 from decimal import Decimal
 from fairscale.nn.data_parallel import FullyShardedDataParallel as FSDP
 from fairscale.nn.wrap import enable_wrap, wrap
+from esm.sdk.forge import ESM3ForgeInferenceClient
+from esm.sdk.api import ESMProtein, LogitsConfig
+from esm.models.esmc import ESMC
 
 class BaseFeatureExtraction:
     def __init__(self):
@@ -85,6 +88,8 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
 
     def _load_esm_model(self, model_name):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if model_name.startswith("esmc"):
+            return
         self.repr_layers = int(model_name.split("_")[1].replace("t", ""))
         if model_name == "esm2_t48_15B_UR50D":
             # offload the model to CPU to reduce GPU memory usage. Ex: https://github.com/facebookresearch/esm/blob/main/examples/esm2_infer_fairscale_fsdp_cpu_offloading.py
@@ -130,16 +135,45 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         
         seq_embedding, targets = [], []
         for i, seq in enumerate(sequences):
-            data = [(f"protein_{i}", seq)]
-            labels, strs, tokens = self.batch_converter(data)
-            with torch.no_grad():
-                results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
-                token_embedding = results["representations"][self.repr_layers]
-                # If model is ESM 2 then token embedding is 1:-1 for second dimension, else 1: for esm 1
-                if self.model_name.startswith("esm1"):
-                    residue_embeddings = token_embedding[0, 1:]
+            try:
+                if not self.model_name.startswith("esmc"):
+                    data = [(f"protein_{i}", seq)]
+                    labels, strs, tokens = self.batch_converter(data)
+                    with torch.no_grad():
+                        results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
+                        token_embedding = results["representations"][self.repr_layers]
+                        # If model is ESM 2 then token embedding is 1:-1 for second dimension, else 1: for esm1
+                        if self.model_name.startswith("esm1"):
+                            residue_embeddings = token_embedding[0, 1:]
+                        else:
+                            residue_embeddings = token_embedding[0, 1:-1]
                 else:
-                    residue_embeddings = token_embedding[0, 1:-1]
+                    # ESMC model
+                    # forge_client = ESM3ForgeInferenceClient(
+                    #     model=self.model_name, 
+                    #     url="https://forge.evolutionaryscale.ai", 
+                    #     # token="4cNSB4g1pJ7xgNtvOcrp4Q"
+                    #     token="1pSIqJbe288ALbMQhBTCyU"
+                    # )
+                    protein = ESMProtein(sequence=seq)
+                    client = ESMC.from_pretrained("esmc_300m").to(self.device)
+                    protein_tensor = client.encode(protein)
+                    logits_output = client.logits(
+                        protein_tensor, LogitsConfig(sequence=True, return_embeddings=True)
+                    )
+                    residue_embeddings = logits_output.embeddings[0, 1:-1, :]
+                    
+                            # Store results
                 seq_embedding.extend(residue_embeddings.cpu().numpy())
                 targets.extend(neq_values[i])
+                print("Len of sequence embedding:", len(residue_embeddings))
+                print("Len of targets:", len(neq_values[i]))
+                print("Len of seq_embedding:", len(seq_embedding))
+                print("Len of targets:", len(targets))
+            except Exception as e:
+                print(f"Error processing sequence {i}: {e}")
+                if 'residue_embeddings' not in locals():
+                    print(f"Skipping sequence {i} due to critical failure.")
+                    break
+
         return seq_embedding, targets
