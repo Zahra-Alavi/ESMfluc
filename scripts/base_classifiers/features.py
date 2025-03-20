@@ -149,12 +149,6 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
                             residue_embeddings = token_embedding[0, 1:-1]
                 else:
                     # ESMC model
-                    # forge_client = ESM3ForgeInferenceClient(
-                    #     model=self.model_name, 
-                    #     url="https://forge.evolutionaryscale.ai", 
-                    #     # token="4cNSB4g1pJ7xgNtvOcrp4Q"
-                    #     token="1pSIqJbe288ALbMQhBTCyU"
-                    # )
                     protein = ESMProtein(sequence=seq)
                     client = ESMC.from_pretrained("esmc_300m").to(self.device)
                     protein_tensor = client.encode(protein)
@@ -163,7 +157,7 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
                     )
                     residue_embeddings = logits_output.embeddings[0, 1:-1, :]
                     
-                            # Store results
+                # Store results
                 seq_embedding.extend(residue_embeddings.cpu().numpy())
                 targets.extend(neq_values[i])
                 print("Len of sequence embedding:", len(residue_embeddings))
