@@ -10,9 +10,6 @@ import pandas as pd
 from decimal import Decimal
 from fairscale.nn.data_parallel import FullyShardedDataParallel as FSDP
 from fairscale.nn.wrap import enable_wrap, wrap
-from esm.sdk.forge import ESM3ForgeInferenceClient
-from esm.sdk.api import ESMProtein, LogitsConfig
-from esm.models.esmc import ESMC
 
 class BaseFeatureExtraction:
     def __init__(self):
@@ -134,6 +131,11 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         print("Feature extraction version 1.3")
         
         seq_embedding, targets = [], []
+        
+        if self.model_name.startswith("esmc"):
+            from esm.sdk.forge import ESM3ForgeInferenceClient
+            from esm.sdk.api import ESMProtein, LogitsConfig
+            from esm.models.esmc import ESMC
         for i, seq in enumerate(sequences):
             try:
                 if not self.model_name.startswith("esmc"):
