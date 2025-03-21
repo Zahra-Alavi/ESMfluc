@@ -156,11 +156,14 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
                     #         residue_embeddings = token_embedding[0, 1:-1]
                     tokenized_input = self.tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False).to(self.device)
                     residue_embeddings = self.model(tokenized_input.input_ids, tokenized_input.attention_mask).last_hidden_state.squeeze(0)
-                    seq_embedding.extend(residue_embeddings.detach().numpy())
+                    seq_embedding.extend(residue_embeddings.cpu().detach().numpy())
                 else:
                     # ESMC model
                     protein = ESMProtein(sequence=seq)
-                    client = ESMC.from_pretrained(self.model_name).to(self.device)
+                    if self.model_name == "esmc-6b-2024-12":
+                        client = ESM3ForgeInferenceClient(model="esmc-6b-2024-12", url="https://forge.evolutionaryscale.ai", token="input-token-here")
+                    else:
+                        client = ESMC.from_pretrained(self.model_name).to(self.device)
                     protein_tensor = client.encode(protein)
                     logits_output = client.logits(
                         protein_tensor, LogitsConfig(sequence=True, return_embeddings=True)
