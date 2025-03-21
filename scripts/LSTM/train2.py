@@ -24,6 +24,7 @@ from sklearn.metrics import classification_report, confusion_matrix, ConfusionMa
 from data_utils import create_classification_func, load_and_preprocess_data, SequenceClassificationDataset, collate_fn_sequence
 
 from transformers import EsmModel, EsmTokenizer
+from esm.sdk.forge import ESM3ForgeInferenceClient
 from esm.models.esmc import ESMC
 from esm.sdk.api import ESMProtein, LogitsConfig
 from esm.sdk import client
@@ -40,6 +41,7 @@ from esm.sdk.api import (
 )
 
 from models import (
+    BiLSTMClassificationModelWithoutEmbedding,
     FocalLoss, 
     BiLSTMClassificationModel,
     BiLSTMWithSelfAttentionModel
@@ -116,9 +118,7 @@ def get_loss_fn(args, train_dataset):
 
 def set_up_embedding_model(args):
     if args.esm_model.startswith("esmc"):
-        embedding_model = ESMC.load_model(args.esm_model)
-        embedding_model.to(args.device)
-        embedding_model.train()
+        return
     else:
         embedding_model = EsmModel.from_pretrained(f"facebook/{args.esm_model}")
         embedding_model.to(args.device)
@@ -138,8 +138,21 @@ def set_up_embedding_model(args):
             print(f"Freezing layers {args.freeze_layers}")
         return embedding_model
 
-def set_up_classification_model(args):
+def set_up_classification_model(args, esm_model=None):
     embedding_model = set_up_embedding_model(args)
+    if args.esm_model.startswith("esmc"):
+        print("Using ESMC model")
+        if args.architecture == "bilstm_wo_embedding":
+            print("Using BiLSTM model without embedding layer")
+            model = BiLSTMClassificationModelWithoutEmbedding(
+                input_size=esm_model.config.hidden_size,
+                hidden_size=args.hidden_size,
+                num_layers=args.num_layers,
+                dropout=args.dropout,
+                num_classes=args.num_classes
+            )
+        else:
+            raise ValueError("BiLSTM model is not supported for ESMC model")
     if args.architecture == "bilstm":
         print("Using BiLSTM model")
         model = BiLSTMClassificationModel(
@@ -163,32 +176,19 @@ def set_up_classification_model(args):
     model.to(args.device)
     return model
 
-def embed_sequence(model: ESM3InferenceClient, sequence: str) -> LogitsOutput:
-    EMBEDDING_CONFIG = LogitsConfig(
-        sequence=True, return_embeddings=True, return_hidden_states=True
-    )
-    protein = ESMProtein(sequence=sequence)
-    protein_tensor = model.encode(protein)
-    output = model.logits(protein_tensor, EMBEDDING_CONFIG)
-    return output.embeddings
+def esm_embed(model, input):
+    try:
+        protein = ESMProtein(sequence=input)
+        protein_tensor = model.encode(protein)
+        logits_output = client.logits(
+            protein_tensor, LogitsConfig(sequence=True, return_embeddings=True)
+        )
+        embeddings = logits_output.embeddings[:, 1:-1, :]
+        return embeddings.cpu().numpy()
 
-def batch_embed(
-    model: ESM3InferenceClient, inputs: Sequence[ProteinType]
-) -> Sequence[LogitsOutput]:
-    """Forge supports auto-batching. So batch_embed() is as simple as running a collection
-    of embed calls in parallel using asyncio.
-    """
-    with ThreadPoolExecutor() as executor:
-        futures = [
-            executor.submit(embed_sequence, model, protein) for protein in inputs
-        ]
-        results = []
-        for future in futures:
-            try:
-                results.append(future.result())
-            except Exception as e:
-                results.append(ESMProteinError(500, str(e)))
-    return results
+    except ESMProteinError as e:
+        print(f"Error: {e}")
+        return None
 
 def train(args):
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -213,22 +213,24 @@ def train(args):
         test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
     else:
         # ESMC model
+        esm_model = None
+        print("ESMC model -", args.esm_model)
+        if args.esm_model == "esmc-6b-2024-12":
+            esm_model = ESM3ForgeInferenceClient(model=args.esm_model, url="https://forge.evolutionaryscale.ai", token="input-token-here")
+        else:
+            esm_model = ESMC.from_pretrained(args.esm_model).to(args.device)
         
         # the protein sequence need to switch Protein
-        token = "4cNSB4g1pJ7xgNtvOcrp4Q"
-        model = client(
-            model="esmc-300m-2024-12", url="https://forge.evolutionaryscale.ai", token=token
-        )
-        ESMC_6B_EMBEDDING_CONFIG = LogitsConfig(return_hidden_states=True, ith_hidden_layer=55)
         #This X_train doesn't have attention_mask or input_ids
-        X_train = batch_embed(model, X_train["sequence"].tolist())
-        X_test = batch_embed(model, X_test["sequence"].tolist())
+        X_train = X_train["sequence"].map(lambda x: ESMProtein(sequence=x)).tolist()
+        X_test = X_test["sequence"].map(lambda x: ESMProtein(sequence=x)).tolist()
         y_train = train_data['neq_class'].tolist()
         y_test = test_data['neq_class'].tolist()
+        args.batch_size = 1 # ESMC model only supports batch size 1
         
         
     
-    model = set_up_classification_model(args)
+    model = set_up_classification_model(args, esm_model)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         
     if args.lr_scheduler == "reduce_on_plateau":
@@ -271,10 +273,13 @@ def train(args):
         total_loss = 0
         
         for i, batch in enumerate(train_loader):
-            input_ids = batch['input_ids'].to(args.device)
-            attention_mask = batch['attention_mask'].to(args.device)
+            if not args.esm_model.startswith("esmc"):
+                input_ids = batch['input_ids'].to(args.device)
+                attention_mask = batch['attention_mask'].to(args.device)
+            else:
+                input_ids = esm_embed(model, batch['sequence'][0], args.device)
+                attention_mask = None
             y = batch['labels'].to(args.device)
-            
             optimizer.zero_grad()
             
             if scaler and args.mixed_precision:

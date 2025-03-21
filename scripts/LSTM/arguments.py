@@ -36,7 +36,9 @@ def parse_arguments():
         "esm2_t33_650M_UR50D",
         "esm2_t36_3B_UR50D",
         "esm2_t48_15B_UR50D",
-        "esmc-300m-2024-12"]
+        "esmc_300m",
+        "esmc_600m",
+        "esmc-6b-2024-12",]
     
     parser.add_argument("--esm_model", type=str, default="esm2_t12_35M_UR50D",
     choices=esm_models,
@@ -61,7 +63,7 @@ def parse_arguments():
 
     # Architecture
     parser.add_argument("--architecture", type=str, default="bilstm",
-                        choices=["bilstm", "bilstm_attention"],
+                        choices=["bilstm", "bilstm_attention", "bilstm_wo_embedding"],
                         help="Choose between BiLSTM ('bilstm') or BiLSTM+SelfAttention ('bilstm_attention'). default='bilstm")
     parser.add_argument("--hidden_size", type=int, default=512, help="Hidden size of LSTM layers. default=512")
     parser.add_argument("--num_layers", type=int, default=2, help="Number of LSTM layers. default=2")
