@@ -23,7 +23,7 @@ This repository provides a pipeline for training a **BiLSTM** or **BiLSTM + Self
    python scripts/main.py [options...]
 
 4. **EXample**
-  `python main.py   --train_data_file ../../data/train_data.csv   --test_data_file ../../data/test_data.csv  --esm_model esm2_t12_35M_UR50D   --architecture bilstm_attention   --hidden_size 512   --num_layers 3   --dropout 0.3   --loss_function focal   --num_classes 2   --neq_thresholds 1.0   --mixed_precision   --freeze_layers "0-4"   --lr_scheduler reduce_on_plateau   --epochs 20   --patience 5   --batch_size 4   --n_splits 5`
+  `python main.py   --train_data_file ../../data/train_data.csv   --test_data_file ../../data/test_data.csv  --esm_model esm2_t12_35M_UR50D   --architecture bilstm_attention   --hidden_size 512   --num_layers 3   --dropout 0.3   --loss_function focal   --num_classes 2   --neq_thresholds 1.0   --mixed_precision   --freeze_layers "0-4"   --lr_scheduler reduce_on_plateau   --epochs 20   --patience 5   --batch_size 4 `
 
 ## Arguments
 
@@ -72,9 +72,6 @@ This repository provides a pipeline for training a **BiLSTM** or **BiLSTM + Self
 - **`--focal_class_weights`** (flag)  
   Enable class weights (`alpha`) for focal loss if set.
 
-- **`--n_splits [int]`** (default: `5`)  
-  Number of folds for cross-validation.
-
 - **`--freeze_layers [str]`** (default: `None`)  
   E.g. `"0-5"` means freeze layers 0..5 in ESM.
   note: all layer norms are kept unfrozen. 
@@ -91,16 +88,13 @@ This repository provides a pipeline for training a **BiLSTM** or **BiLSTM + Self
 - **`run_parameters.txt`**  
   Records all the command-line arguments used for the run.
 
-- **`best_model_fold_X.pt`**  
-  Model weights at the best epoch (lowest validation loss) for each fold.
-
 - **`loss_curves_fold_X.png`**  
-  Plot of training and validation loss over epochs for each fold.
+  Plot of training and validation loss over epochs.
 
 - **`confusion_matrix_fold_X.png`**  
-  Confusion matrix for the validation set of each fold.
+  Confusion matrix for the heldout test set.
 
 - **`classification_report_fold_X.txt`**
-  Classification report of each fold.
+  Classification report of the heldout test set.
 
 All these files are placed into a timestamped directory named `run_YYYY-MM-DD_HH-MM-SS`.

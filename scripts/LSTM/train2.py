@@ -244,6 +244,14 @@ def train(args):
         X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2)
         val_dataset = SequenceClassificationDataset(X_val, y_val)
         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+        
+    train_dataset = SequenceClassificationDataset(X_train, y_train)
+    test_dataset = SequenceClassificationDataset(X_test, y_test)
+    
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+    
+
     
     loss_fn = get_loss_fn(args, train_dataset)
         
