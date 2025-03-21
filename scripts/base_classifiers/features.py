@@ -11,6 +11,10 @@ from decimal import Decimal
 from fairscale.nn.data_parallel import FullyShardedDataParallel as FSDP
 from fairscale.nn.wrap import enable_wrap, wrap
 
+from transformers import EsmModel, EsmTokenizer
+from esm.sdk.forge import ESM3ForgeInferenceClient
+from esm.sdk.api import ESMProtein, LogitsConfig
+from esm.models.esmc import ESMC
 class BaseFeatureExtraction:
     def __init__(self):
         self.amino_acids = "ACDEFGHIKLMNPQRSTVWY"  # Standard amino acids
@@ -88,84 +92,82 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
         if model_name.startswith("esmc"):
             return
         self.repr_layers = int(model_name.split("_")[1].replace("t", ""))
-        if model_name == "esm2_t48_15B_UR50D":
+        # if model_name == "esm2_t48_15B_UR50D":
             # offload the model to CPU to reduce GPU memory usage. Ex: https://github.com/facebookresearch/esm/blob/main/examples/esm2_infer_fairscale_fsdp_cpu_offloading.py
 
+            # esm.pretrained not working currently
             # init the distributed world with world_size 1
-            print("Offload the model to CPU to reduce GPU memory usage")
-            url = "tcp://localhost:23456"
-            torch.distributed.init_process_group(backend="nccl", init_method=url, world_size=1, rank=0)
+            # print("Offload the model to CPU to reduce GPU memory usage")
+            # url = "tcp://localhost:23456"
+            # torch.distributed.init_process_group(backend="nccl", init_method=url, world_size=1, rank=0)
             
-            model_data, regression_data = esm.pretrained._download_model_and_regression_data(model_name)
+            # model_data, regression_data = esm.pretrained._download_model_and_regression_data(model_name)
             
-            # initialize the model with FSDP wrapper
-            fsdp_params = dict(
-                mixed_precision=True,
-                flatten_parameters=True,
-                state_dict_device=torch.device("cpu"),  # reduce GPU mem usage
-                cpu_offload=True,  # enable cpu offloading
-            )
+            # # initialize the model with FSDP wrapper
+            # fsdp_params = dict(
+            #     mixed_precision=True,
+            #     flatten_parameters=True,
+            #     state_dict_device=torch.device("cpu"),  # reduce GPU mem usage
+            #     cpu_offload=True,  # enable cpu offloading
+            # )
             
-            with enable_wrap(wrapper_cls=FSDP, **fsdp_params):
-                model, vocab = esm.pretrained.load_model_and_alphabet_core(
-                    model_name, model_data, regression_data
-                )
-                self.batch_converter = vocab.get_batch_converter()
-                model.eval()
+            # with enable_wrap(wrapper_cls=FSDP, **fsdp_params):
+            #     model, vocab = esm.pretrained.load_model_and_alphabet_core(
+            #         model_name, model_data, regression_data
+            #     )
+            #     self.batch_converter = vocab.get_batch_converter()
+            #     model.eval()
 
-                # Wrap each layer in FSDP separately
-                for name, child in model.named_children():
-                    if name == "layers":
-                        for layer_name, layer in child.named_children():
-                            wrapped_layer = wrap(layer)
-                            setattr(child, layer_name, wrapped_layer)
-                self.model = wrap(model)
-                print("Model wrapped with FSDP")
-        else:
-            self.model, alphabet = esm.pretrained.load_model_and_alphabet(model_name)
-            self.batch_converter = alphabet.get_batch_converter()
-            self.model.eval()
-            self.model.to(self.device)
+            #     # Wrap each layer in FSDP separately
+            #     for name, child in model.named_children():
+            #         if name == "layers":
+            #             for layer_name, layer in child.named_children():
+            #                 wrapped_layer = wrap(layer)
+            #                 setattr(child, layer_name, wrapped_layer)
+            #     self.model = wrap(model)
+            #     print("Model wrapped with FSDP")
+        # else:
+        #     self.model, alphabet = esm.pretrained.load_model_and_alphabet(model_name)
+        #     self.batch_converter = alphabet.get_batch_converter()
+        #     self.model.eval()
+        #     self.model.to(self.device)
+        model = EsmModel.from_pretrained(f"facebook/{model_name}")
+        model.to(self.device)
+        self.model = model
+        self.tokenizer = EsmTokenizer.from_pretrained(f"facebook/{model_name}")
     
     def extract_features(self, sequences, neq_values):
         print("Feature extraction version 1.3")
         
         seq_embedding, targets = [], []
         
-        if self.model_name.startswith("esmc"):
-            from esm.sdk.forge import ESM3ForgeInferenceClient
-            from esm.sdk.api import ESMProtein, LogitsConfig
-            from esm.models.esmc import ESMC
         for i, seq in enumerate(sequences):
             try:
                 if not self.model_name.startswith("esmc"):
-                    data = [(f"protein_{i}", seq)]
-                    labels, strs, tokens = self.batch_converter(data)
-                    with torch.no_grad():
-                        results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
-                        token_embedding = results["representations"][self.repr_layers]
-                        # If model is ESM 2 then token embedding is 1:-1 for second dimension, else 1: for esm1
-                        if self.model_name.startswith("esm1"):
-                            residue_embeddings = token_embedding[0, 1:]
-                        else:
-                            residue_embeddings = token_embedding[0, 1:-1]
+                    # data = [(f"protein_{i}", seq)]
+                    # labels, strs, tokens = self.batch_converter(data)
+                    # with torch.no_grad():
+                    #     results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
+                    #     token_embedding = results["representations"][self.repr_layers]
+                    #     # If model is ESM 2 then token embedding is 1:-1 for second dimension, else 1: for esm1
+                    #     if self.model_name.startswith("esm1"):
+                    #         residue_embeddings = token_embedding[0, 1:]
+                    #     else:
+                    #         residue_embeddings = token_embedding[0, 1:-1]
+                    tokenized_input = self.tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False)
+                    residue_embeddings = self.model(tokenized_input.input_ids, tokenized_input.attention_mask).last_hidden_state.squeeze(0)
+                    seq_embedding.extend(residue_embeddings.detach().numpy())
                 else:
                     # ESMC model
                     protein = ESMProtein(sequence=seq)
-                    client = ESMC.from_pretrained("esmc_300m").to(self.device)
+                    client = ESMC.from_pretrained(self.model_name).to(self.device)
                     protein_tensor = client.encode(protein)
                     logits_output = client.logits(
                         protein_tensor, LogitsConfig(sequence=True, return_embeddings=True)
                     )
                     residue_embeddings = logits_output.embeddings[0, 1:-1, :]
-                    
-                # Store results
-                seq_embedding.extend(residue_embeddings.cpu().numpy())
+                    seq_embedding.extend(residue_embeddings.cpu().numpy())
                 targets.extend(neq_values[i])
-                print("Len of sequence embedding:", len(residue_embeddings))
-                print("Len of targets:", len(neq_values[i]))
-                print("Len of seq_embedding:", len(seq_embedding))
-                print("Len of targets:", len(targets))
             except Exception as e:
                 print(f"Error processing sequence {i}: {e}")
                 if 'residue_embeddings' not in locals():
