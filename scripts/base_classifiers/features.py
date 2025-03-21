@@ -154,7 +154,7 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
                     #         residue_embeddings = token_embedding[0, 1:]
                     #     else:
                     #         residue_embeddings = token_embedding[0, 1:-1]
-                    tokenized_input = self.tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False)
+                    tokenized_input = self.tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False).to(self.device)
                     residue_embeddings = self.model(tokenized_input.input_ids, tokenized_input.attention_mask).last_hidden_state.squeeze(0)
                     seq_embedding.extend(residue_embeddings.detach().numpy())
                 else:
