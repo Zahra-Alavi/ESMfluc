@@ -222,8 +222,8 @@ def train(args):
         
         # the protein sequence need to switch Protein
         #This X_train doesn't have attention_mask or input_ids
-        X_train = X_train["sequence"].map(lambda x: ESMProtein(sequence=x)).tolist()
-        X_test = X_test["sequence"].map(lambda x: ESMProtein(sequence=x)).tolist()
+        X_train = train_data["sequence"].map(lambda x: ESMProtein(sequence=x)).tolist()
+        X_test = train_data["sequence"].map(lambda x: ESMProtein(sequence=x)).tolist()
         y_train = train_data['neq_class'].tolist()
         y_test = test_data['neq_class'].tolist()
         args.batch_size = 1 # ESMC model only supports batch size 1
