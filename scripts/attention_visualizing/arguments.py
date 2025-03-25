@@ -120,5 +120,14 @@ def parse_arguments():
     parser.add_argument("--lr_scheduler", type=str, default="reduce_on_plateau",
                         choices=["none", "reduce_on_plateau"],
                         help="Use no scheduler ('none') or 'reduce_on_plateau' (PyTorch's ReduceLROnPlateau). default=reduce_on_plateau")
+    
+    # Dropout rate learning
+    parser.add_argument("--dropout_rate_learning", 
+                        action="store_true",
+                        help="Getting the statistics for different dropout rates")
+    
+    # Result folder
+    parser.add_argument("--result_foldername", type=str, default="",
+                        help="Name for the result folder. default=")
 
     return parser

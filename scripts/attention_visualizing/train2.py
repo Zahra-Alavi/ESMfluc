@@ -78,10 +78,12 @@ def evaluate(model, data_loader, loss_fn, device):
         conf_matrix = confusion_matrix(all_targets, all_preds)
         return report, conf_matrix
 
-def create_run_folder():
+def create_run_folder(folder_name):
     now = datetime.datetime.now()
-    folder_name = "../../results/" + now.strftime("%Y-%m-%d-%H-%M-%S")
-    os.makedirs(folder_name)
+    results_folder = "../../results/"
+    if len(folder_name) == 0:
+        folder_name = now.strftime("%Y-%m-%d-%H-%M-%S")
+    os.makedirs(results_folder + folder_name)
     return folder_name
 
     
@@ -170,7 +172,7 @@ def set_up_classification_model(args):
 def train(args):
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
     
-    run_folder = create_run_folder()
+    run_folder = create_run_folder(args.result_foldername)
         
     model = set_up_classification_model(args)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
