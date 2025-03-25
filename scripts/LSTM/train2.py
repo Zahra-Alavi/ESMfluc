@@ -145,7 +145,7 @@ def set_up_classification_model(args, esm_model=None):
         if args.architecture == "bilstm_wo_embedding":
             print("Using BiLSTM model without embedding layer")
             model = BiLSTMClassificationModelWithoutEmbedding(
-                input_size=esm_model.config.hidden_size,
+                input_size=320,
                 hidden_size=args.hidden_size,
                 num_layers=args.num_layers,
                 dropout=args.dropout,
@@ -153,7 +153,7 @@ def set_up_classification_model(args, esm_model=None):
             )
         else:
             raise ValueError("BiLSTM model is not supported for ESMC model")
-    if args.architecture == "bilstm":
+    elif args.architecture == "bilstm":
         print("Using BiLSTM model")
         model = BiLSTMClassificationModel(
             embedding_model=embedding_model,
@@ -222,8 +222,8 @@ def train(args):
         
         # the protein sequence need to switch Protein
         #This X_train doesn't have attention_mask or input_ids
-        X_train = X_train["sequence"].map(lambda x: ESMProtein(sequence=x)).tolist()
-        X_test = X_test["sequence"].map(lambda x: ESMProtein(sequence=x)).tolist()
+        X_train = train_data["sequence"].map(lambda x: ESMProtein(sequence=x)).tolist()
+        X_test = train_data["sequence"].map(lambda x: ESMProtein(sequence=x)).tolist()
         y_train = train_data['neq_class'].tolist()
         y_test = test_data['neq_class'].tolist()
         args.batch_size = 1 # ESMC model only supports batch size 1
