@@ -160,7 +160,7 @@ def set_up_classification_model(args):
         
     model.to(args.device)
     
-    # Optionally wrap in DataParallel
+    # Wrap in DataParallel for bigger models
     if args.data_parallel and torch.cuda.device_count() > 1:
        print(f"Using nn.DataParallel on {torch.cuda.device_count()} GPUs")
        model = nn.DataParallel(model)
@@ -311,7 +311,7 @@ def train(args):
             best_val_loss = avg_val_loss
             epochs_no_improve = 0
             if isinstance(model, nn.DataParallel):
-                # Save the underlying model’s state
+                # Save the best model
                 torch.save(model.module.state_dict(), f"{run_folder}/best_model.pth")
             else:
                 torch.save(model.state_dict(), f"{run_folder}/best_model.pth")
@@ -323,7 +323,6 @@ def train(args):
        
             
     # Plot loss curve
-  
     plt.figure()
     plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
     plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
@@ -337,10 +336,8 @@ def train(args):
     cls_report, conf_matrix = evaluate(model, test_loader, loss_fn, args.device)
     print(cls_report)
     print(conf_matrix)
+    
     # Save classification report and confusion matrix
-    # Save args to text
-    with open(f"{run_folder}/args.txt", "w") as f:
-        f.write(str(args))
     with open(f"{run_folder}/classification_report.txt", "w") as f:
         f.write(str(cls_report))
     disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix)
@@ -349,4 +346,8 @@ def train(args):
     plt.savefig(f"{run_folder}/confusion_matrix.png")
     plt.close()
     
+    # Save args to text
+    with open(f"{run_folder}/args.txt", "w") as f:
+        f.write(str(args))
+        
     print("Training completed")
