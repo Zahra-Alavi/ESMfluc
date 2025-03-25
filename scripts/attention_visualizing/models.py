@@ -12,6 +12,7 @@ Created on Tue Feb  4 10:09:40 2025
 import torch.nn as nn
 import torch
 import math 
+
 # =============================================================================
 # Model Architecture
 # =============================================================================
@@ -102,41 +103,7 @@ class BiLSTMWithSelfAttentionModel(nn.Module):
             return logits, attn_weights
         else:
             return logits
-
-# =============================================================================
-# Loss Function 
-# =============================================================================
-
-class FocalLoss(nn.Module):
-    def __init__(self, alpha=None, gamma=2, reduction='mean', ignore_index=-1):
-        """
-        alpha: A tensor of shape [num_classes] specifying weight for each class,
-               or None if you do not want class-weighting.
-        gamma: focusing parameter for Focal Loss.
-        """
-        super().__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.reduction = reduction
-        self.ignore_index = ignore_index
-        self.ce_loss = nn.CrossEntropyLoss(weight=alpha, reduction='none', ignore_index=ignore_index)
-
-    def forward(self, inputs, targets):
-        logpt = -self.ce_loss(inputs, targets)
-        pt = torch.exp(logpt)
-        loss = ((1 - pt) ** self.gamma) * logpt
-
-        if self.reduction == 'mean':
-            return -loss.mean()
-        elif self.reduction == 'sum':
-            return -loss.sum()
-        else:
-            return -loss
         
-# ---------------------------------------------------------------------
-# Add the Transformer-based model from your v61 approach
-# ---------------------------------------------------------------------
-
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
         super().__init__()
@@ -207,3 +174,35 @@ class TransformerClassificationModel(nn.Module):
         logits = self.fc(transformer_output)   # [batch_size, seq_len, num_classes]
         return logits
         
+
+# =============================================================================
+# Loss Function 
+# =============================================================================
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=None, gamma=2, reduction='mean', ignore_index=-1):
+        """
+        alpha: A tensor of shape [num_classes] specifying weight for each class,
+               or None if you do not want class-weighting.
+        gamma: focusing parameter for Focal Loss.
+        """
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+        self.ignore_index = ignore_index
+        self.ce_loss = nn.CrossEntropyLoss(weight=alpha, reduction='none', ignore_index=ignore_index)
+
+    def forward(self, inputs, targets):
+        logpt = -self.ce_loss(inputs, targets)
+        pt = torch.exp(logpt)
+        loss = ((1 - pt) ** self.gamma) * logpt
+
+        if self.reduction == 'mean':
+            return -loss.mean()
+        elif self.reduction == 'sum':
+            return -loss.sum()
+        else:
+            return -loss
+        
+
