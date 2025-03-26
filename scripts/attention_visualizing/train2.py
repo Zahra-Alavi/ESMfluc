@@ -95,7 +95,8 @@ def create_run_folder(folder_name):
     if len(folder_name) == 0:
         folder_name = now.strftime("%Y-%m-%d-%H-%M-%S")
     result_dir = results_folder + folder_name
-    os.makedirs(result_dir)
+    if not os.path.exists(result_dir):
+        os.makedirs(result_dir)
     print("The result directory is", result_dir)
     return result_dir
 
