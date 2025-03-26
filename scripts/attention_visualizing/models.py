@@ -62,6 +62,65 @@ class SelfAttentionLayer(nn.Module):
             return context, attention_weights
         else:
             return context
+        
+class MultiHeadSelfAttentionLayer(nn.Module):
+    def __init__(self, hidden_size, n_heads=8):
+        super().__init__()
+        assert hidden_size % n_heads == 0, "Hidden size must be divisible by number of heads"
+        self.n_heads = n_heads
+        self.head_dim = hidden_size // n_heads
+        self.query = nn.Linear(hidden_size * 2, hidden_size)
+        self.key = nn.Linear(hidden_size * 2, hidden_size)
+        self.value = nn.Linear(hidden_size * 2, hidden_size)
+        self.fc_out = nn.Linear(hidden_size, hidden_size * 2)
+        self.softmax = nn.Softmax(dim=-1)
+    
+    def forward(self, lstm_out, return_weights = False):
+        batch_size, seq_len, hidden_size = lstm_out.size()
+        Q = self.query(lstm_out).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        K = self.key(lstm_out).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        V = self.value(lstm_out).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        
+        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.head_dim)  # [batch_size, num_heads, seq_len, seq_len]
+        attn_weights = self.softmax(attn_scores)
+        context = torch.matmul(attn_weights, V)  # [batch_size, num_heads, seq_len, head_dim]
+        context = context.transpose(1, 2).contiguous().view(batch_size, seq_len, hidden_size)
+        output = self.fc_out(context)
+        if return_weights:
+            return output, attn_weights
+        else:
+            return output
+        
+class BiLSTMWithMultiHeadAttentionModel(nn.Module):
+    def __init__(self, embedding_model, hidden_size, num_layers, num_heads=4, num_classes=4, dropout=0.3):
+        super().__init__()
+        self.embedding_model = embedding_model
+        self.lstm = nn.LSTM(
+            input_size=embedding_model.config.hidden_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout
+        )
+        self.multihead_attention = MultiHeadSelfAttentionLayer(hidden_size, num_heads)
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(hidden_size * 2, num_classes)
+
+    def forward(self, input_ids, attention_mask, return_attention=False):
+        outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
+        embeddings = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
+        lstm_out, _ = self.lstm(embeddings)     # [batch_size, seq_len, hidden_size*2]
+        context, attn_weights = self.multihead_attention(lstm_out)
+
+        context = self.dropout(context)
+
+        logits = self.fc(context)  # [batch_size, seq_len, num_classes]
+
+        if return_attention:
+            return logits, attn_weights
+        else:
+            return logits
 
 
 class BiLSTMWithSelfAttentionModel(nn.Module):
