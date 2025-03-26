@@ -58,6 +58,7 @@ def evaluate(model, data_loader, loss_fn, device):
     with torch.no_grad():
         model.eval()
         all_preds, all_targets = [], []
+        results = []
         for batch in data_loader:
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
@@ -74,10 +75,19 @@ def evaluate(model, data_loader, loss_fn, device):
             y = y[mask_flat]
             all_preds.extend(y_preds.cpu().numpy())
             all_targets.extend(y.cpu().numpy())
+            
+            for seq, neq, pred, true_label in zip(batch['sequence'], batch['neq'], y_preds.cpu().numpy(), y.cpu().numpy()):
+                results.append({
+                    'sequence': seq,
+                    'neq values': neq,
+                    'pred': pred.item(),
+                    'true label': true_label.item()
+                })
 
         report = classification_report(all_targets, all_preds, output_dict=True)
         conf_matrix = confusion_matrix(all_targets, all_preds)
-        return report, conf_matrix
+        results_df = pd.DataFrame(results)
+        return report, conf_matrix, results_df
 
 def create_run_folder(folder_name):
     now = datetime.datetime.now()
@@ -203,22 +213,25 @@ def train(args):
 
     # Preprocessing data
     tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
-    X_train = tokenize(train_data['sequence'], tokenizer) # [input_ids, attention_mask]
-    X_test = tokenize(test_data['sequence'], tokenizer)
-    y_train = train_data['neq_class'].tolist()
-    y_test = test_data['neq_class'].tolist()
-    
+    X_train = train_data["sequence"]
+    X_test = test_data["sequence"]
+    y_label_train = train_data["neq_class"].tolist()
+    y_label_test= test_data["neq_class"].tolist()
+    y_raw_train = train_data["neq"].tolist()
+    y_raw_test = test_data["neq"].tolist()
     
     # If having scheduler as ReduceLROnPlateau, split the data into train and validation
     val_loader = None
     if scheduler:
-        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2)
-        val_dataset = SequenceClassificationDataset(X_val, y_val)
+        X_train, X_val, y_label_train, y_label_val, y_raw_train, y_raw_val = train_test_split(X_train, y_label_train, y_raw_train, test_size=0.2)
+        X_val_tokenized = tokenize(X_val, tokenizer)
+        val_dataset = SequenceClassificationDataset(X_val_tokenized, y_label_val, X_val, y_raw_val)
         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
         
-        
-    train_dataset = SequenceClassificationDataset(X_train, y_train)
-    test_dataset = SequenceClassificationDataset(X_test, y_test)
+    X_train_tokenized = tokenize(X_train, tokenizer)
+    X_test_tokenized = tokenize(X_test, tokenizer)
+    train_dataset = SequenceClassificationDataset(X_train_tokenized, y_label_train, X_train, y_raw_train)
+    test_dataset = SequenceClassificationDataset(X_test_tokenized, y_label_test, X_test, y_raw_test)
     
     # Check original class distribution before oversampling
     raw_labels = []
@@ -264,92 +277,101 @@ def train(args):
        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
        
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
-    
-    
-    
-    loss_fn = get_loss_fn(args, train_dataset)
         
     # -------------------------
     # Training loop
     # -------------------------
-    scaler = GradScaler(device=args.device) if args.mixed_precision else None
-    
-    best_val_loss = float('inf')
-    epochs_no_improve = 0
-    
-    val_losses = []
-    train_losses = []
-    
-    for epoch in range(args.epochs):
-        model.train()
-        total_loss = 0
+    best_model_path = f"{run_folder}/best_model.pth"
+    # Perform training only if best_model.pth does not exist
+    if os.path.exists(best_model_path):
+        print("Model already trained. Skipping training.")
+        model.load_state_dict(torch.load(best_model_path))
+    else:
+        print("Starting training.....................................")
+        loss_fn = get_loss_fn(args, train_dataset)
+        scaler = GradScaler(device=args.device) if args.mixed_precision else None
         
-        for i, batch in enumerate(train_loader):
-            input_ids = batch['input_ids'].to(args.device)
-            attention_mask = batch['attention_mask'].to(args.device)
-            y = batch['labels'].to(args.device)
+        best_val_loss = float('inf')
+        epochs_no_improve = 0
+        
+        val_losses = []
+        train_losses = []
+        
+        for epoch in range(args.epochs):
+            model.train()
+            total_loss = 0
             
-            optimizer.zero_grad()
-            
-            if scaler and args.mixed_precision:
-                with torch.amp.autocast(device_type=args.device):
+            for i, batch in enumerate(train_loader):
+                input_ids = batch['input_ids'].to(args.device)
+                attention_mask = batch['attention_mask'].to(args.device)
+                y = batch['labels'].to(args.device)
+                
+                optimizer.zero_grad()
+                
+                if scaler and args.mixed_precision:
+                    with torch.amp.autocast(device_type=args.device):
+                        y_preds = model(input_ids, attention_mask)
+                        y_preds_flat = y_preds.view(-1, args.num_classes)
+                        y_flat = y.view(-1)
+                        loss = loss_fn(y_preds_flat, y_flat)
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
                     y_preds = model(input_ids, attention_mask)
                     y_preds_flat = y_preds.view(-1, args.num_classes)
                     y_flat = y.view(-1)
                     loss = loss_fn(y_preds_flat, y_flat)
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                y_preds = model(input_ids, attention_mask)
-                y_preds_flat = y_preds.view(-1, args.num_classes)
-                y_flat = y.view(-1)
-                loss = loss_fn(y_preds_flat, y_flat)
-                loss.backward()
-                optimizer.step()
+                    loss.backward()
+                    optimizer.step()
+                
+                total_loss += loss.item()
+            avg_train_loss = total_loss / len(train_loader)
+            train_losses.append(avg_train_loss)
+            print(f"[Epoch {epoch}] Training Loss: {avg_train_loss:.4f}")
             
-            total_loss += loss.item()
-        avg_train_loss = total_loss / len(train_loader)
-        train_losses.append(avg_train_loss)
-        print(f"[Epoch {epoch}] Training Loss: {avg_train_loss:.4f}")
-        
-        avg_val_loss = compute_validation_loss(model, val_loader, loss_fn, args.device)
-        val_losses.append(avg_val_loss)
-        print(f"[Epoch {epoch}] Validation Loss: {avg_val_loss:.4f}")
-        
-        if scheduler:
-            scheduler.step(avg_val_loss)
-        
-        # Early stopping check
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            epochs_no_improve = 0
-            if isinstance(model, nn.DataParallel):
-                # Save the best model
-                torch.save(model.module.state_dict(), f"{run_folder}/best_model.pth")
-            else:
-                torch.save(model.state_dict(), f"{run_folder}/best_model.pth")
-        else:
-            epochs_no_improve += 1
-            if epochs_no_improve >= args.patience:
-                print(f"Early stopping at epoch {epoch}")
-                break
-       
+            avg_val_loss = compute_validation_loss(model, val_loader, loss_fn, args.device)
+            val_losses.append(avg_val_loss)
+            print(f"[Epoch {epoch}] Validation Loss: {avg_val_loss:.4f}")
             
-    # Plot loss curve
-    plt.figure()
-    plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
-    plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Loss Curve")
-    plt.legend()
-    plt.savefig(f"{run_folder}/loss_curve.png")
+            if scheduler:
+                scheduler.step(avg_val_loss)
+            
+            # Early stopping check
+            if avg_val_loss < best_val_loss:
+                best_val_loss = avg_val_loss
+                epochs_no_improve = 0
+                if isinstance(model, nn.DataParallel):
+                    # Save the best model
+                    torch.save(model.module.state_dict(), best_model_path)
+                else:
+                    torch.save(model.state_dict(), best_model_path)
+            else:
+                epochs_no_improve += 1
+                if epochs_no_improve >= args.patience:
+                    print(f"Early stopping at epoch {epoch}")
+                    break
+        
+                
+        # Plot loss curve
+        plt.figure()
+        plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
+        plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.title("Loss Curve")
+        plt.legend()
+        plt.savefig(f"{run_folder}/loss_curve.png")
     
+    # -------------------------
     # Evaluation
-    cls_report, conf_matrix = evaluate(model, test_loader, loss_fn, args.device)
+    # -------------------------
+    print("Evaluating model on test data...")
+    cls_report, conf_matrix, results_df = evaluate(model, test_loader, loss_fn, args.device)
     print(cls_report)
     print(conf_matrix)
+    
+    results_df.to_csv(f"{run_folder}/results.csv", index=False)
     
     # Save classification report and confusion matrix
     with open(f"{run_folder}/classification_report.txt", "w") as f:
