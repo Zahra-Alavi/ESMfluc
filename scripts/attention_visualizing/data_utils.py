@@ -47,8 +47,10 @@ def create_classification_func(num_classes, thresholds):
 # =============================================================================
 
 class SequenceClassificationDataset(Dataset):
-    def __init__(self, encoded_inputs, labels):
+    def __init__(self, encoded_inputs, labels, sequences, neq_values):
+        self.sequences = sequences
         self.encoded_inputs = encoded_inputs
+        self.neq_values = neq_values
         self.labels = labels
 
     def __len__(self):
@@ -56,6 +58,8 @@ class SequenceClassificationDataset(Dataset):
 
     def __getitem__(self, idx):
         return {
+            'sequence': self.sequences[idx],
+            'neq': self.neq_values[idx],
             'input_ids': self.encoded_inputs[idx]['input_ids'].squeeze(0),
             'attention_mask': self.encoded_inputs[idx]['attention_mask'].squeeze(0),
             'labels': torch.tensor(self.labels[idx])
@@ -65,17 +69,23 @@ def collate_fn_sequence(batch, tokenizer):
     input_ids = [item['input_ids'] for item in batch]
     attention_masks = [item['attention_mask'] for item in batch]
     labels = [item['labels'] for item in batch]
+    sequences = [item['sequence'] for item in batch]
+    neq_values = [item['neq'] for item in batch]
 
     pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 1
 
     input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=pad_token_id)
     attention_masks_padded = pad_sequence(attention_masks, batch_first=True, padding_value=0)
     labels_padded = pad_sequence(labels, batch_first=True, padding_value=-1)
+    sequences_padded = pad_sequence(sequences, batch_first=True, padding_value='')
+    neq_values_padded = pad_sequence(neq_values, batch_first=True, padding_value=-1)
 
     return {
         'input_ids': input_ids_padded,
         'attention_mask': attention_masks_padded,
-        'labels': labels_padded
+        'labels': labels_padded,
+        'sequences': sequences_padded,
+        'neq_values': neq_values_padded
     }
 
 
