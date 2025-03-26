@@ -58,7 +58,7 @@ class SequenceClassificationDataset(Dataset):
 
     def __getitem__(self, idx):
         return {
-            'sequence': self.sequences[idx],
+            'sequences': self.sequences[idx],
             'neq': self.neq_values[idx],
             'input_ids': self.encoded_inputs[idx]['input_ids'].squeeze(0),
             'attention_mask': self.encoded_inputs[idx]['attention_mask'].squeeze(0),
@@ -68,25 +68,26 @@ class SequenceClassificationDataset(Dataset):
 def collate_fn_sequence(batch, tokenizer):
     input_ids = [item['input_ids'] for item in batch]
     attention_masks = [item['attention_mask'] for item in batch]
-    labels = [item['labels'] for item in batch]
-    sequences = [item['sequence'] for item in batch]
-    neq_values = [item['neq'] for item in batch]
+    labels = [torch.tensor(item['labels']) for item in batch]
+    sequences = [item['sequences'] for item in batch]
+    neq_values = [torch.tensor(item['neq'], dtype=torch.float) for item in batch]
 
     pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 1
 
+    # Padding tensors
     input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=pad_token_id)
     attention_masks_padded = pad_sequence(attention_masks, batch_first=True, padding_value=0)
     labels_padded = pad_sequence(labels, batch_first=True, padding_value=-1)
-    sequences_padded = pad_sequence(sequences, batch_first=True, padding_value='')
-    neq_values_padded = pad_sequence(neq_values, batch_first=True, padding_value=-1)
+    neq_values_padded = pad_sequence(neq_values, batch_first=True, padding_value=-1.0)
 
     return {
         'input_ids': input_ids_padded,
         'attention_mask': attention_masks_padded,
         'labels': labels_padded,
-        'sequences': sequences_padded,
+        'sequences': sequences,
         'neq_values': neq_values_padded
     }
+
 
 
 def load_and_preprocess_data(csv_path, classify_neq):
