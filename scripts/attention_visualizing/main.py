@@ -16,7 +16,7 @@ def dropout_rate_learning(args):
     dropout_rates = [0.1, 0.2, 0.3, 0.4, 0.5]
     for dropout in dropout_rates:
         args.dropout = dropout
-        args.result_dir = "dropout_{}".format(dropout)
+        args.result_foldername = "dropout_{}".format(dropout)
         train(args)
 
 def main():
