@@ -28,6 +28,7 @@ from data_utils import create_classification_func, load_and_preprocess_data, Seq
 from transformers import EsmModel, EsmTokenizer
 
 from models import (
+    BiLSTMWithMultiHeadAttentionModel,
     FocalLoss, 
     BiLSTMClassificationModel,
     BiLSTMWithSelfAttentionModel,
@@ -84,7 +85,7 @@ def create_run_folder(folder_name):
     if len(folder_name) == 0:
         folder_name = now.strftime("%Y-%m-%d-%H-%M-%S")
     os.makedirs(results_folder + folder_name)
-    return folder_name
+    return results_folder + folder_name
 
     
 def get_loss_fn(args, train_dataset):
@@ -138,6 +139,15 @@ def set_up_classification_model(args):
     elif args.architecture == "bilstm_attention":
         print("Using BiLSTM with SelfAttention model")
         model = BiLSTMWithSelfAttentionModel(
+            embedding_model=embedding_model,
+            hidden_size=args.hidden_size,
+            num_layers=args.num_layers,
+            dropout=args.dropout,
+            num_classes=args.num_classes
+        )
+    elif args.architecture == "bilstm_multihead_attention":
+        print("Using BiLSTM with MultiHeadAttention model")
+        model = BiLSTMWithMultiHeadAttentionModel(
             embedding_model=embedding_model,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
