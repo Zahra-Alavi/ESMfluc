@@ -83,8 +83,10 @@ def create_run_folder(folder_name):
     results_folder = "../../results/"
     if len(folder_name) == 0:
         folder_name = now.strftime("%Y-%m-%d-%H-%M-%S")
-    os.makedirs(results_folder + folder_name)
-    return folder_name
+    result_dir = results_folder + folder_name
+    os.makedirs(result_dir)
+    print("The result directory is", result_dir)
+    return result_dir
 
     
 def get_loss_fn(args, train_dataset):
