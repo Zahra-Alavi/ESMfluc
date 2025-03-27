@@ -90,7 +90,7 @@ class MultiHeadSelfAttentionLayer(nn.Module):
         attention = self.softmax(energy)
         context = torch.matmul(attention, V)
         
-        context = context.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_len, hidden_size/2)
+        context = context.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_len, hidden_size//2)
         context = self.fc_out(context)
         
         if return_weights:

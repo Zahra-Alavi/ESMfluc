@@ -76,7 +76,7 @@ def evaluate(model, data_loader, loss_fn, device):
             all_preds.extend(y_preds.cpu().numpy())
             all_targets.extend(y.cpu().numpy())
             
-            for seq, neq, pred, true_label in zip(batch['sequence'], batch['neq'], y_preds.cpu().numpy(), y.cpu().numpy()):
+            for seq, neq, pred, true_label in zip(batch['sequences'], batch['neq_values'], y_preds.cpu().numpy(), y.cpu().numpy()):
                 results.append({
                     'sequence': seq,
                     'neq values': neq,
@@ -214,8 +214,8 @@ def train(args):
 
     # Preprocessing data
     tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
-    X_train = train_data["sequence"]
-    X_test = test_data["sequence"]
+    X_train = train_data["sequence"].tolist()
+    X_test = test_data["sequence"].tolist()
     y_label_train = train_data["neq_class"].tolist()
     y_label_test= test_data["neq_class"].tolist()
     y_raw_train = train_data["neq"].tolist()
