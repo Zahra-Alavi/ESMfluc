@@ -60,7 +60,7 @@ def parse_arguments():
 
     # Architecture
     parser.add_argument("--architecture", type=str, default="bilstm",
-                        choices=["bilstm", "bilstm_attention", "bilstm_multihead_attention" "transformer"],
+                        choices=["bilstm", "bilstm_attention", "bilstm_multihead_attention", "transformer"],
                         help="Model architecture: 'bilstm', 'bilstm_attention', or 'transformer'.")
     parser.add_argument("--hidden_size", type=int, default=512, help="Hidden size of LSTM layers. default=512")
     parser.add_argument("--num_layers", type=int, default=2, help="Number of LSTM layers. default=2")
