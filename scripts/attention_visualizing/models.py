@@ -77,22 +77,30 @@ class MultiHeadSelfAttentionLayer(nn.Module):
     
     def forward(self, lstm_out, return_weights = False):
         batch_size, seq_len, hidden_size = lstm_out.size()
-        Q = self.query(lstm_out).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        K = self.key(lstm_out).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        V = self.value(lstm_out).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         
-        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.head_dim)  # [batch_size, num_heads, seq_len, seq_len]
-        attn_weights = self.softmax(attn_scores)
-        context = torch.matmul(attn_weights, V)  # [batch_size, num_heads, seq_len, head_dim]
-        context = context.transpose(1, 2).contiguous().view(batch_size, seq_len, hidden_size)
-        output = self.fc_out(context)
+        Q = self.query(lstm_out)
+        K = self.key(lstm_out)
+        V = self.value(lstm_out)
+        
+        Q = Q.view(batch_size, seq_len, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
+        K = K.view(batch_size, seq_len, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
+        V = V.view(batch_size, seq_len, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
+        
+        energy = torch.matmul(Q, K.permute(0, 1, 3, 2)) / math.sqrt(self.head_dim)
+        attention = self.softmax(energy)
+        context = torch.matmul(attention, V)
+        
+        context = context.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_len, hidden_size)
+        context = self.fc_out(context)
+        
         if return_weights:
-            return output, attn_weights
+            return context, attention
         else:
-            return output
+            return context
+        
         
 class BiLSTMWithMultiHeadAttentionModel(nn.Module):
-    def __init__(self, embedding_model, hidden_size, num_layers, num_heads=4, num_classes=4, dropout=0.3):
+    def __init__(self, embedding_model, hidden_size, num_layers, num_heads=8, num_classes=4, dropout=0.3):
         super().__init__()
         self.embedding_model = embedding_model
         self.lstm = nn.LSTM(
