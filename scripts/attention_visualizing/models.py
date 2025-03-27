@@ -90,7 +90,7 @@ class MultiHeadSelfAttentionLayer(nn.Module):
         attention = self.softmax(energy)
         context = torch.matmul(attention, V)
         
-        context = context.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_len, hidden_size)
+        context = context.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_len, hidden_size/2)
         context = self.fc_out(context)
         
         if return_weights:
@@ -119,7 +119,11 @@ class BiLSTMWithMultiHeadAttentionModel(nn.Module):
         outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
         embeddings = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
         lstm_out, _ = self.lstm(embeddings)     # [batch_size, seq_len, hidden_size*2]
-        context, attn_weights = self.multihead_attention(lstm_out)
+        
+        if return_attention:
+            context, attn_weights = self.multihead_attention(lstm_out)
+        else:
+            context = self.multihead_attention(lstm_out)
 
         context = self.dropout(context)
 
