@@ -76,7 +76,7 @@ def evaluate(model, data_loader, loss_fn, device):
             all_preds.extend(y_preds.cpu().numpy())
             all_targets.extend(y.cpu().numpy())
             
-            for seq, neq, pred, true_label in zip(batch['sequences'], batch['neq_values'], y_preds.cpu().numpy(), y.cpu().numpy()):
+            for seq, neq, pred, true_label in zip(batch['sequences'], batch['neq_values'], y_preds.cpu().numpy().tolist(), y.cpu().numpy().tolist()):
                 results.append({
                     'sequence': seq,
                     'neq values': neq,
