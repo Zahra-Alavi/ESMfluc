@@ -76,12 +76,12 @@ def evaluate(model, data_loader, loss_fn, device):
             all_preds.extend(y_preds.cpu().numpy())
             all_targets.extend(y.cpu().numpy())
             
-            for seq, neq, pred, true_label in zip(batch['sequences'], batch['neq_values'], y_preds.cpu().numpy().tolist(), y.cpu().numpy().tolist()):
+            for seq, neq in zip(batch['sequences'], batch['neq_values']):
                 results.append({
                     'sequence': seq,
                     'neq values': neq,
-                    'pred': pred.item(),
-                    'true label': true_label.item()
+                    'pred': y_preds.cpu().numpy().tolist(),
+                    'true label': y.cpu().numpy().tolist()
                 })
 
         report = classification_report(all_targets, all_preds, output_dict=True)
