@@ -283,13 +283,15 @@ def train(args):
     # Training loop
     # -------------------------
     best_model_path = f"{run_folder}/best_model.pth"
+    loss_fn = get_loss_fn(args, train_dataset)
     # Perform training only if best_model.pth does not exist
     if os.path.exists(best_model_path):
         print("Model already trained. Skipping training.")
-        model.load_state_dict(torch.load(best_model_path))
+        state_dict = torch.load(best_model_path)
+        new_state_dict = {f"module.{k}": v for k, v in state_dict.items()}
+        model.load_state_dict(new_state_dict)
     else:
         print("Starting training.....................................")
-        loss_fn = get_loss_fn(args, train_dataset)
         scaler = GradScaler(device=args.device) if args.mixed_precision else None
         
         best_val_loss = float('inf')
