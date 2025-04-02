@@ -11,6 +11,9 @@ def analysis(args):
 
     wrong_aa_count_0 = Counter()
     wrong_aa_count_1 = Counter()
+    
+    total_aa_count_0 = Counter()
+    total_aa_count_1 = Counter()
 
     # Iterate through the dataset
 
@@ -25,6 +28,11 @@ def analysis(args):
                     wrong_aa_count_0[aa] += 1
                 elif true_c == 1:
                     wrong_aa_count_1[aa] += 1
+            # Count total occurrences of each amino acid in the true classes
+            if true_c == 0:
+                total_aa_count_0[aa] += 1
+            elif true_c == 1:
+                total_aa_count_1[aa] += 1
 
 
     # Plot the histogram
@@ -32,8 +40,10 @@ def analysis(args):
     width = 0.4
 
     plt.figure(figsize=(12, 6))
-    plt.bar(x - width/2, [wrong_aa_count_0[aa] for aa in amino_acids], width, label="Class 0")
-    plt.bar(x + width/2, [wrong_aa_count_1[aa] for aa in amino_acids], width, label="Class 1")
+    plt.bar(x - width/2, [wrong_aa_count_0[aa] for aa in amino_acids], width, label="True Class is 0 But Predicted Class is 1")
+    plt.bar(x + width/2, [wrong_aa_count_1[aa] for aa in amino_acids], width, label="True Class is 1 But Predicted Class is 0")
+    plt.bar(x - width/2, [total_aa_count_0[aa] for aa in amino_acids], width, alpha=0.5, label="Total Class 0")
+    plt.bar(x + width/2, [total_aa_count_1[aa] for aa in amino_acids], width, alpha=0.5, label="Total Class 1")
 
     # Labels and title
     plt.xticks(x, amino_acids)
