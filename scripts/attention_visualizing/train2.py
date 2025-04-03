@@ -79,7 +79,7 @@ def evaluate(model, data_loader, loss_fn, device):
             for seq, neq in zip(batch['sequences'], batch['neq_values']):
                 results.append({
                     'sequence': seq,
-                    'neq values': neq,
+                    'neq values': neq.cpu().numpy().tolist(),
                     'pred': y_preds.cpu().numpy().tolist(),
                     'true label': y.cpu().numpy().tolist()
                 })
