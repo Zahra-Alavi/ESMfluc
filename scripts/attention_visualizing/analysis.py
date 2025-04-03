@@ -66,9 +66,9 @@ def analysis(args):
     # Plot the histogram for neq values for each amino acid
     for aa, neq_values in wrong_aa_neq_values_1.items():
         plt.figure(figsize=(12, 6))  
-        bins = np.arange(1, 16, 1)
-        plt.hist(neq_values, bins=bins, edgecolor="black", align="left", rwidth=0.8)
-        plt.title(f"True Neq Values of {aa} That Were Wronly Classified As 0")
+        bins = np.arange(1, 8, 1)
+        plt.hist(neq_values, bins=bins, edgecolor="black", rwidth=0.8)
+        plt.title(f"True Neq Values of {aa} That Were Wrongly Classified As 0")
         plt.xlabel("neq values")
         plt.ylabel("Frequency")
         plt.savefig(args.folder + f"/plot/neq_values_{aa}.png")
