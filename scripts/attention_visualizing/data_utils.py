@@ -78,7 +78,7 @@ def collate_fn_sequence(batch, tokenizer):
     input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=pad_token_id)
     attention_masks_padded = pad_sequence(attention_masks, batch_first=True, padding_value=0)
     labels_padded = pad_sequence(labels, batch_first=True, padding_value=-1)
-    neq_values_padded = pad_sequence(neq_values, batch_first=True, padding_value=-1.0)
+    neq_values_padded = pad_sequence(neq_values, batch_first=True, padding_value=-1)
 
     return {
         'input_ids': input_ids_padded,
