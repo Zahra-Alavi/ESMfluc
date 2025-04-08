@@ -67,22 +67,20 @@ def evaluate(model, data_loader, loss_fn, device):
             y_preds = model(input_ids, attention_mask)
             y_probs = torch.softmax(y_preds, dim=-1)
             y_preds = torch.argmax(y_probs, dim=-1)
-            y_preds = y_preds.view(-1)
-            y = y.view(-1)
-            
-            mask_flat = y != -1
-            y_preds = y_preds[mask_flat]
-            y = y[mask_flat]
-            all_preds.extend(y_preds.cpu().numpy())
-            all_targets.extend(y.cpu().numpy())
-            
-            for seq, neq in zip(batch['sequences'], batch['neq_values']):
+            for i in range(len(batch['sequences'])):
+                seq = batch['sequences'][i]
+                mask = batch['labels'][i] != -1
+                neq_values = batch['neq_values'][i][mask].cpu().numpy().tolist()
+                pred = y_preds[i][mask].cpu().numpy().tolist()
+                true_label = y[i][mask].cpu().numpy().tolist()
                 results.append({
                     'sequence': seq,
-                    'neq values': neq.cpu().numpy().tolist(),
-                    'pred': y_preds.cpu().numpy().tolist(),
-                    'true label': y.cpu().numpy().tolist()
+                    'neq values': neq_values.cpu().numpy().tolist(),
+                    'pred': pred,
+                    'true label': true_label
                 })
+                all_preds.extend(pred)
+                all_targets.extend(true_label)
 
         report = classification_report(all_targets, all_preds, output_dict=True)
         conf_matrix = confusion_matrix(all_targets, all_preds)
