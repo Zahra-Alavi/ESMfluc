@@ -70,12 +70,12 @@ def evaluate(model, data_loader, loss_fn, device):
             for i in range(len(batch['sequences'])):
                 seq = batch['sequences'][i]
                 mask = batch['labels'][i] != -1
-                neq_values = batch['neq_values'][i][mask].cpu().numpy().tolist()
+                neq_values = batch['neq_values'][i][mask].tolist()
                 pred = y_preds[i][mask].cpu().numpy().tolist()
                 true_label = y[i][mask].cpu().numpy().tolist()
                 results.append({
                     'sequence': seq,
-                    'neq values': neq_values.cpu().numpy().tolist(),
+                    'neq values': neq_values,
                     'pred': pred,
                     'true label': true_label
                 })
