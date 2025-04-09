@@ -28,8 +28,9 @@ def create_classification_func(num_classes, thresholds):
     sorted_thresholds = sorted(thresholds)
 
     def classify_neq(neq_value):
+        rounded_neq_values = round(neq_value, 2)
         for i, t in enumerate(sorted_thresholds):
-            if neq_value <= t:
+            if rounded_neq_values <= t:
                 return i
         return len(sorted_thresholds)
 
