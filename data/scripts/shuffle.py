@@ -9,7 +9,6 @@ import pandas as pd
 import ast
 import random
 
-df = pd.read_csv("train_data.csv")
 
 def shuffle_neq_in_row(neq_str):
     """
@@ -22,8 +21,6 @@ def shuffle_neq_in_row(neq_str):
     # convert back to string
     return str(neq_list)
 
-# Apply this to every row of the 'neq' column
+df = pd.read_csv("train_data.csv")
 df["neq"] = df["neq"].apply(shuffle_neq_in_row)
-
-# Save to a new file
 df.to_csv("shuffled_inplace_data.csv", index=False)
