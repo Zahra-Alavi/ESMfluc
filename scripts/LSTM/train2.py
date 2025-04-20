@@ -75,9 +75,11 @@ def evaluate(model, data_loader, loss_fn, device):
         conf_matrix = confusion_matrix(all_targets, all_preds)
         return report, conf_matrix
 
-def create_run_folder():
+def create_run_folder(folder_name):
     now = datetime.datetime.now()
-    folder_name = "../../results/" + now.strftime("%Y-%m-%d-%H-%M-%S")
+    results_folder = "../../results/"
+    if folder_name == results_folder:
+        folder_name = results_folder + now.strftime("%Y-%m-%d-%H-%M-%S")
     os.makedirs(folder_name)
     return folder_name
 

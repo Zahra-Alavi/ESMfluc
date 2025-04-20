@@ -60,11 +60,18 @@ def parse_arguments():
 
     # Architecture
     parser.add_argument("--architecture", type=str, default="bilstm",
-                        choices=["bilstm", "bilstm_attention"],
-                        help="Choose between BiLSTM ('bilstm') or BiLSTM+SelfAttention ('bilstm_attention'). default='bilstm")
+                        choices=["bilstm", "bilstm_attention", "bilstm_multihead_attention", "transformer"],
+                        help="Model architecture: 'bilstm', 'bilstm_attention', or 'transformer'.")
     parser.add_argument("--hidden_size", type=int, default=512, help="Hidden size of LSTM layers. default=512")
     parser.add_argument("--num_layers", type=int, default=2, help="Number of LSTM layers. default=2")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout rate. default=0.3")
+    
+    parser.add_argument("--transformer_nhead", type=int, default=8,
+                        help="Number of attention heads in the Transformer encoder.")
+    parser.add_argument("--transformer_num_encoder_layers", type=int, default=6,
+                        help="Number of layers in the Transformer encoder.")
+    parser.add_argument("--transformer_dim_feedforward", type=int, default=1024,
+                        help="Dimension of the feedforward layer in the Transformer.")
 
     # Loss function
     parser.add_argument("--loss_function", type=str, default="focal",
@@ -74,21 +81,32 @@ def parse_arguments():
     parser.add_argument("--focal_class_weights", action="store_true",
                         help="If using focal loss, use class weights (alpha) computed from data.")
 
+    # Oversampling
+    parser.add_argument("--oversampling", action="store_true",
+                        help="Enable oversampling of minority classes at sequence level. action='store_true")
+    
+    parser.add_argument("--oversampling_threshold", type=float, default=0.1, help="Fraction of minority residues required for oversampling. default=0.1")
+    
+    parser.add_argument("--undersampling_threshold", type=float, default=0.01, help="Fraction of minority residues below which to down-weight samples. default=0.1")
+    
+    parser.add_argument("--undersampling_intensity", type=float, default=0.1, help="scaling factor: how much to undersample majority-class sequences. default=0.1")
+    
+    parser.add_argument("--oversampling_intensity", type=float, default=5.0, help="scaling factor: how much to oversample minority-class sequences. default=5.0")
+ 
+    # Whether to wrap the model in DataParallel if multiple GPUs are available
+    parser.add_argument("--data_parallel", action="store_true",
+                       help="Use nn.DataParallel for multi-GPU training if more than one GPU is available.")
+
+    
 # =============================================================================
-#     # Oversampling
-#     parser.add_argument("--oversampling", action="store_true",
-#                         help="Enable oversampling of minority classes at sequence level. action='store_true")
 # 
-# =============================================================================
-# =============================================================================
 #     # Cross-validation
 #     parser.add_argument("--cv_type", type=str, default="standard",
 #                         choices=["stratified", "standard"],
 #                         help="Use 'stratified' (StratifiedKFold) or 'standard' (KFold). default=stratified")
 #     parser.add_argument("--n_splits", type=int, default=5, help="Number of folds for cross-validation.default=5")
+# 
 # =============================================================================
-    
-
     # Layer freezing
     parser.add_argument("--freeze_layers", type=str, default=None,
                         help=("Specify which layers to freeze, e.g. '0-5' means freeze layers 0..5, "
@@ -102,10 +120,14 @@ def parse_arguments():
     parser.add_argument("--lr_scheduler", type=str, default="reduce_on_plateau",
                         choices=["none", "reduce_on_plateau"],
                         help="Use no scheduler ('none') or 'reduce_on_plateau' (PyTorch's ReduceLROnPlateau). default=reduce_on_plateau")
-    parser.add_arguemtn("--dropout_rate_learning", 
+    
+    # Dropout rate learning
+    parser.add_argument("--dropout_rate_learning", 
                         action="store_true",
                         help="Getting the statistics for different dropout rates")
-    parser.add_argument("--result_dir", type=str, default="../../results/",
-                        help="Directory to save results. default=../../results/")
+    
+    # Result folder
+    parser.add_argument("--result_foldername", type=str, default="",
+                        help="Name for the result folder. default=")
 
     return parser
