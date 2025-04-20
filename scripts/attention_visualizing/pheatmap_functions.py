@@ -15,7 +15,7 @@ from sklearn.preprocessing  import StandardScaler
 
 
 """
-This script takes a JSON file including seq names, sequences, attention weights and optionally neq_pred and ss_pred. 
+This script takes a JSON file including seq names, sequences, attention weights, neq_pred and optionally ss_pred. 
 (input JSON is the output of get_attn.py)
 
 It can:
