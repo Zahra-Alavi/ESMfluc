@@ -12,6 +12,8 @@ The pipeline has been modified to:
 
 # Folder Structure
 
+Training:
+
 - `main.py`: The main entry point for training and evaluation.
 
 - `arguments.py`: Defines all available command-line arguments.
@@ -22,9 +24,10 @@ The pipeline has been modified to:
 
 - `data_utils.py`: Preprocessing and data handling utilities.
 
-- `analysis.py`: Scripts for performing histogram analysis from the input results.
+Inference and Analysis:
 
-- `attention_visualizer.py`: Plots attention heatmaps for each sequence.
+- `get_attn.py`: Main inference scripts, takes a fasta file and the best model check point, returns a JSON file with sequences, their attention weights and predicted neq class.
+- `pheatmap_functions.py`: Contains functions to plot attention heat maps and perform PCA. It can also analyze variant effect for an input file including a WT and mutants.  
 
 # Training Instructions
 
@@ -49,49 +52,15 @@ python main.py \
   --data_parallel \
   --num_layers 3
 ```
+# Inference Instructions
 
-# Visualizing Attention Heatmaps
+Once the model is trained and saved, you can apply it to sequences from a FASTA file to get predicted neq class and attention weights. The results will be saved in your desired path as a JSON file.
 
-Once the model is trained and saved, you can apply it to sequences from a FASTA file and generate attention heatmaps using:
-
-```bash python attention_visualizer_interactive.py --checkpoint best_model_shuffled.pth --fasta_file examples.fasta ```
-
-# Generating Histogram Analysis
-
-1. Generate `results.csv` file
-
-After training the model, you can generate the `results.csv` file using a similar command. Since the best model is already saved during training, you only need to specify the folder containing the saved model. The results will automatically be saved in the `results/` folder.
-
-**Argument**: --result_foldername (specifies the folder name where results are stored)
-
-Ex: 
-
-```bash
-python main.py \
-  --train_data_file ../../data/train_data.csv \
-  --test_data_file ../../data/test_data.csv \
-  --esm_model esm2_t33_650M_UR50D \
-  --architecture bilstm_attention \
-  --dropout 0.3 \
-  --loss_function focal \
-  --mixed_precision \
-  --lr_scheduler reduce_on_plateau \
-  --epochs 80 \
-  --patience 3 \
-  --batch_size 2 \
-  --num_classes 2 \
-  --neq_thresholds 1.0 \
-  --freeze_layers '0-4' \
-  --data_parallel \
-  --num_layers 3 \
-  --result_foldername fold_1
+```bash 
+python get_attn.py --checkpoint best_model.pth --fasta_file your_sequences.fasta (optional)--ss_csv your_ss.csv --ouput path_to_the_final_output
 ```
 
-2. Generate Histograms from `results.csv`
+If a CSV file for secondary structure prediction is given, the final JSON will also include ss_pred. Such CSV file can be obtained from: https://services.healthtech.dtu.dk/services/NetSurfP-3.0/. This is only useful if you later want to plot attention heatmaps with ss annotations.
 
-Once the results are generated, you can visualize them by running the following command:
+Once you run inference, you can visualize the attentin mechanism using `pheatmap_functions.py`
 
-```
-python analysis.py --folder ../../results/[folder_name]
-```
-Replace [`folder_name`] with the actual folder where your results are stored.
