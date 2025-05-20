@@ -167,7 +167,7 @@ def set_up_classification_model(args):
             num_layers=args.num_layers,
             dropout=args.dropout,
             num_classes=args.num_classes, 
-            bidirectional=True
+            bidirectional=bidirectional
         )
     elif args.architecture == "bilstm_multihead_attention" or args.architecture == "lstm_multihead_attention":
         print("Using LSTM with MultiHeadAttention model")
