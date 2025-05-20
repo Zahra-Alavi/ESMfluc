@@ -28,7 +28,7 @@ from data_utils import create_classification_func, load_and_preprocess_data, Seq
 from transformers import EsmModel, EsmTokenizer
 
 from models import (
-    BiLSTMWithMultiHeadAttentionModel,
+    LSTMWithMultiHeadAttentionModel,
     FocalLoss, 
     LSTMClassificationModel,
     LSTMWithSelfAttentionModel,
@@ -169,14 +169,16 @@ def set_up_classification_model(args):
             num_classes=args.num_classes, 
             bidirectional=True
         )
-    elif args.architecture == "bilstm_multihead_attention":
-        print("Using BiLSTM with MultiHeadAttention model")
-        model = BiLSTMWithMultiHeadAttentionModel(
+    elif args.architecture == "bilstm_multihead_attention" or args.architecture == "lstm_multihead_attention":
+        print("Using LSTM with MultiHeadAttention model")
+        bidirectional = define_lstm_bidirectional(args.architecture)
+        model = LSTMWithMultiHeadAttentionModel(
             embedding_model=embedding_model,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
             dropout=args.dropout,
-            num_classes=args.num_classes
+            num_classes=args.num_classes,
+            bidirectional=bidirectional,
         )
     
     elif args.architecture == "transformer":
