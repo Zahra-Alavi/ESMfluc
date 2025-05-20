@@ -17,8 +17,8 @@ import math
 # Model Architecture
 # =============================================================================
 
-class BiLSTMClassificationModel(nn.Module):
-    def __init__(self, embedding_model, hidden_size, num_layers, num_classes=4, dropout=0.3):
+class LSTMClassificationModel(nn.Module):
+    def __init__(self, embedding_model, hidden_size, num_layers, num_classes=4, dropout=0.3, bidirectional=True):
         super().__init__()
         self.embedding_model = embedding_model
         self.lstm = nn.LSTM(
@@ -26,11 +26,14 @@ class BiLSTMClassificationModel(nn.Module):
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=True,
-            bidirectional=True,
+            bidirectional=bidirectional,
             dropout=dropout
         )
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(hidden_size * 2, num_classes)
+        if bidirectional:
+            self.fc = nn.Linear(hidden_size * 2, num_classes)
+        else:
+            self.fc = nn.Linear(hidden_size, num_classes)
 
     def forward(self, input_ids, attention_mask):
         outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
@@ -41,11 +44,13 @@ class BiLSTMClassificationModel(nn.Module):
         return logits
 
 class SelfAttentionLayer(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, hidden_size, bidirectional=True):
         super().__init__()
-        self.query = nn.Linear(hidden_size * 2, hidden_size * 2)
-        self.key = nn.Linear(hidden_size * 2, hidden_size * 2)
-        self.value = nn.Linear(hidden_size * 2, hidden_size * 2)
+        if bidirectional:
+            hidden_size = hidden_size * 2
+        self.query = nn.Linear(hidden_size, hidden_size)
+        self.key = nn.Linear(hidden_size, hidden_size)
+        self.value = nn.Linear(hidden_size, hidden_size)
         self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, lstm_out, return_weights=False):
@@ -135,8 +140,8 @@ class BiLSTMWithMultiHeadAttentionModel(nn.Module):
             return logits
 
 
-class BiLSTMWithSelfAttentionModel(nn.Module):
-    def __init__(self, embedding_model, hidden_size, num_layers, num_classes=4, dropout=0.3):
+class LSTMWithSelfAttentionModel(nn.Module):
+    def __init__(self, embedding_model, hidden_size, num_layers, num_classes=4, dropout=0.3, bidirectional=True):
         super().__init__()
         self.embedding_model = embedding_model
         self.lstm = nn.LSTM(
@@ -144,12 +149,16 @@ class BiLSTMWithSelfAttentionModel(nn.Module):
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=True,
-            bidirectional=True,
+            bidirectional=bidirectional,
             dropout=dropout
         )
-        self.attention = SelfAttentionLayer(hidden_size)
+        self.attention = SelfAttentionLayer(hidden_size, bidirectional=bidirectional)
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(hidden_size * 2, num_classes)
+        self.bidirectional = bidirectional
+        if bidirectional:
+            self.fc = nn.Linear(hidden_size * 2, num_classes)
+        else:
+            self.fc = nn.Linear(hidden_size, num_classes)
 
     def forward(self, input_ids, attention_mask, return_attention=False):
         # 1) Obtain embeddings from your pretrained ESM

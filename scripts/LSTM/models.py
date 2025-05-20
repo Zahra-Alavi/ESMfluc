@@ -16,7 +16,7 @@ import torch
 # Model Architecture
 # =============================================================================
 
-class BiLSTMClassificationModel(nn.Module):
+class LSTMClassificationModel(nn.Module):
     def __init__(self, embedding_model, hidden_size, num_layers, num_classes=4, dropout=0.3):
         super().__init__()
         self.embedding_model = embedding_model
@@ -58,7 +58,7 @@ class SelfAttentionLayer(nn.Module):
         context = torch.bmm(attention_weights, V)  # [batch_size, seq_len, hidden_size*2]
         return context
 
-class BiLSTMWithSelfAttentionModel(nn.Module):
+class LSTMWithSelfAttentionModel(nn.Module):
     def __init__(self, embedding_model, hidden_size, num_layers, num_classes=4, dropout=0.3):
         super().__init__()
         self.embedding_model = embedding_model

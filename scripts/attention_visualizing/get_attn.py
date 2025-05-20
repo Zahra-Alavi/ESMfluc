@@ -20,7 +20,7 @@ import torch
 from transformers import EsmModel, EsmTokenizer
 
 
-from models import BiLSTMWithSelfAttentionModel
+from models import LSTMWithSelfAttentionModel
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -111,7 +111,7 @@ def main():
     embedding_model.to(device)
         
 
-    model = BiLSTMWithSelfAttentionModel(
+    model = LSTMWithSelfAttentionModel(
         embedding_model=embedding_model,
         hidden_size=512,
         num_layers=3,

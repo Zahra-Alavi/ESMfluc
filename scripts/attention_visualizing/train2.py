@@ -30,8 +30,8 @@ from transformers import EsmModel, EsmTokenizer
 from models import (
     BiLSTMWithMultiHeadAttentionModel,
     FocalLoss, 
-    BiLSTMClassificationModel,
-    BiLSTMWithSelfAttentionModel,
+    LSTMClassificationModel,
+    LSTMWithSelfAttentionModel,
     TransformerClassificationModel
 )
 
@@ -136,25 +136,38 @@ def set_up_embedding_model(args):
         print(f"Freezing layers {args.freeze_layers}")
     return embedding_model
 
+def define_lstm_bidirectional(model_name):
+    if "lstm" in model_name:
+        if "bilstm" in model_name:
+            return True
+        else:
+            return False
+    else:
+        raise ValueError(f"Invalid model name: {model_name}. Expected 'lstm' or 'bilstm' in the name.")
+
 def set_up_classification_model(args):
     embedding_model = set_up_embedding_model(args)
-    if args.architecture == "bilstm":
-        print("Using BiLSTM model")
-        model = BiLSTMClassificationModel(
+    if args.architecture == "bilstm" or args.architecture == "lstm":
+        print("Using LSTM model without attention")
+        bidirectional = define_lstm_bidirectional(args.architecture)
+        model = LSTMClassificationModel(
             embedding_model=embedding_model,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
             dropout=args.dropout,
-            num_classes=args.num_classes
+            num_classes=args.num_classes,
+            bidirectional=bidirectional
         )
-    elif args.architecture == "bilstm_attention":
-        print("Using BiLSTM with SelfAttention model")
-        model = BiLSTMWithSelfAttentionModel(
+    elif args.architecture == "bilstm_attention" or args.architecture == "lstm_attention":
+        print("Using LSTM with SelfAttention model")
+        bidirectional = define_lstm_bidirectional(args.architecture)
+        model = LSTMWithSelfAttentionModel(
             embedding_model=embedding_model,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
             dropout=args.dropout,
-            num_classes=args.num_classes
+            num_classes=args.num_classes, 
+            bidirectional=True
         )
     elif args.architecture == "bilstm_multihead_attention":
         print("Using BiLSTM with MultiHeadAttention model")
