@@ -191,6 +191,7 @@ def set_up_classification_model(args):
     return model
      
 def train(args):
+    torch.cuda.empty_cache()
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
     
     run_folder = create_run_folder(args.result_foldername)
