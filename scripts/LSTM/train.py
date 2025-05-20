@@ -25,8 +25,8 @@ from transformers import EsmModel, EsmTokenizer
 
 from models import (
     FocalLoss, 
-    BiLSTMClassificationModel,
-    BiLSTMWithSelfAttentionModel
+    LSTMClassificationModel,
+    LSTMWithSelfAttentionModel
 )
 from data_utils import load_and_preprocess_data, SequenceClassificationDataset, collate_fn_sequence
 
@@ -255,7 +255,7 @@ def run_training(args):
 
          # Choose architecture
          if args.architecture == "bilstm":
-             model = BiLSTMClassificationModel(
+             model = LSTMClassificationModel(
                  embedding_model=embedding_model,
                  hidden_size=args.hidden_size,
                  num_layers=args.num_layers,
@@ -264,7 +264,7 @@ def run_training(args):
              )
              print("Using BiLSTM architecture.")
          else:
-             model = BiLSTMWithSelfAttentionModel(
+             model = LSTMWithSelfAttentionModel(
                  embedding_model=embedding_model,
                  hidden_size=args.hidden_size,
                  num_layers=args.num_layers,

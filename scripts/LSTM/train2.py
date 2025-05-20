@@ -27,8 +27,8 @@ from transformers import EsmModel, EsmTokenizer
 
 from models import (
     FocalLoss, 
-    BiLSTMClassificationModel,
-    BiLSTMWithSelfAttentionModel
+    LSTMClassificationModel,
+    LSTMWithSelfAttentionModel
 )
 
 def tokenize(sequences, tokenizer):
@@ -125,7 +125,7 @@ def set_up_classification_model(args):
     embedding_model = set_up_embedding_model(args)
     if args.architecture == "bilstm":
         print("Using BiLSTM model")
-        model = BiLSTMClassificationModel(
+        model = LSTMClassificationModel(
             embedding_model=embedding_model,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
@@ -134,7 +134,7 @@ def set_up_classification_model(args):
         )
     elif args.architecture == "bilstm_attention":
         print("Using BiLSTM with SelfAttention model")
-        model = BiLSTMWithSelfAttentionModel(
+        model = LSTMWithSelfAttentionModel(
             embedding_model=embedding_model,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
