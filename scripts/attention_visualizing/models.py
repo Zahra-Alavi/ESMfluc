@@ -69,15 +69,18 @@ class SelfAttentionLayer(nn.Module):
             return context
         
 class MultiHeadSelfAttentionLayer(nn.Module):
-    def __init__(self, hidden_size, n_heads=8):
+    def __init__(self, hidden_size, n_heads=8, bidirectional=False):
         super().__init__()
-        assert hidden_size % n_heads == 0, "Hidden size must be divisible by number of heads"
+        self.input_size = hidden_size * 2 if bidirectional else hidden_size
+        assert self.input_size % n_heads == 0, "Input size must be divisible by n_heads"
         self.n_heads = n_heads
-        self.head_dim = hidden_size // n_heads
-        self.query = nn.Linear(hidden_size * 2, hidden_size)
-        self.key = nn.Linear(hidden_size * 2, hidden_size)
-        self.value = nn.Linear(hidden_size * 2, hidden_size)
-        self.fc_out = nn.Linear(hidden_size, hidden_size * 2)
+        self.head_dim = self.input_size // n_heads
+        self.bidirectional = bidirectional
+
+        self.query = nn.Linear(self.input_size, hidden_size)
+        self.key = nn.Linear(self.input_size, hidden_size)
+        self.value = nn.Linear(self.input_size, hidden_size)
+        self.fc_out = nn.Linear(hidden_size, self.input_size)
         self.softmax = nn.Softmax(dim=-1)
     
     def forward(self, lstm_out, return_weights = False):
@@ -95,7 +98,8 @@ class MultiHeadSelfAttentionLayer(nn.Module):
         attention = self.softmax(energy)
         context = torch.matmul(attention, V)
         
-        context = context.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_len, hidden_size//2)
+        output_dim = hidden_size//2 if self.bidirectional else hidden_size
+        context = context.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_len, output_dim)
         context = self.fc_out(context)
         
         if return_weights:
@@ -104,8 +108,8 @@ class MultiHeadSelfAttentionLayer(nn.Module):
             return context
         
         
-class BiLSTMWithMultiHeadAttentionModel(nn.Module):
-    def __init__(self, embedding_model, hidden_size, num_layers, num_heads=8, num_classes=4, dropout=0.3):
+class LSTMWithMultiHeadAttentionModel(nn.Module):
+    def __init__(self, embedding_model, hidden_size, num_layers, num_heads=8, num_classes=4, dropout=0.3, bidirectional=False):
         super().__init__()
         self.embedding_model = embedding_model
         self.lstm = nn.LSTM(
@@ -113,12 +117,14 @@ class BiLSTMWithMultiHeadAttentionModel(nn.Module):
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=True,
-            bidirectional=True,
+            bidirectional=bidirectional,
             dropout=dropout
         )
-        self.multihead_attention = MultiHeadSelfAttentionLayer(hidden_size, num_heads)
+        self.multihead_attention = MultiHeadSelfAttentionLayer(hidden_size, num_heads, bidirectional)
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(hidden_size * 2, num_classes)
+        self.bidirectional = bidirectional
+        input_size = hidden_size * 2 if bidirectional else hidden_size
+        self.fc = nn.Linear(input_size, num_classes)
 
     def forward(self, input_ids, attention_mask, return_attention=False):
         outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
