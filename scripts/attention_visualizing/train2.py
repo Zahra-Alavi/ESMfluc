@@ -422,7 +422,7 @@ def train(args):
     # Evaluation
     # -------------------------
     print("Evaluating model on test data...")
-    cls_report, conf_matrix, results_df = evaluate(model, test_loader, args.loss_function.split(-1)[-1], args.device)
+    cls_report, conf_matrix, results_df = evaluate(model, test_loader, args.loss_function.split("-")[-1], args.device)
     print(cls_report)
     print(conf_matrix)
     
