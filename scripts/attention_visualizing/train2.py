@@ -38,7 +38,7 @@ from models import (
 def tokenize(sequences, tokenizer):
     return [tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False) for seq in sequences]
 
-def compute_validation_loss(model, data_loader, loss_fn, device):
+def compute_validation_loss(model, data_loader, loss_fn, loss_type, device):
     with torch.no_grad():
         model.eval()
         total_loss = 0
@@ -48,9 +48,12 @@ def compute_validation_loss(model, data_loader, loss_fn, device):
             y = batch['labels'].to(device)
             
             y_preds = model(input_ids, attention_mask)
-            y_preds = y_preds.view(-1, y_preds.shape[-1])
-            y = y.view(-1)
-            loss = loss_fn(y_preds, y)
+            if "bce" in loss_type:
+                loss = loss_fn(y_preds.squeeze(-1), y)
+            else:
+                y_preds = y_preds.view(-1, y_preds.shape[-1])
+                y = y.view(-1)
+                loss = loss_fn(y_preds, y)
             total_loss += loss.item()
     return total_loss / len(data_loader)
 
@@ -173,9 +176,20 @@ def define_lstm_bidirectional(model_name):
             return False
     else:
         raise ValueError(f"Invalid model name: {model_name}. Expected 'lstm' or 'bilstm' in the name.")
+    
+def determine_num_classes(args):
+    # Because we should have num_classes = 1 for binary classificaiton
+    if args.num_classes == 2:
+        if "bce" in args.loss_function:
+            return 1
+        else:
+            return 2
+    else:
+        return args.num_classes
 
 def set_up_classification_model(args):
     embedding_model = set_up_embedding_model(args)
+    num_classes = determine_num_classes(args)
     if args.architecture == "bilstm" or args.architecture == "lstm":
         print("Using LSTM model without attention")
         bidirectional = define_lstm_bidirectional(args.architecture)
@@ -184,7 +198,7 @@ def set_up_classification_model(args):
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
             dropout=args.dropout,
-            num_classes=args.num_classes,
+            num_classes=num_classes,
             bidirectional=bidirectional
         )
     elif args.architecture == "bilstm_attention" or args.architecture == "lstm_attention":
@@ -195,7 +209,7 @@ def set_up_classification_model(args):
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
             dropout=args.dropout,
-            num_classes=args.num_classes, 
+            num_classes=num_classes, 
             bidirectional=bidirectional
         )
     elif args.architecture == "bilstm_multihead_attention" or args.architecture == "lstm_multihead_attention":
@@ -206,7 +220,7 @@ def set_up_classification_model(args):
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
             dropout=args.dropout,
-            num_classes=args.num_classes,
+            num_classes=num_classes,
             bidirectional=bidirectional,
         )
     
@@ -217,7 +231,7 @@ def set_up_classification_model(args):
             nhead=args.transformer_nhead,
             num_encoder_layers=args.transformer_num_encoder_layers,
             dim_feedforward=args.transformer_dim_feedforward,
-            num_classes=args.num_classes,
+            num_classes=num_classes,
             dropout=args.dropout
         )   
     
@@ -357,9 +371,7 @@ def train(args):
                     with torch.amp.autocast(device_type=args.device):
                         y_preds = model(input_ids, attention_mask)
                         if "bce" in args.loss_function:
-                            y_preds = y_preds.view(-1, args.num_classes)
-                            y = y.float().view(-1, args.num_classes)
-                            loss = loss_fn(y_preds, y)
+                            loss = loss_fn(y_preds.squeeze(-1), y)
                         else:
                             y_preds_flat = y_preds.view(-1, args.num_classes)
                             y_flat = y.view(-1)
@@ -370,9 +382,7 @@ def train(args):
                 else:
                     y_preds = model(input_ids, attention_mask)
                     if args.loss_type == "bce":
-                        y_preds = y_preds.view(-1, args.num_classes)
-                        y = y.float().view(-1, args.num_classes)
-                        loss = loss_fn(y_preds, y)
+                        loss = loss_fn(y_preds.squeeze(-1), y)
                     else:
                         y_preds_flat = y_preds.view(-1, args.num_classes)
                         y_flat = y.view(-1)
