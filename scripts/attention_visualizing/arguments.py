@@ -23,6 +23,8 @@ def parse_arguments():
     parser.add_argument("--test_data_file", type=str, default="../../data/test_data.csv",
                         help="Path to the test data CSV file.default=../../data/test_data.csv")
     
+    parser.add_argument("--max_seq_len", type=int, default=1024,
+                        help="Maximum sequence length for ESM. default=1024")
     
     esm_models = [
         "esm1_t6_43M_UR50S",
@@ -74,9 +76,9 @@ def parse_arguments():
                         help="Dimension of the feedforward layer in the Transformer.")
 
     # Loss function
-    parser.add_argument("--loss_function", type=str, default="focal",
-                        choices=["focal", "crossentropy"],
-                        help="Use 'focal' or 'crossentropy' loss. default=focal")
+    parser.add_argument("--loss_function", type=str, default="focal-loss-ce",
+                        choices=["focal-loss-ce", "ce", "focal-loss-bce", "bce"],
+                        help="Use 'focal-loss-ce', 'ce', 'focal-loss-bce', 'bce'. default=focal-loss-ce")
     # **Focal loss specific**: whether to compute class weights or not.
     parser.add_argument("--focal_class_weights", action="store_true",
                         help="If using focal loss, use class weights (alpha) computed from data.")
@@ -130,4 +132,5 @@ def parse_arguments():
     parser.add_argument("--result_foldername", type=str, default="",
                         help="Name for the result folder. default=")
 
+    parser.add_argument("--esm_source", type=str, default="huggingface", choices=["huggingface", "fairesm"], help="Source of ESM model (either huggingface or fairesm). default=huggingface")
     return parser

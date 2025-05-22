@@ -266,7 +266,7 @@ class TransformerClassificationModel(nn.Module):
 # =============================================================================
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=None, gamma=2, reduction='mean', ignore_index=-1):
+    def __init__(self, alpha=None, gamma=2, reduction='mean', ignore_index=-1, loss_type="ce"):
         """
         alpha: A tensor of shape [num_classes] specifying weight for each class,
                or None if you do not want class-weighting.
@@ -277,7 +277,12 @@ class FocalLoss(nn.Module):
         self.gamma = gamma
         self.reduction = reduction
         self.ignore_index = ignore_index
-        self.ce_loss = nn.CrossEntropyLoss(weight=alpha, reduction='none', ignore_index=ignore_index)
+        if loss_type == "bce":
+            self.ce_loss = nn.BCEWithLogitsLoss(weight=alpha, reduction='none')
+        elif loss_type == "ce":
+            self.ce_loss = nn.CrossEntropyLoss(weight=alpha,     reduction='none', ignore_index=ignore_index)
+        else:
+            raise ValueError("Invalid loss type. Choose 'ce' or 'bce'.")
 
     def forward(self, inputs, targets):
         logpt = -self.ce_loss(inputs, targets)

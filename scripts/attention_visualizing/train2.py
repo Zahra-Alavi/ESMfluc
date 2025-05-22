@@ -59,30 +59,56 @@ def evaluate(model, data_loader, loss_fn, device):
         model.eval()
         all_preds, all_targets = [], []
         results = []
+
         for batch in data_loader:
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             y = batch['labels'].to(device)
-            
-            y_preds = model(input_ids, attention_mask)
-            y_probs = torch.softmax(y_preds, dim=-1)
-            y_preds = torch.argmax(y_probs, dim=-1)
-            for i in range(len(batch['sequences'])):
-                seq = batch['sequences'][i]
-                mask = batch['labels'][i] != -1
-                neq_values = batch['neq_values'][i][mask].tolist()
-                pred = y_preds[i][mask].cpu().numpy().tolist()
-                true_label = y[i][mask].cpu().numpy().tolist()
-                results.append({
-                    'sequence': seq,
-                    'neq values': neq_values,
-                    'pred': pred,
-                    'true label': true_label
-                })
-                all_preds.extend(pred)
-                all_targets.extend(true_label)
 
-        report = classification_report(all_targets, all_preds, output_dict=True)
+            y_preds = model(input_ids, attention_mask)
+
+            if "bce" in loss_fn:
+                y_probs = torch.sigmoid(y_preds)
+                preds = (y_probs > 0.5).int()
+
+                for i in range(len(batch['sequences'])):
+                    seq = batch['sequences'][i]
+                    pred = preds[i].cpu().numpy().tolist()
+                    true_label = y[i].int().cpu().numpy().tolist()
+                    results.append({
+                        'sequence': seq,
+                        'pred': pred,
+                        'true label': true_label
+                    })
+                    all_preds.append(pred)
+                    all_targets.append(true_label)
+
+            else:
+                y_probs = torch.softmax(y_preds, dim=-1)
+                y_preds = torch.argmax(y_probs, dim=-1)
+
+                for i in range(len(batch['sequences'])):
+                    seq = batch['sequences'][i]
+                    mask = batch['labels'][i] != -1
+                    neq_values = batch['neq_values'][i][mask].tolist()
+                    pred = y_preds[i][mask].cpu().numpy().tolist()
+                    true_label = y[i][mask].cpu().numpy().tolist()
+                    results.append({
+                        'sequence': seq,
+                        'neq values': neq_values,
+                        'pred': pred,
+                        'true label': true_label
+                    })
+                    all_preds.extend(pred)
+                    all_targets.extend(true_label)
+
+        # Convert predictions and targets for metrics
+        if 'bce' in loss_fn:
+            # Flatten for multi-label metrics
+            all_preds = [item for sublist in all_preds for item in sublist]
+            all_targets = [item for sublist in all_targets for item in sublist]
+
+        report = classification_report(all_targets, all_preds, output_dict=True, zero_division=0)
         conf_matrix = confusion_matrix(all_targets, all_preds)
         results_df = pd.DataFrame(results)
         return report, conf_matrix, results_df
@@ -111,10 +137,13 @@ def get_loss_fn(args, train_dataset):
         else:
             alpha_tensor = None
             print("Using FocalLoss without class weights")
-        loss_fn = FocalLoss(alpha=alpha_tensor, gamma=2, ignore_index=-1)
-    else:
+        loss_fn = FocalLoss(alpha=alpha_tensor, gamma=2, ignore_index=-1, , loss_type=args.loss_function.split('-')[-1])
+    elif args.loss_function == "ce":
         print("Using CrossEntropyLoss")
-        loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
+        loss_fn = nn.CrossEntropyLoss(ignore_index=-1, reduction="none")
+    elif args.loss_function == "bce":
+        print("Using BCEWithLogitsLoss")
+        loss_fn = nn.BCEWithLogitsLoss(reduction="none")
     return loss_fn
 
 def set_up_embedding_model(args):
@@ -327,17 +356,27 @@ def train(args):
                 if scaler and args.mixed_precision:
                     with torch.amp.autocast(device_type=args.device):
                         y_preds = model(input_ids, attention_mask)
-                        y_preds_flat = y_preds.view(-1, args.num_classes)
-                        y_flat = y.view(-1)
-                        loss = loss_fn(y_preds_flat, y_flat)
+                        if "bce" in args.loss_function:
+                            y_preds = y_preds.view(-1, args.num_classes)
+                            y = y.float().view(-1, args.num_classes)
+                            loss = loss_fn(y_preds, y)
+                        else:
+                            y_preds_flat = y_preds.view(-1, args.num_classes)
+                            y_flat = y.view(-1)
+                            loss = loss_fn(y_preds_flat, y_flat)
                     scaler.scale(loss).backward()
                     scaler.step(optimizer)
                     scaler.update()
                 else:
                     y_preds = model(input_ids, attention_mask)
-                    y_preds_flat = y_preds.view(-1, args.num_classes)
-                    y_flat = y.view(-1)
-                    loss = loss_fn(y_preds_flat, y_flat)
+                    if args.loss_type == "bce":
+                        y_preds = y_preds.view(-1, args.num_classes)
+                        y = y.float().view(-1, args.num_classes)
+                        loss = loss_fn(y_preds, y)
+                    else:
+                        y_preds_flat = y_preds.view(-1, args.num_classes)
+                        y_flat = y.view(-1)
+                        loss = loss_fn(y_preds_flat, y_flat)
                     loss.backward()
                     optimizer.step()
                 
@@ -383,7 +422,7 @@ def train(args):
     # Evaluation
     # -------------------------
     print("Evaluating model on test data...")
-    cls_report, conf_matrix, results_df = evaluate(model, test_loader, loss_fn, args.device)
+    cls_report, conf_matrix, results_df = evaluate(model, test_loader, args.loss_function.split(-1)[-1], args.device)
     print(cls_report)
     print(conf_matrix)
     
