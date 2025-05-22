@@ -13,7 +13,6 @@ cycler==0.12.1
 datasets==2.19.2
 dill==0.3.8
 evaluate==0.4.2
-fair-esm==2.0.0
 filelock==3.14.0
 flatbuffers==24.3.25
 focal-loss==0.0.7
@@ -96,3 +95,5 @@ werkzeug==3.0.4
 wrapt==1.16.0
 xxhash==3.4.1
 yarl==1.9.4
+git+https://github.com/facebookresearch/esm.git
+fairscale
