@@ -126,7 +126,7 @@ def create_run_folder(folder_name):
 
     
 def get_loss_fn(args, train_dataset):
-    if args.loss_function == "focal":
+    if "focal" in args.loss_function:
         if args.focal_class_weights:
             print("Computing class weights for FocalLoss")
             # Compute class weights from the dataset
@@ -137,7 +137,7 @@ def get_loss_fn(args, train_dataset):
         else:
             alpha_tensor = None
             print("Using FocalLoss without class weights")
-        loss_fn = FocalLoss(alpha=alpha_tensor, gamma=2, ignore_index=-1, , loss_type=args.loss_function.split('-')[-1])
+        loss_fn = FocalLoss(alpha=alpha_tensor, gamma=2, ignore_index=-1, loss_type=args.loss_function.split('-')[-1])
     elif args.loss_function == "ce":
         print("Using CrossEntropyLoss")
         loss_fn = nn.CrossEntropyLoss(ignore_index=-1, reduction="none")
