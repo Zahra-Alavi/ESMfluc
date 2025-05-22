@@ -49,7 +49,7 @@ def compute_validation_loss(model, data_loader, loss_fn, loss_type, device):
             
             y_preds = model(input_ids, attention_mask)
             if "bce" in loss_type:
-                loss = loss_fn(y_preds.squeeze(-1), y)
+                loss = loss_fn(y_preds.squeeze(-1), y.float())
             else:
                 y_preds = y_preds.view(-1, y_preds.shape[-1])
                 y = y.view(-1)
@@ -371,7 +371,7 @@ def train(args):
                     with torch.amp.autocast(device_type=args.device):
                         y_preds = model(input_ids, attention_mask)
                         if "bce" in args.loss_function:
-                            loss = loss_fn(y_preds.squeeze(-1), y)
+                            loss = loss_fn(y_preds.squeeze(-1), y.float())
                         else:
                             y_preds_flat = y_preds.view(-1, args.num_classes)
                             y_flat = y.view(-1)
@@ -382,7 +382,7 @@ def train(args):
                 else:
                     y_preds = model(input_ids, attention_mask)
                     if args.loss_type == "bce":
-                        loss = loss_fn(y_preds.squeeze(-1), y)
+                        loss = loss_fn(y_preds.squeeze(-1), y.float())
                     else:
                         y_preds_flat = y_preds.view(-1, args.num_classes)
                         y_flat = y.view(-1)
@@ -395,7 +395,7 @@ def train(args):
             train_losses.append(avg_train_loss)
             print(f"[Epoch {epoch}] Training Loss: {avg_train_loss:.4f}")
             
-            avg_val_loss = compute_validation_loss(model, val_loader, loss_fn, args.device)
+            avg_val_loss = compute_validation_loss(model, val_loader, loss_fn, args.loss_function.split("-")[-1], args.device)
             val_losses.append(avg_val_loss)
             print(f"[Epoch {epoch}] Validation Loss: {avg_val_loss:.4f}")
             
