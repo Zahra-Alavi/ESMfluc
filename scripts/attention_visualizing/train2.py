@@ -49,6 +49,10 @@ def compute_validation_loss(model, data_loader, loss_fn, loss_type, device):
             
             y_preds = model(input_ids, attention_mask)
             if "bce" in loss_type:
+                mask = y != -1
+                y_preds = y_preds[mask]
+                y = y[mask].float()
+                print("Logits min/max:", y_preds.min().item(), y_preds.max().item())
                 loss = loss_fn(y_preds.squeeze(-1), y.float())
             else:
                 y_preds = y_preds.view(-1, y_preds.shape[-1])
@@ -371,7 +375,11 @@ def train(args):
                     with torch.amp.autocast(device_type=args.device):
                         y_preds = model(input_ids, attention_mask)
                         if "bce" in args.loss_function:
-                            loss = loss_fn(y_preds.squeeze(-1), y.float())
+                            mask = y != -1
+                            y_preds = y_preds[mask]
+                            y = y[mask].float()
+                            print("Logits min/max:", y_preds.min().item(), y_preds.max().item())
+                            loss = loss_fn(y_preds.squeeze(-1), y)
                         else:
                             y_preds_flat = y_preds.view(-1, args.num_classes)
                             y_flat = y.view(-1)
@@ -382,7 +390,11 @@ def train(args):
                 else:
                     y_preds = model(input_ids, attention_mask)
                     if args.loss_type == "bce":
-                        loss = loss_fn(y_preds.squeeze(-1), y.float())
+                        mask = y != -1
+                        y_preds = y_preds[mask]
+                        y = y[mask].float()
+                        print("Logits min/max:", y_preds.min().item(), y_preds.max().item())
+                        loss = loss_fn(y_preds.squeeze(-1), y)
                     else:
                         y_preds_flat = y_preds.view(-1, args.num_classes)
                         y_flat = y.view(-1)
