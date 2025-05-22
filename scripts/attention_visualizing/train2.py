@@ -52,7 +52,6 @@ def compute_validation_loss(model, data_loader, loss_fn, loss_type, device):
                 mask = y != -1
                 y_preds = y_preds[mask]
                 y = y[mask].float()
-                print("Logits min/max:", y_preds.min().item(), y_preds.max().item())
                 loss = loss_fn(y_preds.squeeze(-1), y.float())
             else:
                 y_preds = y_preds.view(-1, y_preds.shape[-1])
@@ -147,10 +146,10 @@ def get_loss_fn(args, train_dataset):
         loss_fn = FocalLoss(alpha=alpha_tensor, gamma=2, ignore_index=-1, loss_type=args.loss_function.split('-')[-1])
     elif args.loss_function == "ce":
         print("Using CrossEntropyLoss")
-        loss_fn = nn.CrossEntropyLoss(ignore_index=-1, reduction="none")
+        loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
     elif args.loss_function == "bce":
         print("Using BCEWithLogitsLoss")
-        loss_fn = nn.BCEWithLogitsLoss(reduction="none")
+        loss_fn = nn.BCEWithLogitsLoss()
     return loss_fn
 
 def set_up_embedding_model(args):
@@ -378,7 +377,6 @@ def train(args):
                             mask = y != -1
                             y_preds = y_preds[mask]
                             y = y[mask].float()
-                            print("Logits min/max:", y_preds.min().item(), y_preds.max().item())
                             loss = loss_fn(y_preds.squeeze(-1), y)
                         else:
                             y_preds_flat = y_preds.view(-1, args.num_classes)
@@ -393,7 +391,6 @@ def train(args):
                         mask = y != -1
                         y_preds = y_preds[mask]
                         y = y[mask].float()
-                        print("Logits min/max:", y_preds.min().item(), y_preds.max().item())
                         loss = loss_fn(y_preds.squeeze(-1), y)
                     else:
                         y_preds_flat = y_preds.view(-1, args.num_classes)
