@@ -27,8 +27,8 @@ from transformers import EsmModel, EsmTokenizer
 
 from models import (
     FocalLoss, 
-    BiLSTMClassificationModel,
-    BiLSTMWithSelfAttentionModel
+    LSTMClassificationModel,
+    LSTMWithSelfAttentionModel
 )
 
 def tokenize(sequences, tokenizer):
@@ -75,9 +75,11 @@ def evaluate(model, data_loader, loss_fn, device):
         conf_matrix = confusion_matrix(all_targets, all_preds)
         return report, conf_matrix
 
-def create_run_folder():
+def create_run_folder(folder_name):
     now = datetime.datetime.now()
-    folder_name = "../../results/" + now.strftime("%Y-%m-%d-%H-%M-%S")
+    results_folder = "../../results/"
+    if folder_name == results_folder:
+        folder_name = results_folder + now.strftime("%Y-%m-%d-%H-%M-%S")
     os.makedirs(folder_name)
     return folder_name
 
@@ -123,7 +125,7 @@ def set_up_classification_model(args):
     embedding_model = set_up_embedding_model(args)
     if args.architecture == "bilstm":
         print("Using BiLSTM model")
-        model = BiLSTMClassificationModel(
+        model = LSTMClassificationModel(
             embedding_model=embedding_model,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
@@ -132,7 +134,7 @@ def set_up_classification_model(args):
         )
     elif args.architecture == "bilstm_attention":
         print("Using BiLSTM with SelfAttention model")
-        model = BiLSTMWithSelfAttentionModel(
+        model = LSTMWithSelfAttentionModel(
             embedding_model=embedding_model,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
