@@ -159,8 +159,9 @@ def compute_sampling_weights(dataset, num_classes, neq_thresholds, oversampling_
 
         # Assign weights dynamically
         if minority_fraction == 0:
-            weight = 0.001  # ignore sequences that only have class 0 & 1
+            weight = 0.001  # almost ignore sequences that only have class 0 & 1
         if minority_fraction < undersampling_threshold:
+
             weight = undersampling_intensity  # Undersample sequences with almost no minority residues
         else:
            #weight = 1.0 + oversampling_intensity * (minority_fraction / oversampling_threshold) # Oversample minority-rich sequences
