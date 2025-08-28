@@ -252,7 +252,7 @@ def train(args):
        
             
     # Plot loss curve
-    run_folder = create_run_folder()
+    run_folder = create_run_folder(args.result_dir)
     plt.figure()
     plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss', marker='o')
     plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss', marker='o')
