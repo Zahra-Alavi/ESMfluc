@@ -97,6 +97,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train a CRF model for predicting Neq values of amino acids.")
     parser.add_argument('--amino_acids_file', type=str, default="../../data/amino_acids_characteristics.csv", help='Path to the amino acids characteristics CSV file.')
     parser.add_argument('--training_data_file', type=str, default="../../data/neq_training_data.csv", help='Path to the training data CSV file.')
+    parser.add_argument('--train_data_file', type=str, default="../../data/train_data.csv", help='Path to the train data CSV file.')
+    parser.add_argument('--test_data_file', type=str, default="../../data/test_data.csv", help='Path to the test data CSV file.')
     parser.add_argument('--window_size', type=int, default=2, help='Window size for feature extraction (default is 2).')
     parser.add_argument('--features', type=str, default="charges,polar,hydrophobic", help='Comma-separated list of features to use (choices: charges, polar, hydrophobic, molecular_weight, pKa, pKb, pKx, pI).')
     parser.add_argument('--hyperparameter_tuning', type=bool, default=False)
@@ -105,12 +107,12 @@ def parse_args():
 
 def main():
     args = parse_args()
-    sequences, labels, characteristics_dict = load_data(args.amino_acids_file, args.training_data_file)
     selected_features = args.features.split(",")
-    
-    X = [extract_features(seq, args.window_size, characteristics_dict, selected_features) for seq in sequences]
-    X_train, X_test, y_train, y_test = train_test_split(X, labels, test_size=0.2, random_state=42)
-    
+
+    train_sequences, y_train, train_characteristics = load_data(args.amino_acids_file, args.train_data_file)
+    test_sequences, y_test, test_characteristics = load_data(args.amino_acids_file, args.test_data_file)
+    X_train = [extract_features(seq, args.window_size, train_characteristics, selected_features) for seq in train_sequences]
+    X_test = [extract_features(seq, args.window_size, test_characteristics, selected_features) for seq in test_sequences]
     if args.hyperparameter_tuning:
         best_c1, best_c2 = tune_hyperparameters(X_train, y_train, X_test, y_test, args.show_progress)
     else:
