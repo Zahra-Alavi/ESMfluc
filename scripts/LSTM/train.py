@@ -9,6 +9,7 @@ Created on Tue Feb  4 10:10:41 2025
 # train.py
 
 import os
+import time
 import numpy as np
 import torch
 import torch.nn as nn
@@ -109,6 +110,8 @@ def tokenize(dataset, tokenizer):
 
 def run_training(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    start_time = time.time()
 
     # Create run folder
     import datetime
@@ -374,3 +377,4 @@ def run_training(args):
 
     print("\nTraining and evaluation complete.")
     print(f"All outputs saved in folder: {run_folder}")
+    print(f"Total time taken: {time.time() - start_time:.2f} seconds.")
