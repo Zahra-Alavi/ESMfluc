@@ -16,6 +16,7 @@ import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from torch.amp import GradScaler
+import time
 
 
 from sklearn.utils.class_weight import compute_class_weight
@@ -148,7 +149,7 @@ def set_up_classification_model(args):
      
 def train(args):
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
-        
+    start_time = time.time()
     model = set_up_classification_model(args)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         
@@ -276,5 +277,6 @@ def train(args):
     plt.title("Confusion Matrix")
     plt.savefig(f"{run_folder}/confusion_matrix.png")
     plt.close()
-    
+    print("Results is saved in ", run_folder)
+    print("Total time: ", time.time() - start_time, "seconds")
     print("Training completed")
