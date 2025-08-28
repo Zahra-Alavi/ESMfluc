@@ -5,6 +5,7 @@ Author: Ngoc Kim Ngan Tran
 """
 
 import argparse
+import time
 from data_loader import DataLoader
 from classifiers_models import *
 from data_learning import DataLearning
@@ -79,6 +80,7 @@ def main():
         ESMModelLearning(args).run()
     
     if args.model:
+        start_time = time.time()
         data_loader = DataLoader(args.train_data_file, args.feature_engineering_version, args.esm_model, binary_classification=True)
         X_train, y_train = data_loader.get_data()
         X_test, y_test = DataLoader(args.test_data_file, args.feature_engineering_version, args.esm_model, binary_classification=True).get_data()
@@ -86,6 +88,7 @@ def main():
         classifier = ClassifierFactory.get_classifier(args.model, X_train, y_train, X_test, y_test, args.hyperameter_tuning)
         classifier.fit()
         print(classifier.evaluate(classifier.predict()))
+        print("Time taken:", time.time() - start_time)
 
 if __name__ == "__main__":
     main()
