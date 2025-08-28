@@ -11,8 +11,8 @@ def split_data(data):
     X = data['sequence']
     y = data['neq']
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    train_data = pd.DataFrame({'sequence': X_train, 'neq_class': y_train})
-    test_data = pd.DataFrame({'sequence': X_test, 'neq_class': y_test})
+    train_data = pd.DataFrame({'sequence': X_train, 'neq': y_train})
+    test_data = pd.DataFrame({'sequence': X_test, 'neq': y_test})
     return train_data, test_data
 
 
