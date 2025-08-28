@@ -5,6 +5,7 @@ Author: Ngoc Kim Ngan Tran
 """
 
 import os
+from data_loader import DataLoader
 from utils import *
 from decimal import Decimal
 
@@ -38,3 +39,10 @@ class DataLearning:
         
         aa_avg_neq = {aa: sum(neq_values) / len(neq_values) for aa, neq_values in aa_neq.items()}
         plot_horizontal_bar(list(aa_avg_neq.values()), list(aa_avg_neq.keys()), title="Average Neq Values for Amino Acids", xlabel="Average Neq Value", ylabel="Amino Acids", save_as="plot/data/neq/average_neq_values.png")
+        
+        # Load train and test data and print out the data
+        data_loader = DataLoader("../../data/train_data.csv", "1.1", "esm2_t6_8M_UR50D", binary_classification=True)
+        X_train, y_train = data_loader.get_data()
+        X_test, y_test = DataLoader("../../data/test_data.csv", "1.1", "esm2_t6_8M_UR50D", binary_classification=True).get_data()
+        print("Train Data size:", len(X_train))
+        print("Test Data size:", len(X_test))
