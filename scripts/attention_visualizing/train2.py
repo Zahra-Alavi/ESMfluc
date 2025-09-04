@@ -9,6 +9,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import time
 
 from sklearn.model_selection import train_test_split
 import torch 
@@ -253,6 +254,8 @@ def set_up_classification_model(args):
      
 def train(args):
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
+    torch.cuda.reset_peak_memory_stats()
+    start_time = time.time()
     
     run_folder = create_run_folder(args.result_foldername)
         
@@ -387,7 +390,7 @@ def train(args):
                     scaler.update()
                 else:
                     y_preds = model(input_ids, attention_mask)
-                    if args.loss_type == "bce":
+                    if args.loss_function == "bce":
                         mask = y != -1
                         y_preds = y_preds[mask]
                         y = y[mask].float()
@@ -444,12 +447,22 @@ def train(args):
     cls_report, conf_matrix, results_df = evaluate(model, test_loader, args.loss_function.split("-")[-1], args.device)
     print(cls_report)
     print(conf_matrix)
-    
+    print("Total time: ", time.time() - start_time)
+    max_memory_allocated = torch.cuda.max_memory_allocated() / (1024 ** 3)
+    max_memory_reserved = torch.cuda.max_memory_reserved() / (1024 ** 3)
+    print(f"Max allocated: {max_memory_allocated:.2f} GB")
+    print(f"Max reserved: {max_memory_reserved:.2f} GB")
     results_df.to_csv(f"{run_folder}/results.csv", index=False)
     
     # Save classification report and confusion matrix
     with open(f"{run_folder}/classification_report.txt", "w") as f:
         f.write(str(cls_report))
+        
+    # Print classification report as latex table
+    report_df = pd.DataFrame(cls_report).transpose()
+    latex_table = report_df.to_latex(float_format="%.2f")
+    print("Classification Report (LaTeX format):")
+    print(latex_table)
     disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix)
     disp.plot(cmap='Blues')
     plt.title("Confusion Matrix")
