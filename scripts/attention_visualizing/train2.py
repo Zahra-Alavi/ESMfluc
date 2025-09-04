@@ -409,7 +409,7 @@ def train(args):
                     scaler.update()
                 else:
                     y_preds = model(input_ids, attention_mask)
-                    if args.loss_function == "bce":
+                    if "bce" in args.loss_function:
                         mask = y != -1
                         y_preds = y_preds[mask]
                         y = y[mask].float()
