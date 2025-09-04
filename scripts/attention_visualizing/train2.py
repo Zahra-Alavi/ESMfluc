@@ -6,6 +6,7 @@ Created on Tue Feb  4 10:00:07 2025
 # train2.py
 import os
 import datetime
+import random
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -251,8 +252,19 @@ def set_up_classification_model(args):
        model = nn.DataParallel(model)
        
     return model
+
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    # Make cuDNN deterministic
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
      
 def train(args):
+    set_seed(args.seed if hasattr(args, "seed") else 42)
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
     torch.cuda.reset_peak_memory_stats()
     start_time = time.time()
