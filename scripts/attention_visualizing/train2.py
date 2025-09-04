@@ -18,7 +18,13 @@ import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.amp import GradScaler
-
+import torch.distributed as dist
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import CPUOffload
+from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
+from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
+from torch.distributed.fsdp import FullStateDictConfig, ShardingStrategy
+import torch.multiprocessing as mp
 from collections import Counter
 
 
@@ -52,7 +58,7 @@ def compute_validation_loss(model, data_loader, loss_fn, loss_type, device):
             y_preds = model(input_ids, attention_mask)
             if "bce" in loss_type:
                 mask = y != -1
-                y_preds = y_preds[mask]
+                y_preds = y_preds[mask].clone()
                 y = y[mask].float()
                 loss = loss_fn(y_preds.squeeze(-1), y.float())
             else:
@@ -257,7 +263,28 @@ def set_up_classification_model(args):
     if args.data_parallel and torch.cuda.device_count() > 1:
        print(f"Using nn.DataParallel on {torch.cuda.device_count()} GPUs")
        model = nn.DataParallel(model)
-       
+    
+    # Wrap with FSDP if multiple GPUs
+    if args.use_fsdp and torch.cuda.device_count() > 1:
+        print(f"Wrapping model with FSDP on {torch.cuda.device_count()} GPUs")
+        auto_wrap = transformer_auto_wrap_policy if "transformer" in args.architecture else None
+
+        mixed_precision = None
+        if args.mixed_precision:
+            mixed_precision = MixedPrecision(
+                param_dtype=torch.bfloat16,
+                reduce_dtype=torch.bfloat16,
+                buffer_dtype=torch.bfloat16,
+            )
+    
+        model = FSDP(
+            model,
+            auto_wrap_policy=auto_wrap,
+            mixed_precision=mixed_precision,
+            sharding_strategy=ShardingStrategy.FULL_SHARD,
+            cpu_offload=CPUOffload(offload_params=True),
+            device_id=args.device
+        )
     return model
 
 def set_seed(seed=42):
@@ -270,200 +297,328 @@ def set_seed(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
      
+# def train(args):
+#     set_seed(args.seed if hasattr(args, "seed") else 42)
+#     args.device = "cuda" if torch.cuda.is_available() else "cpu"
+#     if args.use_fsdp and torch.cuda.device_count() > 1:
+#         dist.init_process_group(backend="nccl")
+#     torch.cuda.reset_peak_memory_stats()
+#     start_time = time.time()
+    
+#     run_folder = create_run_folder(args.result_foldername)
+        
+#     model = set_up_classification_model(args)
+#     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        
+#     if args.lr_scheduler == "reduce_on_plateau":
+#         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3, verbose=True)
+#         print("Using ReduceLROnPlateau scheduler")
+#     else:
+#         scheduler = None
+#         print("Not using any scheduler")
+    
+#     # Load data
+#     labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
+#     train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
+#     test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
+
+#     # Preprocessing data
+#     tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
+#     X_train = train_data["sequence"].tolist()
+#     X_test = test_data["sequence"].tolist()
+#     y_label_train = train_data["neq_class"].tolist()
+#     y_label_test= test_data["neq_class"].tolist()
+#     y_raw_train = train_data["neq"].tolist()
+#     y_raw_test = test_data["neq"].tolist()
+    
+#     # If having scheduler as ReduceLROnPlateau, split the data into train and validation
+#     val_loader = None
+#     if scheduler:
+#         X_train, X_val, y_label_train, y_label_val, y_raw_train, y_raw_val = train_test_split(X_train, y_label_train, y_raw_train, test_size=0.2)
+#         X_val_tokenized = tokenize(X_val, tokenizer)
+#         val_dataset = SequenceClassificationDataset(X_val_tokenized, y_label_val, X_val, y_raw_val)
+#         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+        
+#     X_train_tokenized = tokenize(X_train, tokenizer)
+#     X_test_tokenized = tokenize(X_test, tokenizer)
+#     train_dataset = SequenceClassificationDataset(X_train_tokenized, y_label_train, X_train, y_raw_train)
+#     test_dataset = SequenceClassificationDataset(X_test_tokenized, y_label_test, X_test, y_raw_test)
+    
+#     # Check original class distribution before oversampling
+#     raw_labels = []
+#     for i in range(len(train_dataset)):
+#         raw_labels.extend(train_dataset.labels[i])
+
+#     raw_class_counts = Counter(raw_labels)
+#     print("Original Class Distribution:", raw_class_counts)
+    
+#     # If oversampling is enabled, compute weights
+#     if args.oversampling:
+#        print("Applying oversampling using WeightedRandomSampler...")
+#        sampling_weights = compute_sampling_weights(
+#            train_dataset, 
+#            num_classes=args.num_classes,
+#            neq_thresholds=args.neq_thresholds,
+#            oversampling_threshold=args.oversampling_threshold, 
+#            undersampling_threshold=args.undersampling_threshold,
+#            undersampling_intensity = args.undersampling_intensity,
+#            oversampling_intensity = args.oversampling_intensity
+#        )
+       
+#        sampler = WeightedRandomSampler(
+#            weights=sampling_weights,
+#            num_samples=len(train_dataset),
+#            replacement=True  # Allows oversampling
+#        )
+       
+#        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+       
+#        # Collect labels from the sampled data in the DataLoader
+#        oversampled_labels = []
+#        for batch in train_loader:
+#            batch_labels = batch['labels'].cpu().numpy().flatten()
+#            batch_labels = batch_labels[batch_labels != -1]  # Remove padding values
+#            oversampled_labels.extend(batch_labels)
+
+#        oversampled_class_counts = Counter(oversampled_labels)
+#        print("Sampled Class Distribution After Oversampling:", oversampled_class_counts)
+
+
+#     else:
+#        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+       
+#     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+        
+#     # -------------------------
+#     # Training loop
+#     # -------------------------
+#     best_model_path = f"{run_folder}/best_model.pth"
+#     loss_fn = get_loss_fn(args, train_dataset)
+#     # Perform training only if best_model.pth does not exist
+#     if os.path.exists(best_model_path):
+#         print("Model already trained. Skipping training.")
+#         state_dict = torch.load(best_model_path)
+#         new_state_dict = {f"module.{k}": v for k, v in state_dict.items()}
+#         model.load_state_dict(new_state_dict)
+#     else:
+#         print("Starting training.....................................")
+#         scaler = GradScaler(device=args.device) if args.mixed_precision else None
+        
+#         best_val_loss = float('inf')
+#         epochs_no_improve = 0
+        
+#         val_losses = []
+#         train_losses = []
+        
+#         for epoch in range(args.epochs):
+#             model.train()
+#             total_loss = 0
+            
+#             for i, batch in enumerate(train_loader):
+#                 input_ids = batch['input_ids'].to(args.device)
+#                 attention_mask = batch['attention_mask'].to(args.device)
+#                 y = batch['labels'].to(args.device)
+                
+#                 optimizer.zero_grad()
+                
+#                 if scaler and args.mixed_precision:
+#                     with torch.amp.autocast(device_type=args.device):
+#                         y_preds = model(input_ids, attention_mask)
+#                         if "bce" in args.loss_function:
+#                             mask = y != -1
+#                             y_preds = y_preds[mask]
+#                             y = y[mask].float()
+#                             loss = loss_fn(y_preds.squeeze(-1), y)
+#                         else:
+#                             y_preds_flat = y_preds.view(-1, args.num_classes)
+#                             y_flat = y.view(-1)
+#                             loss = loss_fn(y_preds_flat, y_flat)
+#                     scaler.scale(loss).backward()
+#                     scaler.step(optimizer)
+#                     scaler.update()
+#                 else:
+#                     y_preds = model(input_ids, attention_mask)
+#                     if "bce" in args.loss_function:
+#                         mask = y != -1
+#                         y_preds = y_preds[mask]
+#                         y = y[mask].float()
+#                         loss = loss_fn(y_preds.squeeze(-1), y)
+#                     else:
+#                         y_preds_flat = y_preds.view(-1, args.num_classes)
+#                         y_flat = y.view(-1)
+#                         loss = loss_fn(y_preds_flat, y_flat)
+#                     loss.backward()
+#                     optimizer.step()
+                
+#                 total_loss += loss.item()
+#             avg_train_loss = total_loss / len(train_loader)
+#             train_losses.append(avg_train_loss)
+#             print(f"[Epoch {epoch}] Training Loss: {avg_train_loss:.4f}")
+            
+#             avg_val_loss = compute_validation_loss(model, val_loader, loss_fn, args.loss_function.split("-")[-1], args.device)
+#             val_losses.append(avg_val_loss)
+#             print(f"[Epoch {epoch}] Validation Loss: {avg_val_loss:.4f}")
+            
+#             if scheduler:
+#                 scheduler.step(avg_val_loss)
+            
+#             # Early stopping check
+#             if avg_val_loss < best_val_loss:
+#                 best_val_loss = avg_val_loss
+#                 epochs_no_improve = 0
+#                 if isinstance(model, nn.DataParallel):
+#                     # Save the best model
+#                     torch.save(model.module.state_dict(), best_model_path)
+#                 else:
+#                     torch.save(model.state_dict(), best_model_path)
+#             else:
+#                 epochs_no_improve += 1
+#                 if epochs_no_improve >= args.patience:
+#                     print(f"Early stopping at epoch {epoch}")
+#                     break
+        
+                
+#         # Plot loss curve
+#         plt.figure()
+#         plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
+#         plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
+#         plt.xlabel("Epoch")
+#         plt.ylabel("Loss")
+#         plt.title("Loss Curve")
+#         plt.legend()
+#         plt.savefig(f"{run_folder}/loss_curve.png")
+    
+
+#     print("Evaluating model on test data...")
+#     cls_report, conf_matrix, results_df = evaluate(model, test_loader, args.loss_function.split("-")[-1], args.device)
+#     print(cls_report)
+#     print(conf_matrix)
+    
+
 def train(args):
     set_seed(args.seed if hasattr(args, "seed") else 42)
-    args.device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    use_distributed = args.use_fsdp and torch.cuda.device_count() > 1
+    if use_distributed:
+        dist.init_process_group(backend="nccl")
+        local_rank = int(os.environ["LOCAL_RANK"])
+        device = torch.device(f"cuda:{local_rank}")
+        torch.cuda.set_device(device)
+        args.device = device
+    else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        args.device = device
+
     torch.cuda.reset_peak_memory_stats()
+    torch.cuda.empty_cache()
     start_time = time.time()
     
     run_folder = create_run_folder(args.result_foldername)
         
     model = set_up_classification_model(args)
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         
+    scheduler = None
     if args.lr_scheduler == "reduce_on_plateau":
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3, verbose=True)
         print("Using ReduceLROnPlateau scheduler")
-    else:
-        scheduler = None
-        print("Not using any scheduler")
     
-    # Load data
+    # ------------------------
+    # Data loading
+    # ------------------------
     labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
     train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
     test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
-
-    # Preprocessing data
     tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
-    X_train = train_data["sequence"].tolist()
-    X_test = test_data["sequence"].tolist()
-    y_label_train = train_data["neq_class"].tolist()
-    y_label_test= test_data["neq_class"].tolist()
-    y_raw_train = train_data["neq"].tolist()
-    y_raw_test = test_data["neq"].tolist()
-    
-    # If having scheduler as ReduceLROnPlateau, split the data into train and validation
+
+    X_train, X_test = train_data["sequence"].tolist(), test_data["sequence"].tolist()
+    y_label_train, y_label_test = train_data["neq_class"].tolist(), test_data["neq_class"].tolist()
+    y_raw_train, y_raw_test = train_data["neq"].tolist(), test_data["neq"].tolist()
+
+    # Validation split if using ReduceLROnPlateau
     val_loader = None
     if scheduler:
-        X_train, X_val, y_label_train, y_label_val, y_raw_train, y_raw_val = train_test_split(X_train, y_label_train, y_raw_train, test_size=0.2)
-        X_val_tokenized = tokenize(X_val, tokenizer)
-        val_dataset = SequenceClassificationDataset(X_val_tokenized, y_label_val, X_val, y_raw_val)
+        X_train, X_val, y_label_train, y_label_val, y_raw_train, y_raw_val = train_test_split(
+            X_train, y_label_train, y_raw_train, test_size=0.2)
+        val_dataset = SequenceClassificationDataset(tokenize(X_val, tokenizer), y_label_val, X_val, y_raw_val)
         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
-        
-    X_train_tokenized = tokenize(X_train, tokenizer)
-    X_test_tokenized = tokenize(X_test, tokenizer)
-    train_dataset = SequenceClassificationDataset(X_train_tokenized, y_label_train, X_train, y_raw_train)
-    test_dataset = SequenceClassificationDataset(X_test_tokenized, y_label_test, X_test, y_raw_test)
+
+    train_dataset = SequenceClassificationDataset(tokenize(X_train, tokenizer), y_label_train, X_train, y_raw_train)
+    test_dataset = SequenceClassificationDataset(tokenize(X_test, tokenizer), y_label_test, X_test, y_raw_test)
     
-    # Check original class distribution before oversampling
-    raw_labels = []
-    for i in range(len(train_dataset)):
-        raw_labels.extend(train_dataset.labels[i])
-
-    raw_class_counts = Counter(raw_labels)
-    print("Original Class Distribution:", raw_class_counts)
-    
-    # If oversampling is enabled, compute weights
-    if args.oversampling:
-       print("Applying oversampling using WeightedRandomSampler...")
-       sampling_weights = compute_sampling_weights(
-           train_dataset, 
-           num_classes=args.num_classes,
-           neq_thresholds=args.neq_thresholds,
-           oversampling_threshold=args.oversampling_threshold, 
-           undersampling_threshold=args.undersampling_threshold,
-           undersampling_intensity = args.undersampling_intensity,
-           oversampling_intensity = args.oversampling_intensity
-       )
-       
-       sampler = WeightedRandomSampler(
-           weights=sampling_weights,
-           num_samples=len(train_dataset),
-           replacement=True  # Allows oversampling
-       )
-       
-       train_loader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
-       
-       # Collect labels from the sampled data in the DataLoader
-       oversampled_labels = []
-       for batch in train_loader:
-           batch_labels = batch['labels'].cpu().numpy().flatten()
-           batch_labels = batch_labels[batch_labels != -1]  # Remove padding values
-           oversampled_labels.extend(batch_labels)
-
-       oversampled_class_counts = Counter(oversampled_labels)
-       print("Sampled Class Distribution After Oversampling:", oversampled_class_counts)
-
-
-    else:
-       train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
-       
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
-        
+    
+    # -------------------------
+    # Loss
+    # -------------------------
+    loss_fn = get_loss_fn(args, train_dataset)
+    
     # -------------------------
     # Training loop
     # -------------------------
+    scaler = GradScaler(device=args.device) if args.mixed_precision else None
     best_model_path = f"{run_folder}/best_model.pth"
-    loss_fn = get_loss_fn(args, train_dataset)
-    # Perform training only if best_model.pth does not exist
-    if os.path.exists(best_model_path):
-        print("Model already trained. Skipping training.")
-        state_dict = torch.load(best_model_path)
-        new_state_dict = {f"module.{k}": v for k, v in state_dict.items()}
-        model.load_state_dict(new_state_dict)
-    else:
-        print("Starting training.....................................")
-        scaler = GradScaler(device=args.device) if args.mixed_precision else None
+    
+    for epoch in range(args.epochs):
+        model.train()
+        total_loss = 0
         
-        best_val_loss = float('inf')
-        epochs_no_improve = 0
-        
-        val_losses = []
-        train_losses = []
-        
-        for epoch in range(args.epochs):
-            model.train()
-            total_loss = 0
+        for batch in train_loader:
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            y = batch['labels'].to(device)
             
-            for i, batch in enumerate(train_loader):
-                input_ids = batch['input_ids'].to(args.device)
-                attention_mask = batch['attention_mask'].to(args.device)
-                y = batch['labels'].to(args.device)
-                
-                optimizer.zero_grad()
-                
-                if scaler and args.mixed_precision:
-                    with torch.amp.autocast(device_type=args.device):
-                        y_preds = model(input_ids, attention_mask)
-                        if "bce" in args.loss_function:
-                            mask = y != -1
-                            y_preds = y_preds[mask]
-                            y = y[mask].float()
-                            loss = loss_fn(y_preds.squeeze(-1), y)
-                        else:
-                            y_preds_flat = y_preds.view(-1, args.num_classes)
-                            y_flat = y.view(-1)
-                            loss = loss_fn(y_preds_flat, y_flat)
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
+            optimizer.zero_grad()
+            
+            if scaler and args.mixed_precision:
+                with torch.amp.autocast(device_type=device.type):
                     y_preds = model(input_ids, attention_mask)
+                    y_preds = y_preds.contiguous()
                     if "bce" in args.loss_function:
                         mask = y != -1
-                        y_preds = y_preds[mask]
+                        y_preds = y_preds[mask].clone()
                         y = y[mask].float()
                         loss = loss_fn(y_preds.squeeze(-1), y)
                     else:
-                        y_preds_flat = y_preds.view(-1, args.num_classes)
-                        y_flat = y.view(-1)
-                        loss = loss_fn(y_preds_flat, y_flat)
-                    loss.backward()
-                    optimizer.step()
-                
-                total_loss += loss.item()
-            avg_train_loss = total_loss / len(train_loader)
-            train_losses.append(avg_train_loss)
-            print(f"[Epoch {epoch}] Training Loss: {avg_train_loss:.4f}")
-            
-            avg_val_loss = compute_validation_loss(model, val_loader, loss_fn, args.loss_function.split("-")[-1], args.device)
-            val_losses.append(avg_val_loss)
-            print(f"[Epoch {epoch}] Validation Loss: {avg_val_loss:.4f}")
-            
-            if scheduler:
-                scheduler.step(avg_val_loss)
-            
-            # Early stopping check
-            if avg_val_loss < best_val_loss:
-                best_val_loss = avg_val_loss
-                epochs_no_improve = 0
-                if isinstance(model, nn.DataParallel):
-                    # Save the best model
-                    torch.save(model.module.state_dict(), best_model_path)
-                else:
-                    torch.save(model.state_dict(), best_model_path)
+                        loss = loss_fn(y_preds.clone().view(-1, args.num_classes), y.clone().view(-1))
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
             else:
-                epochs_no_improve += 1
-                if epochs_no_improve >= args.patience:
-                    print(f"Early stopping at epoch {epoch}")
-                    break
-        
-                
-        # Plot loss curve
-        plt.figure()
-        plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
-        plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
-        plt.xlabel("Epoch")
-        plt.ylabel("Loss")
-        plt.title("Loss Curve")
-        plt.legend()
-        plt.savefig(f"{run_folder}/loss_curve.png")
-    
+                y_preds = model(input_ids, attention_mask)
+                y_preds = y_preds.contiguous()
+                if "bce" in args.loss_function:
+                    mask = y != -1
+                    y_preds = y_preds[mask].clone()
+                    y = y[mask].float()
+                    loss = loss_fn(y_preds.squeeze(-1), y)
+                else:
+                    loss = loss_fn(y_preds.clone().view(-1, args.num_classes), y.clone().view(-1))
+                loss.backward()
+                optimizer.step()
+            
+            total_loss += loss.item()
+        print(f"[Epoch {epoch}] Training Loss: {total_loss/len(train_loader):.4f}")
+
+    # -------------------------
+    # Save FSDP model
+    # -------------------------
+    if use_distributed:
+        # Save full model state dict
+        full_state_dict = model.state_dict()
+        if dist.get_rank() == 0:
+            torch.save(full_state_dict, best_model_path)
+    else:
+        torch.save(model.state_dict(), best_model_path)
+
     # -------------------------
     # Evaluation
     # -------------------------
-    print("Evaluating model on test data...")
-    cls_report, conf_matrix, results_df = evaluate(model, test_loader, args.loss_function.split("-")[-1], args.device)
+    if use_distributed:
+        dist.barrier()  # wait for rank 0 to save
+    cls_report, conf_matrix, results_df = evaluate(model, test_loader, args.loss_function.split("-")[-1], device)
     print(cls_report)
     print(conf_matrix)
     print("Total time: ", time.time() - start_time)

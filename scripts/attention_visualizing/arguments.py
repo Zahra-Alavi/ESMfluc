@@ -98,6 +98,8 @@ def parse_arguments():
     # Whether to wrap the model in DataParallel if multiple GPUs are available
     parser.add_argument("--data_parallel", action="store_true",
                        help="Use nn.DataParallel for multi-GPU training if more than one GPU is available.")
+    parser.add_argument("--use_fsdp", action="store_true",
+                       help="Use FSDP for multi-GPU training if more than one GPU is available.")
     
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility. default=42")
 

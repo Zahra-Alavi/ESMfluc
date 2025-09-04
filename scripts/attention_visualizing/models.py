@@ -38,7 +38,7 @@ class LSTMClassificationModel(nn.Module):
     def forward(self, input_ids, attention_mask):
         outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
         embeddings = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
-        lstm_out, _ = self.lstm(embeddings)     # [batch_size, seq_len, hidden_size*2]
+        lstm_out, _ = self.lstm(embeddings.contiguous())     # [batch_size, seq_len, hidden_size*2]
         lstm_out = self.dropout(lstm_out)
         logits = self.fc(lstm_out)              # [batch_size, seq_len, num_classes]
         return logits
@@ -129,7 +129,7 @@ class LSTMWithMultiHeadAttentionModel(nn.Module):
     def forward(self, input_ids, attention_mask, return_attention=False):
         outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
         embeddings = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
-        lstm_out, _ = self.lstm(embeddings)     # [batch_size, seq_len, hidden_size*2]
+        lstm_out, _ = self.lstm(embeddings.contiguous())     # [batch_size, seq_len, hidden_size*2]
         
         if return_attention:
             context, attn_weights = self.multihead_attention(lstm_out)
@@ -172,7 +172,7 @@ class LSTMWithSelfAttentionModel(nn.Module):
         embeddings = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
 
         # 2) Pass embeddings to LSTM
-        lstm_out, _ = self.lstm(embeddings)     # [batch_size, seq_len, hidden_size*2]
+        lstm_out, _ = self.lstm(embeddings.contiguous())     # [batch_size, seq_len, hidden_size*2]
 
         # 3) Pass LSTM output to your custom self-attention
         if return_attention:
