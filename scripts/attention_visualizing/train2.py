@@ -81,15 +81,22 @@ def evaluate(model, data_loader, loss_fn, device):
 
                 for i in range(len(batch['sequences'])):
                     seq = batch['sequences'][i]
-                    pred = preds[i].cpu().numpy().tolist()
-                    true_label = y[i].int().cpu().numpy().tolist()
+                    y_seq = y[i].cpu()
+                    pred_seq = preds[i].cpu()
+
+                    # Mask out padding values
+                    mask = y_seq != -1
+                    y_seq = y_seq[mask]
+                    pred_seq = pred_seq[mask]
+
                     results.append({
                         'sequence': seq,
-                        'pred': pred,
-                        'true label': true_label
+                        'pred': pred_seq.numpy().tolist(),
+                        'true label': y_seq.numpy().tolist()
                     })
-                    all_preds.append(pred)
-                    all_targets.append(true_label)
+
+                    all_preds.append(pred_seq.numpy().tolist())
+                    all_targets.append(y_seq.numpy().tolist())
 
             else:
                 y_probs = torch.softmax(y_preds, dim=-1)
