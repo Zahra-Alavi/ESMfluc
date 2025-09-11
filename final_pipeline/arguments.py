@@ -153,6 +153,9 @@ def parse_arguments():
     # reproducibility
     parser.add_argument("--seed", type=int, default=42,
                     help="Global random seed for full reproducibility. default=42")
+
+    parser.add_argument("--result_foldername", type=str, default="timestamp",
+                        help="Name for the result folder. default=timestamp")
 # =============================================================================
 #     parser.add_argument("--deterministic", action="store_true",
 #                     help="Use fully deterministic CUDA/cuDNN kernels (slower, may raise on some ops).")

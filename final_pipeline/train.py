@@ -120,10 +120,15 @@ def evaluate(model, data_loader, criterion, args):
         return report, conf_matrix
 
 
-def create_run_folder():
+def create_run_folder(desired_folder_name):
     now = datetime.datetime.now()
-    folder_name = "./results/" + now.strftime("%Y-%m-%d-%H-%M-%S")
-    os.makedirs(folder_name)
+    folder_name = "./results/"
+    if desired_folder_name != "timestamp":
+        folder_name += desired_folder_name
+    else:
+        folder_name += now.strftime("%Y-%m-%d-%H-%M-%S")
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
     return folder_name
 
     
@@ -277,13 +282,10 @@ def infer_feat_dim(model, args):
     if args.architecture == "transformer":
         return m.embedding_model.config.hidden_size
     raise ValueError("Cannot infer feature dimension.")
-
-
-    raise ValueError(f"Unknown architecture: {args.architecture}")
      
 def train(args):
     
-    run_folder = create_run_folder()
+    run_folder = create_run_folder(args.result_foldername)
         
     model = set_up_classification_model(args)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -454,7 +456,7 @@ def train(args):
             
             optimizer.zero_grad()
             
-            if amp_enabled:
+            if amp_enabled and args.device.startswith("cuda"):
                 with autocast(dtype=amp_dtype):
                     logits, feats = model(input_ids, attention_mask,
                               return_features=("pre" if args.head=="softmax"
