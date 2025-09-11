@@ -544,12 +544,17 @@ def train(args):
     
     # Evaluation
     cls_report, conf_matrix = evaluate(model, test_loader, criterion, args)
+    cls_report_df = pd.DataFrame(cls_report).transpose()
+    latex_table = cls_report_df.to_latex(float_format="%.2f")
     print(cls_report)
+    print(latex_table)
     print(conf_matrix)
     
     # Save classification report and confusion matrix
     with open(f"{run_folder}/classification_report.txt", "w") as f:
         f.write(str(cls_report))
+    with open(f"{run_folder}/classification_report.tex", "w") as f:
+        f.write(latex_table)
     disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix)
     disp.plot(cmap='Blues')
     plt.title("Confusion Matrix")
