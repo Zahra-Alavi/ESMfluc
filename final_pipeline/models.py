@@ -50,6 +50,38 @@ class BiLSTMClassificationModel(nn.Module):
             raise RuntimeError("return_features='post' requires logits (centroid head has no FC).")
         return logits, feats
 
+class ESMLinearTokenClassifier(nn.Module):
+    def __init__(self, embedding_model, num_classes, head="softmax"):
+        super().__init__()
+        self.embedding_model = embedding_model
+        self.head = head
+        self.use_fc = (head != "centroid")
+        self.output_dim = embedding_model.config.hidden_size
+        if self.use_fc:
+            self.fc = nn.Linear(embedding_model.config.hidden_size, num_classes)
+
+    def forward(self, input_ids, attention_mask, return_features="none", return_attn=False):
+        outputs = self.embedding_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=return_attn,
+            return_dict=True,
+        )
+        h = outputs.last_hidden_state  # [B,L,D] from ESM
+        logits = self.fc(h) if self.use_fc else None
+
+        feats = None
+        if return_features == "pre":
+            feats = h
+        elif return_features == "post":
+            if logits is None:
+                raise RuntimeError("post features need logits")
+            feats = logits
+
+        if return_attn:
+            return logits, feats, outputs.attentions
+        return logits, feats
+
 
 class SelfAttentionLayer(nn.Module):
     def __init__(self, feature_dim, dropout=0.0):
