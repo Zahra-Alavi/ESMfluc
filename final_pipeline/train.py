@@ -524,7 +524,9 @@ def train(args):
                 scheduler.step(avg_val_loss)
 
             # Early stopping
-            if avg_val_loss < best_val_loss:
+            MIN_DELTA = 1e-4  #small tolerance 
+            improved = (best_val_loss - avg_val_loss) > MIN_DELTA
+            if improved:
                 best_val_loss = avg_val_loss
                 epochs_no_improve = 0
                 torch.save(model.module.state_dict() if isinstance(model, nn.DataParallel) else model.state_dict(),
