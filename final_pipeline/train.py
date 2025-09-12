@@ -524,7 +524,7 @@ def train(args):
                 scheduler.step(avg_val_loss)
 
             # Early stopping
-            MIN_DELTA = 1e-4  #small tolerance 
+            MIN_DELTA = 1e-3  #small tolerance 
             improved = (best_val_loss - avg_val_loss) > MIN_DELTA
             if improved:
                 best_val_loss = avg_val_loss
