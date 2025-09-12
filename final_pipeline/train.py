@@ -37,7 +37,8 @@ from models import (
     FocalLoss, 
     BiLSTMClassificationModel,
     BiLSTMWithSelfAttentionModel,
-    TransformerClassificationModel
+    TransformerClassificationModel,
+    ESMLinearTokenClassifier
 )
 
 from nc_losses import NCLoss
@@ -204,7 +205,15 @@ def set_up_classification_model(args):
             num_classes=args.num_classes,
             dropout=args.dropout,
             head = args.head
-        )   
+        )
+        
+    elif args.architecture == "esm_linear":
+        print("Using ESM-only linear token classifier")
+        model = ESMLinearTokenClassifier(
+            embedding_model=embedding_model,
+            num_classes=args.num_classes,
+            head=args.head,   
+        )
     
     else:
         raise ValueError(f"Invalid architecture: {args.architecture}")
@@ -586,6 +595,64 @@ def train(args):
     with open(f"{run_folder}/metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)
     print(f"Saved metrics to {run_folder}/metrics.json")
+    
+    # ---------- RUN SUMMARY CSV (one row) ----------
+    # Build a flat dict with config, metrics, report, and confusion matrix
+
+    row = {
+        "run_dir": run_folder,
+        "batch_size": args.batch_size,
+        "embedding_model": args.esm_model,
+        "model_architecture": args.architecture,
+
+        # Loss description (explicit fields + compact summary)
+        "loss_mode": args.loss_mode,                # "supervised" | "nc" | "both"
+        "loss_function": args.loss_function,        # "focal" | "crossentropy"
+        "head": args.head,                          # "softmax" | "postfc" | "centroid"
+        "loss_desc": f"{args.loss_mode}|{args.loss_function}|head={args.head}",
+
+        # Timing & memory
+        "total_time_seconds": total_seconds,
+        "epochs_ran": len(epoch_times),
+        "gpu_overall_peak_bytes": gpu_overall_peak,
+        "cpu_rss_start_bytes": cpu_rss_start,
+        "cpu_rss_end_bytes": cpu_rss_end,
+        "cpu_rss_delta_bytes": (
+            int(cpu_rss_end - cpu_rss_start)
+            if (cpu_rss_end is not None and cpu_rss_start is not None) else None
+            ),
+
+        # Repro / runtime
+        "seed": getattr(args, "seed", None),
+        "device": str(args.device),
+        "amp_enabled": bool(args.mixed_precision and on_cuda),
+        }
+
+    # Flatten classification_report into columns
+    # e.g., adds: accuracy, 0_precision, 0_recall, ..., macro_avg_f1_score, weighted_avg_support, etc.
+    for key, val in cls_report.items():
+        if key == "accuracy":
+            row["accuracy"] = val
+            continue
+        if isinstance(val, dict):
+           key_safe = str(key).replace(" ", "_")              # "macro avg" -> "macro_avg"
+           for subk, subval in val.items():
+               subk_safe = subk.replace("-", "_")             # "f1-score" -> "f1_score"
+               row[f"{key_safe}_{subk_safe}"] = subval
+
+    # Flatten confusion matrix into columns
+    # cm_true_i_pred_j for every cell
+    cm = conf_matrix
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            row[f"cm_true_{i}_pred_{j}"] = int(cm[i, j])
+
+    # Make DataFrame and save
+    summary_df = pd.DataFrame([row])
+    summary_csv_path = f"{run_folder}/run_summary.csv"
+    summary_df.to_csv(summary_csv_path, index=False)
+    print(f"Saved run summary to {summary_csv_path}")
+# ----------------------------------------------
 
         
     print("Training completed")
