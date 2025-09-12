@@ -126,9 +126,15 @@ def parse_arguments():
     
     parser.add_argument("--warmup_epochs", type=int, default=0,
     help="Number of epochs to keep lambda_ce > 0 before setting it to 0 (centroid/postfc only)")
+    
+    
+    
 
 
     # Layer freezing
+    parser.add_argument("--freeze_all_backbone", action="store_true",
+                        help="Freeze ALL parameters in the ESM backbone. Overrides --freeze_layers.") 
+    
     parser.add_argument("--freeze_layers", type=str, default=None,
                         help=("Specify which layers to freeze, e.g. '0-5' means freeze layers 0..5, "
                               "and unfreeze the rest. Omit or set None to not freeze any layers.default=None"))
