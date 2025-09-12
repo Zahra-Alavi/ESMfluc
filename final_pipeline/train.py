@@ -154,6 +154,16 @@ def get_loss_fn(args, train_dataset):
 def set_up_embedding_model(args):
     embedding_model = EsmModel.from_pretrained(f"facebook/{args.esm_model}")
     embedding_model.to(args.device)
+    
+    if getattr(args, "freeze_all_backbone", False):
+        for p in embedding_model.parameters():
+            p.requires_grad = False
+        embedding_model.eval()    #disable dropout in the frozen backbone
+        print("Frozen ALL ESM parameters.")
+        n_trainable = sum(p.requires_grad for p in embedding_model.parameters())
+        print(f"Trainable ESM params: {n_trainable}")
+        return embedding_model
+    
     embedding_model.train()
     
     # Free layers
@@ -168,6 +178,10 @@ def set_up_embedding_model(args):
             else:   
                 param.requires_grad = True
         print(f"Freezing layers {args.freeze_layers}")
+        
+    n_trainable = sum(p.requires_grad for p in embedding_model.parameters())
+    print(f"Trainable ESM params: {n_trainable}") 
+        
     return embedding_model
 
 def set_up_classification_model(args):
