@@ -7,9 +7,7 @@ Author: Ngoc Kim Ngan Tran
 import torch
 import esm
 import pandas as pd
-from decimal import Decimal
-from fairscale.nn.data_parallel import FullyShardedDataParallel as FSDP
-from fairscale.nn.wrap import enable_wrap, wrap
+from transformers import AutoTokenizer, AutoModel
 
 class BaseFeatureExtraction:
     def __init__(self):
@@ -80,66 +78,32 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
     def __init__(self, model_name):
         super().__init__()
         print("ESM embedding with ESM model:", model_name)
-        self.model_name = model_name
-        self._load_esm_model(model_name)
-
-    def _load_esm_model(self, model_name):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.repr_layers = int(model_name.split("_")[1].replace("t", ""))
-        if model_name == "esm2_t48_15B_UR50D":
-            # offload the model to CPU to reduce GPU memory usage. Ex: https://github.com/facebookresearch/esm/blob/main/examples/esm2_infer_fairscale_fsdp_cpu_offloading.py
-
-            # init the distributed world with world_size 1
-            print("Offload the model to CPU to reduce GPU memory usage")
-            url = "tcp://localhost:23456"
-            torch.distributed.init_process_group(backend="nccl", init_method=url, world_size=1, rank=0)
-            
-            model_data, regression_data = esm.pretrained._download_model_and_regression_data(model_name)
-            
-            # initialize the model with FSDP wrapper
-            fsdp_params = dict(
-                mixed_precision=True,
-                flatten_parameters=True,
-                state_dict_device=torch.device("cpu"),  # reduce GPU mem usage
-                cpu_offload=True,  # enable cpu offloading
-            )
-            
-            with enable_wrap(wrapper_cls=FSDP, **fsdp_params):
-                model, vocab = esm.pretrained.load_model_and_alphabet_core(
-                    model_name, model_data, regression_data
-                )
-                self.batch_converter = vocab.get_batch_converter()
-                model.eval()
-
-                # Wrap each layer in FSDP separately
-                for name, child in model.named_children():
-                    if name == "layers":
-                        for layer_name, layer in child.named_children():
-                            wrapped_layer = wrap(layer)
-                            setattr(child, layer_name, wrapped_layer)
-                self.model = wrap(model)
-                print("Model wrapped with FSDP")
-        else:
-            self.model, alphabet = esm.pretrained.load_model_and_alphabet(model_name)
-            self.batch_converter = alphabet.get_batch_converter()
-            self.model.eval()
-            self.model.to(self.device)
+        self.tokenizer = AutoTokenizer.from_pretrained(f"facebook/{model_name}", use_fast=False)
+        self.model = AutoModel.from_pretrained(model_name)
+        self.model.eval()
+        self.model.to(self.device)
     
     def extract_features(self, sequences, neq_values):
         print("Feature extraction version 1.3")
         
         seq_embedding, targets = [], []
         for i, seq in enumerate(sequences):
-            data = [(f"protein_{i}", seq)]
-            labels, strs, tokens = self.batch_converter(data)
+            inputs = self.tokenizer(seq, return_tensors="pt", add_special_tokens=True)
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
             with torch.no_grad():
-                results = self.model(tokens.to(self.device), repr_layers=[self.repr_layers])
-                token_embedding = results["representations"][self.repr_layers]
-                # If model is ESM 2 then token embedding is 1:-1 for second dimension, else 1: for esm 1
-                if self.model_name.startswith("esm1"):
-                    residue_embeddings = token_embedding[0, 1:]
+                outputs = self.model(**inputs, output_hidden_states=True)
+                # use last hidden state as embeddings
+                token_embeddings = outputs.last_hidden_state.squeeze(0)
+
+                # skip special tokens ([CLS], [SEP]) if present
+                if self.tokenizer.cls_token_id is not None and self.tokenizer.sep_token_id is not None:
+                    residue_embeddings = token_embeddings[1:-1]
                 else:
-                    residue_embeddings = token_embedding[0, 1:-1]
+                    residue_embeddings = token_embeddings
+
                 seq_embedding.extend(residue_embeddings.cpu().numpy())
                 targets.extend(neq_values[i])
+        
         return seq_embedding, targets
