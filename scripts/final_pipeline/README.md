@@ -63,4 +63,3 @@ python get_attn.py --checkpoint best_model.pth --fasta_file your_sequences.fasta
 If a CSV file for secondary structure prediction is given, the final JSON will also include ss_pred. Such CSV file can be obtained from: https://services.healthtech.dtu.dk/services/NetSurfP-3.0/. This is only useful if you later want to plot attention heatmaps with ss annotations.
 
 Once you run inference, you can visualize the attentin mechanism using `pheatmap_functions.py`
-

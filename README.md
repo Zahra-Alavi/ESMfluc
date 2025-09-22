@@ -51,10 +51,8 @@ Ensure your dataset (e.g., `neq_original_data.csv`) is placed in the `data/` dir
 
 To run the project, please navigate through the different folders inside the `scripts/` directory:
 
-  - The `base_classifiers` folder contains code for the Logistic Regression and Random Forest Classification models.
+  - The `base_classifiers` folder contains code for the Logistic Regression and Random Forest Classification and Conditional Random Field models.
 
-  - The `conditional_random_fields` folder contains code for the CRF model.
-
-  - The `attention_visualizing` folder contains the latest code for the BiLSTM model.
+  - The `final_pipeline` folder contains code for LSTM, BiLSTM and Transformers models.
 
 Please refer to the instructions provided within each folder for details on how to use the code.
