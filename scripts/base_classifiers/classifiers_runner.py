@@ -1,5 +1,5 @@
 """
-Description: This script is used to run the classifiers on the dataset.
+Description: This script is used to run Logistic Regression and Random Forest classifiers on the dataset.
 Date: 2025-02-07
 Author: Ngoc Kim Ngan Tran
 """
@@ -47,6 +47,7 @@ def main():
         "--feature_engineering_version",
         type=str,
         default="1.1",
+        choices=["1.1", "1.2", "1.3"],
         help="Optional version number for feature engineering (default: 1.1)."
     )
     parser.add_argument(
@@ -59,6 +60,19 @@ def main():
         "--esm_model",
         type=str,
         default="esm2_t6_8M_UR50D",
+        choices=[
+            "esm1_t6_43M_UR50S",
+            "esm1_t12_85M_UR50S",
+            "esm1_t34_670M_UR100",
+            "esm1_t34_670M_UR50D",
+            "esm1_t34_670M_UR50S",
+            "esm2_t6_8M_UR50D",
+            "esm2_t12_35M_UR50D",
+            "esm2_t30_150M_UR50D",
+            "esm2_t33_650M_UR50D",
+            "esm2_t36_3B_UR50D",
+            "esm2_t48_15B_UR50D"
+        ],
         help="Optional ESM model to use for feature extraction (default: esm2_t6_8M_UR50D)."
     )
     
