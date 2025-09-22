@@ -78,6 +78,7 @@ class FeatureExtraction1_3(BaseFeatureExtraction):
     def __init__(self, model_name):
         super().__init__()
         print("ESM embedding with ESM model:", model_name)
+        
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(f"facebook/{model_name}", use_fast=False)
         self.model = AutoModel.from_pretrained(model_name)
