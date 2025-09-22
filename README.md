@@ -1,6 +1,6 @@
 # The Effects of Embedding Models ESM on Predicting the Flexibility of Amino Acids
 
-This project investigates the effects of ESM (Evolutionary Scale Modeling) embeddings on predicting the flexibility of amino acids. The pipeline processes amino acid sequence data, applies feature engineering (e.g., one-hot encoding or embeddings), and trains models to predict flexibility based on Neq values. The main entry point for running the project is `scripts/main.py`.
+This project investigates the effects of ESM (Evolutionary Scale Modeling) embeddings on predicting the flexibility of amino acids. The pipeline processes amino acid sequence data, applies feature engineering (e.g., one-hot encoding or embeddings), and trains models to predict flexibility based on Neq values.
 
 ## Preprequisties
 
