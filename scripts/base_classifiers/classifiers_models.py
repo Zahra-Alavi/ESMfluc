@@ -1,7 +1,6 @@
 """
 Description: This file contains the models for the classifiers with hyperparameter tuning.
 Date: 2025-02-07
-Author: Ngoc Kim Ngan Tran
 """
 
 import numpy as np

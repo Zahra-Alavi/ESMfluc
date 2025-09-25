@@ -9,7 +9,6 @@ using best model check point.
 If a CSV file for secondary structure prediction is given, the final JSON will also include ss_pred. 
 Such CSV file can be obtained from: https://services.healthtech.dtu.dk/services/NetSurfP-3.0/ 
 
-@author: zalavi
 """
 
 import pandas as pd

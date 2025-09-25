@@ -1,7 +1,6 @@
 """
 Description: This file contains the DataLearning class which is used to analyze the data.
 Date: 2025-02-07
-Author: Ngoc Kim Ngan Tran
 """
 
 import os

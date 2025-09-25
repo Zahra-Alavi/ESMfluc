@@ -3,7 +3,6 @@
 """
 Created on Tue Feb  4 10:43:57 2025
 
-@author: zalavi
 """
 
 import logging

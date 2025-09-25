@@ -3,7 +3,6 @@
 """
 Created on Thu Mar 20 16:11:16 2025
 
-@author: zalavi
 """
 
 import argparse

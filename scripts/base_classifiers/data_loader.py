@@ -1,7 +1,7 @@
 """
 Description: This file contains the DataLoader class which is used to load the data from the csv file and split it into training, validation and test sets.
 Date: 2025-02-07
-Author: Ngoc Kim Ngan Tran
+
 """
 
 import pandas as pd

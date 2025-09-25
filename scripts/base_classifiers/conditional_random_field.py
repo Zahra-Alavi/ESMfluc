@@ -1,7 +1,6 @@
 """
 Description: This only one file used for implementing a Conditional Random Field (CRF) model for predicting Neq values of amino acids in protein sequences.
 Date: 2025-02-08
-Author: Ngoc Kim Ngan Tran
 """
 
 import os

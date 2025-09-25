@@ -1,9 +1,8 @@
 """
 Created on Tue Feb  4 10:00:07 2025
 
-@author: Ngoc Kim Ngan Tran
 """
-# train2.py
+
 import os
 import datetime
 import time, json

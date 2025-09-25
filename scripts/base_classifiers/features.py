@@ -1,7 +1,6 @@
 """
 Description: This file contains the feature extraction functions for the project.
 Date: 2025-02-07
-Author: Ngoc Kim Ngan Tran
 """
 
 import torch

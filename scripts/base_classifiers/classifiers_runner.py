@@ -1,7 +1,6 @@
 """
 Description: This script is used to run Logistic Regression and Random Forest classifiers on the dataset.
 Date: 2025-02-07
-Author: Ngoc Kim Ngan Tran
 """
 
 import argparse

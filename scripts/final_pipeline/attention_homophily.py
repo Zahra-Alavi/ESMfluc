@@ -3,8 +3,8 @@
 """
 Created on Thu Apr  3 12:11:20 2025
 
-Description: This script investigates attention homophily in the test set. 
-@author: zalavi
+This script investigates attention homophily in the test set. 
+
 """
 
 import pandas as pd
