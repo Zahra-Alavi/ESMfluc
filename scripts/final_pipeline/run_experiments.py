@@ -3,7 +3,6 @@
 """
 Created on Fri Sep  5 17:54:55 2025
 
-@author: zalavi
 """
 
 import subprocess, sys, time, json, ast, re, os

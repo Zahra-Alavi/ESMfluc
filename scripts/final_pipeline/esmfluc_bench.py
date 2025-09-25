@@ -3,10 +3,6 @@
 """
 Created on Thu Jul 17 15:32:35 2025
 
-@author: zalavi
-
-esmfluc_bench.py
-
 Run an ESMfluc binary classifier checkpoint on sequences in a FASTA file,
 merge with per-residue Neq (ground truth) and NetSurfP disorder scores,
 and compute Spearman & AUROC per sequence and overall.

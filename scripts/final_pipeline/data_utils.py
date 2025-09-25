@@ -3,7 +3,6 @@
 """
 Created on Tue Feb  4 10:00:07 2025
 
-@author: zalavi
 """
 
 import torch

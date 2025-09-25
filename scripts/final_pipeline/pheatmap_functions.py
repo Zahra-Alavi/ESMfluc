@@ -14,7 +14,6 @@ It can:
         . perform PCA across all mutants
         . perfrom tSNE on the collection
 
-@author: zalavi
 """
 
 import pandas as pd

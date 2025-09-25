@@ -3,7 +3,6 @@
 """
 Created on Tue Feb  4 09:58:50 2025
 
-@author: zalavi
 """
 
 

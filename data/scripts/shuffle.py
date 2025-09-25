@@ -3,7 +3,6 @@
 """
 Created on Mon Mar 24 10:41:37 2025
 
-@author: zalavi
 """
 import pandas as pd
 import ast
