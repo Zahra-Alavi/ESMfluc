@@ -62,34 +62,10 @@ def find_matrices(obj: Any) -> List[Tuple[str, np.ndarray]]:
     return out
 
 
-def aggregate_matrices(arr: np.ndarray, aggregate: str = "mean") -> np.ndarray:
-    # arr may be shape (H,L,L) or (Layers,H,L,L) etc.
-    if arr.ndim == 2:
-        return arr
-    if arr.ndim == 3:
-        if aggregate == "mean":
-            return arr.mean(axis=0)
-        if aggregate == "sum":
-            return arr.sum(axis=0)
-        if aggregate == "max":
-            return arr.max(axis=0)
-    if arr.ndim == 4:
-        # default: mean over layers and heads
-        if aggregate == "mean":
-            return arr.mean(axis=(0, 1))
-        if aggregate == "sum":
-            return arr.sum(axis=(0, 1))
-        if aggregate == "max":
-            return arr.max(axis=(0, 1))
-    raise ValueError(f"Unsupported attention array shape: {arr.shape}")
-
-
-def row_softmax(mat: np.ndarray) -> np.ndarray:
-    # apply softmax along last dimension (targets) for each source row
-    m = mat - np.max(mat, axis=-1, keepdims=True)
-    exp = np.exp(m)
-    s = exp / (np.sum(exp, axis=-1, keepdims=True) + 1e-12)
-    return s
+# Note: attention in this pipeline is a single-head LxL matrix and already
+# softmax-normalized per-row (see models.SelfAttentionLayer). The converter
+# therefore expects a 2D (L, L) attention matrix and does not perform
+# aggregation across heads/layers or apply softmax.
 
 
 def build_edges(
@@ -144,76 +120,42 @@ def process_one(
     rec_id: str,
     arr: np.ndarray,
     out_dir: str,
-    aggregate: str,
-    per_head: bool,
-    layer: int,
-    head: int,
     threshold: float,
     topk: int,
     normalize: bool,
-    softmax: bool,
     out_format: str,
 ):
-    # handle shapes
-    if arr.ndim == 2:
-        mats = [(None, arr)]
-    elif arr.ndim == 3:
-        # (H, L, L)
-        if per_head:
-            mats = [(h, arr[h]) for h in range(arr.shape[0])]
-        else:
-            mats = [(None, aggregate_matrices(arr, aggregate=aggregate))]
-    elif arr.ndim == 4:
-        # (Layers, H, L, L)
-        if layer is not None:
-            if layer < 0 or layer >= arr.shape[0]:
-                raise ValueError("layer index out of bounds")
-            layer_arr = arr[layer]
-            if per_head:
-                mats = [(h, layer_arr[h]) for h in range(layer_arr.shape[0])]
-            else:
-                mats = [(None, aggregate_matrices(layer_arr, aggregate=aggregate))]
-        else:
-            if per_head:
-                # flatten layers*heads as separate items
-                mats = []
-                for Lidx in range(arr.shape[0]):
-                    for h in range(arr.shape[1]):
-                        mats.append((f"L{Lidx}_H{h}", arr[Lidx, h]))
-            else:
-                mats = [(None, aggregate_matrices(arr, aggregate=aggregate))]
-    else:
-        raise ValueError(f"Unsupported array ndim: {arr.ndim}")
+    """Process a single attention matrix assumed to be 2D (L, L).
 
-    for tag, mat in mats:
-        if softmax:
-            mat = row_softmax(mat)
-        edges = build_edges(mat, threshold=threshold, topk=topk, normalize=normalize)
-        L = mat.shape[-1]
-        # file naming
-        safe_tag = f"_{tag}" if tag is not None else ""
-        base = os.path.join(out_dir, f"{rec_id}{safe_tag}")
-        if out_format in ("json", "json_edges"):
-            write_json_edges(base + ".json", rec_id + (f"_{tag}" if tag else ""), L, edges)
-        if out_format in ("graphml", "all"):
-            try:
-                write_graphml(base + ".graphml", L, edges)
-            except RuntimeError as e:
-                print(f"Skipping GraphML for {rec_id}{safe_tag}: {e}")
+    The attention matrices produced by `get_attn.py` are single-head and
+    already softmax-normalized row-wise. This function enforces a 2D input
+    and converts it to edge lists / GraphML.
+    """
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D attention matrix (L,L); got shape {arr.shape}")
+
+    mat = arr
+    edges = build_edges(mat, threshold=threshold, topk=topk, normalize=normalize)
+    L = mat.shape[-1]
+    base = os.path.join(out_dir, f"{rec_id}")
+    if out_format in ("json", "json_edges"):
+        write_json_edges(base + ".json", rec_id, L, edges)
+    if out_format in ("graphml", "all"):
+        try:
+            write_graphml(base + ".graphml", L, edges)
+        except RuntimeError as e:
+            print(f"Skipping GraphML for {rec_id}: {e}")
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--input", "-i", required=True, help="Input JSON path")
     p.add_argument("--output-dir", "-o", required=True, help="Output directory")
-    p.add_argument("--aggregate", choices=("mean", "sum", "max"), default="mean", help="How to aggregate heads/layers")
-    p.add_argument("--per-head", action="store_true", help="Export per-head graphs instead of aggregated")
-    p.add_argument("--layer", type=int, default=None, help="Pick a specific layer (0-based) from a 4D tensor")
-    p.add_argument("--head", type=int, default=None, help="(Not used) reserved for future")
+    # Attention matrices are single-head LxL; aggregation/per-head options removed
     p.add_argument("--threshold", type=float, default=0.0, help="Minimum edge weight to keep")
     p.add_argument("--topk", type=int, default=0, help="Keep top-k targets per source (overrides threshold selection for sparsity)")
     p.add_argument("--normalize", action="store_true", help="Row-normalize attention before thresholding")
-    p.add_argument("--softmax", action="store_true", help="Apply softmax to rows before exporting")
+    # Note: do not apply softmax; matrices are already normalized by the model
     p.add_argument("--format", choices=("json", "graphml", "all", "json_edges"), default="json", help="Output format")
     args = p.parse_args()
 
@@ -229,14 +171,9 @@ def main():
                 rec_id=rec_id,
                 arr=arr,
                 out_dir=args.output_dir,
-                aggregate=args.aggregate,
-                per_head=args.per_head,
-                layer=args.layer,
-                head=args.head,
                 threshold=args.threshold,
                 topk=args.topk,
                 normalize=args.normalize,
-                softmax=args.softmax,
                 out_format=args.format,
             )
             print(f"Wrote graphs for {rec_id}")
