@@ -671,3 +671,10 @@ def train(args):
 
         
     print("Training completed")
+
+
+if __name__ == "__main__":
+    from arguments import parse_arguments
+    parser = parse_arguments()
+    args = parser.parse_args()
+    train(args)
