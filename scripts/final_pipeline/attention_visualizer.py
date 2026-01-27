@@ -1,39 +1,35 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Mar 20 16:11:16 2025
-
+Visualize attention weights from get_attn.py JSON output.
+Takes pre-computed attention weights from JSON instead of running the model.
 """
 
 import argparse
-import torch
+import json
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from transformers import EsmModel, EsmTokenizer
-import biolib
 import pandas as pd
 import numpy as np
 from pheatmap import pheatmap
 import os
-from models import BiLSTMWithSelfAttentionModel
-
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Visualize attention weights for sequences in a FASTA file."
+        description="Visualize attention weights from JSON file."
     )
     parser.add_argument(
-        "--checkpoint",
+        "--attention_json",
         type=str,
         required=True,
-        help="Path to the model checkpoint (e.g., best_model_shuffled.pth)."
+        help="Path to JSON file with attention data (from get_attn.py output)."
     )
     parser.add_argument(
         "--fasta_file",
         type=str,
         required=True,
-        help="Path to the FASTA file containing sequences."
+        help="Path to the FASTA file containing sequences (for matching)."
     )
     return parser.parse_args()
 
@@ -60,82 +56,24 @@ def parse_fasta_file(fasta_path):
         # yield the last record if present
         if seq_id is not None and seq_lines:
             yield seq_id, "".join(seq_lines)
-            
-            
-            
-def run_model(model, tokenizer, sequence, device):     
-    enc = tokenizer(sequence, return_tensors="pt", padding=False, add_special_tokens=False)
-    input_ids = enc["input_ids"].to(device)
-    attn_mask = enc["attention_mask"].to(device)
-    
-    model.eval()
-    with torch.no_grad():
-        logits, attn_weights_torch = model(input_ids, attn_mask, return_attention=True)
-        # attn_weights_torch shape: [batch_size, seq_len, seq_len]
-    attn_weights = attn_weights_torch[0].cpu().numpy()  # shape=(L,L)
-    
-    token_ids = input_ids[0].tolist()
-    tokens = tokenizer.convert_ids_to_tokens(token_ids)  # length=L
-    
-    y_probs = torch.softmax(logits, dim=-1)
-    y_preds = torch.argmax(y_probs, dim=-1)
-    y_preds = y_preds.view(-1)
-    
-    return attn_weights, tokens, y_preds
 
 
-
-def ss_preds(fasta_path):
-
-    nsp3 = biolib.load('DTU/NetSurfP-3')
-    nsp3_results = nsp3.cli(args=f"-i {fasta_path}")
-    print("STDOUT:\n", nsp3_results.get_stdout())
-    print("STDERR:\n", nsp3_results.get_stderr())
-    nsp3_results.save_files("nsp3_results/")
-    
-def parse_nsp3_csv(df):
+def get_tokens_from_sequence(sequence):
     """
-    Returns a dict mapping { seq_id -> list_of_SS }, 
-    where seq_id is the FASTA header without '>',
-    and list_of_SS is a list of 'C','H','E' for each residue.
+    Convert amino acid sequence to token list (one token per amino acid).
     """
-
-    ss_map = {}
-
-    for row in df.itertuples(index=False):
-        raw_id = row[0]    # first column is 'id'
-        q3_label = row[5]  # fourth column is 'q3'
-        seq_id = raw_id.lstrip(">")
-        if seq_id not in ss_map:
-            ss_map[seq_id] = []
-        ss_map[seq_id].append(q3_label)
-
-    return ss_map
+    return list(sequence)
 
 
-
-def visualize_attention(model, tokenizer, seq, seq_id, ss_list, device):
+def visualize_attention(attention_weights, tokens: list, seq_id: str, ss_list=None):
     """
     Generate and save an attention heatmap for a given sequence.
-    seq_id will be used to name the output PNG file.
+    seq_id will be used to name the output HTML file.
+    ss_list is optional (may be None if not available).
     """
+    seq_len = attention_weights.shape[0]
     
-    enc = tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False)
-    input_ids = enc["input_ids"].to(device)
-    attn_mask = enc["attention_mask"].to(device)
-
-    model.eval()
-    with torch.no_grad():
-        logits, attn_weights = model(input_ids, attn_mask, return_attention=True)
-
-    # attn_weights: [batch_size, seq_len, seq_len]
-    attn_weights = attn_weights[0].cpu().numpy()    # shape = [seq_len, seq_len]
-    
-    token_ids = input_ids[0].tolist()  # shape = [seq_len], since batch_size=1
-    tokens = tokenizer.convert_ids_to_tokens(token_ids)
-    seq_len = attn_weights.shape[0]
-    
-    # display pixel info 
+    # Build hover text for each cell
     hover_text = []
     for r in range(seq_len):
         row_text = []
@@ -143,70 +81,80 @@ def visualize_attention(model, tokenizer, seq, seq_id, ss_list, device):
             row_text.append(
                 f"Query idx:{r+1} ({tokens[r]})<br>"
                 f"Key idx:{c+1} ({tokens[c]})<br>"
-                f"Weight: {attn_weights[r,c]:.4f}")
+                f"Weight: {attention_weights[r,c]:.4f}")
         hover_text.append(row_text)
-        
-    ss_map = {'C': 0, 'H': 1, 'E': 2}
-    ss_nums = [ss_map[s] for s in ss_list]
-    ss_array = np.array(ss_nums)       # shape (L,)
-    ss_array_tiled = np.tile(ss_array, (5, 1))  # shape (5, L), to make the colored row in ss plot thicker
+    
+    # Only create SS plot if ss_list is provided
+    has_ss = ss_list is not None and len(ss_list) > 0
+    
+    if has_ss:
+        ss_map = {'C': 0, 'H': 1, 'E': 2}
+        ss_nums = [ss_map.get(s, 0) for s in ss_list]  # default to coil if unknown
+        ss_array = np.array(ss_nums)       # shape (L,)
+        ss_array_tiled = np.tile(ss_array, (5, 1))  # shape (5, L)
+        row_heights = [0.1, 0.9]
+        num_rows = 2
+    else:
+        row_heights = [1.0]
+        num_rows = 1
     
     fig = make_subplots(
-        rows=2, cols=1,
-        shared_xaxes=True,  # so they align horizontally
-        vertical_spacing=0.005, # gap size
-        row_heights=[0.1, 0.9]  # top row smaller
+        rows=num_rows, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.005,
+        row_heights=row_heights
     )
     
-    # top subplot is a single row for ss-preds
-    ss_colorscale = [
-        [0.00, "orange"],  [0.33, "orange"],  # coil
-        [0.33, "blue"],    [0.66, "blue"],    # helix
-        [0.66, "red"],     [1.00, "red"]      # sheet
-    ]
-    
-    fig.add_trace(
-        go.Heatmap(
-            z=ss_array_tiled,
-            colorscale=ss_colorscale,
-            showscale=True,
-            hoverinfo="none",
-            colorbar=dict(
-                title="Sec. Str.",
-                tickvals=[0,1,2],
-                ticktext=["Coil", "Helix", "Sheet"],
-                x=1.08,  # move colorbar to the right
-                y = 0.95, # palce near top
-                len=0.1, # shorter volorbar
+    # top subplot is a single row for ss-preds (if available)
+    if has_ss:
+        ss_colorscale = [
+            [0.00, "orange"],  [0.33, "orange"],  # coil
+            [0.33, "blue"],    [0.66, "blue"],    # helix
+            [0.66, "red"],     [1.00, "red"]      # sheet
+        ]
+        
+        fig.add_trace(
+            go.Heatmap(
+                z=ss_array_tiled,
+                colorscale=ss_colorscale,
+                showscale=True,
+                hoverinfo="none",
+                colorbar=dict(
+                    title="Sec. Str.",
+                    tickvals=[0,1,2],
+                    ticktext=["Coil", "Helix", "Sheet"],
+                    x=1.08,
+                    y = 0.95,
+                    len=0.1,
+                ),
             ),
-        ),
-        row=1, col=1
-    )
-    
-    
-    # hide top subplot’s axes ticks/grids so it looks like a single color bar
-    fig.update_xaxes(visible=False, row=1, col=1)
-    fig.update_yaxes(visible=False, range=[-0.5, 4.5], row=1, col=1)
+            row=1, col=1
+        )
+        
+        fig.update_xaxes(visible=False, row=1, col=1)
+        fig.update_yaxes(visible=False, range=[-0.5, 4.5], row=1, col=1)
+        attn_row = 2
+    else:
+        attn_row = 1
 
-    # bottom subplot: attention heatmap 
+    # attention heatmap 
     fig.add_trace(
         go.Heatmap(
-            z=attn_weights,
+            z=attention_weights,
             text=hover_text,
             hoverinfo='text',
             colorscale='Viridis',
-            # separate colorbar for attention
             colorbar=dict(
                 title="Attention",
-                x=1.08,   # same x offset so colorbars align
+                x=1.08,
                 y = 0.45,
                 len=0.9
             ),
         ),
-        row=2, col=1
+        row=attn_row, col=1
     )
     
-    fig.update_xaxes(scaleanchor="y", scaleratio=1, row=2, col=1)
+    fig.update_xaxes(scaleanchor="y", scaleratio=1, row=attn_row, col=1)
 
     step = 25
     tick_positions = list(range(0, seq_len, step))
@@ -216,28 +164,31 @@ def visualize_attention(model, tokenizer, seq, seq_id, ss_list, device):
         tickmode='array',
         tickvals=tick_positions,
         ticktext=tick_labels,
-        row=2, col=1
+        row=attn_row, col=1
     )
     fig.update_yaxes(
         tickmode='array',
         tickvals=tick_positions,
         ticktext=tick_labels,
-        row=2, col=1
+        row=attn_row, col=1
     )
     
+    title_str = f"{seq_id}: Attention"
+    if has_ss:
+        title_str += " + 3-state SS"
     fig.update_layout(
-        title=f"{seq_id}: Attention + 3-state SS",
-        width=1200, height=1200
+        title=title_str,
+        width=1200, height=1200 if has_ss else 800
     )
     
-    fig.update_xaxes(title="Key Residue", row=2, col=1)
-    fig.update_yaxes(title="Query Residue", row=2, col=1)
+    fig.update_xaxes(title="Key Residue", row=attn_row, col=1)
+    fig.update_yaxes(title="Query Residue", row=attn_row, col=1)
     
-
     # save as an interactive HTML file
-    out_html = f"{seq_id}_attention_ss.html"
+    out_html = f"{seq_id}_attention.html"
     fig.write_html(out_html)
     print(f"Saved interactive Plotly heatmap to {out_html}")
+    
     
 def find_local_peaks(array, global_threshold):
     """
@@ -254,17 +205,18 @@ def find_local_peaks(array, global_threshold):
             array[i] >= array[i+1] and
             array[i] >= global_threshold):
             peaks.append(i)
-    # Edge cases for i=0 or i=L-1 if you want to consider them
     return peaks
     
     
-def pheatmap_visualizer( attention_weights, tokens: list, seq: str, seq_id: str, ss_list: list,neq_preds):
-    
+def pheatmap_visualizer(attention_weights, tokens: list, seq_id: str, ss_list=None, neq_preds=None):
+    """
+    Generate pheatmap PDF visualization of attention with optional annotations.
+    """
     L = attention_weights.shape[0]
     
     threshold = np.quantile(attention_weights, 0.90)
 
-    
+    # Find peaks in column and row maxima
     col_maxes = attention_weights.max(axis=0)  
     col_peaks = find_local_peaks(col_maxes, threshold)
     col_names = ["" for _ in range(L)]
@@ -277,28 +229,39 @@ def pheatmap_visualizer( attention_weights, tokens: list, seq: str, seq_id: str,
     for r in row_peaks:
         row_names[r] = f"{r+1}-{tokens[r]}"
     
-    
-    df_mat = pd.DataFrame(attention_weights,index=row_names,columns=col_names)
+    # Create DataFrame with peak labels
+    df_mat = pd.DataFrame(attention_weights, index=row_names, columns=col_names)
     df_mat = df_mat.round(2)
     
-    neq_labels = [f"NEQ_{int(v)}" for v in neq_preds]  # length L
-
+    # Build annotations dict based on available data
+    anno_col_dict = {}
+    annotation_col_cmaps = {}
+    annotation_row_cmaps = {}
     
-    anno_row = pd.DataFrame({"SS": ss_list}, index=row_names)
+    if neq_preds is not None:
+        neq_labels = [f"NEQ_{int(v)}" for v in neq_preds]
+        anno_col_dict["NEQ"] = neq_labels
+        annotation_col_cmaps["NEQ"] = "Accent"
     
-    anno_col = pd.DataFrame({"NEQ": neq_labels, "SS": ss_list}, index=col_names)
-
-    annotation_col_cmaps = {"NEQ": "Accent", "SS": "Set1"}
-    annotation_row_cmaps = {"SS": "Set1"}
+    if ss_list is not None:
+        anno_col_dict["SS"] = ss_list
+        annotation_col_cmaps["SS"] = "Set1"
+        anno_row_dict = {"SS": ss_list}
+        annotation_row_cmaps["SS"] = "Set1"
+    else:
+        anno_row_dict = {}
+    
+    anno_row = pd.DataFrame(anno_row_dict, index=row_names)
+    anno_col = pd.DataFrame(anno_col_dict, index=col_names)
     
     fig = pheatmap(
-        df_mat,cmap = "viridis",
+        df_mat, cmap="viridis",
         annotation_row=anno_row,
         annotation_col=anno_col,
         annotation_col_cmaps=annotation_col_cmaps,
         annotation_row_cmaps=annotation_row_cmaps,
-        rownames_style = dict(rotation=45, size=4),
-        colnames_style = dict(rotation=90, size=6),
+        rownames_style=dict(rotation=45, size=4),
+        colnames_style=dict(rotation=90, size=6),
         annotation_bar_space=0.3,
         show_rownames=True,
         show_colnames=True   
@@ -306,64 +269,46 @@ def pheatmap_visualizer( attention_weights, tokens: list, seq: str, seq_id: str,
 
     out_file = f"{seq_id}_pheatmap.pdf"
     fig.savefig(out_file, dpi=300)
-    print(f"[visualize_attention] Saved {out_file}")
+    print(f"[pheatmap_visualizer] Saved {out_file}")
+    
     
 def main():
-    
-    
+    """
+    Load attention data from JSON and generate visualizations for each sequence.
+    """
     args = parse_args()
     
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
-    ss_preds(args.fasta_file)
-    df = pd.read_csv("nsp3_results/results.csv", index_col=False)
-    ss_map = parse_nsp3_csv(df)
+    # Load attention data from JSON
+    print(f"Loading attention data from {args.attention_json}")
+    with open(args.attention_json, 'r') as f:
+        attention_data = json.load(f)
     
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    embedding_model = EsmModel.from_pretrained("facebook/esm2_t33_650M_UR50D")
-    embedding_model.to(device)
-
-
-    freeze_list = range(0, 5)
-    for name, param in embedding_model.named_parameters():
-        if "encoder.layer" in name:
-            layer_num = int(name.split(".")[2])
-            param.requires_grad = not layer_num in freeze_list
-        else:   
-            param.requires_grad = True
-        
-
-    model = BiLSTMWithSelfAttentionModel(
-        embedding_model=embedding_model,
-        hidden_size=512,
-        num_layers=3,
-        num_classes=2,
-        dropout=0.3
-    )
-    model.to(device)
-
-
-    checkpoint = torch.load(args.checkpoint, map_location=device)
-    model.load_state_dict(checkpoint)
-
-
-    tokenizer = EsmTokenizer.from_pretrained("facebook/esm2_t33_650M_UR50D")
+    # Create a mapping of seq_id to attention record
+    attn_map = {record['name']: record for record in attention_data}
     
-
-    
-    
+    # Parse FASTA file and visualize
     for seq_id, seq_str in parse_fasta_file(args.fasta_file):
-        if seq_id not in ss_map:
-            print(f"Warning: no SS predictions for {seq_id}")
+        if seq_id not in attn_map:
+            print(f"Warning: no attention data for {seq_id}")
             continue
-        ss_list = ss_map[seq_id]
-        if len(ss_list) != len(seq_str):
-            print(f"Warning: length mismatch for {seq_id}, skipping.")
+        
+        record = attn_map[seq_id]
+        attention_weights = np.array(record['attention_weights'])
+        neq_preds = np.array(record.get('neq_preds', []))
+        ss_list = record.get('ss_pred', None)
+        
+        # Check sequence length match with attention matrix
+        if attention_weights.shape[0] != len(seq_str):
+            print(f"Warning: length mismatch for {seq_id} (seq={len(seq_str)}, attn={attention_weights.shape[0]}), skipping.")
             continue
-        attention_weights, tokens, neq_preds = run_model(model, tokenizer, seq_str, device)
-        pheatmap_visualizer(attention_weights, tokens, seq_str, seq_id, ss_list, neq_preds)
+        
+        # Get tokens from sequence
+        tokens = get_tokens_from_sequence(seq_str)
+        
+        # Generate visualizations
+        visualize_attention(attention_weights, tokens, seq_id, ss_list)
+        pheatmap_visualizer(attention_weights, tokens, seq_id, ss_list, neq_preds)
       
-
 
 
 if __name__ == "__main__":
