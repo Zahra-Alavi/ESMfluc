@@ -67,7 +67,7 @@ def run_model(model, tokenizer, sequence, device):
     
     model.eval()
     with torch.no_grad():
-        logits, attn_weights_torch = model(input_ids, attn_mask, return_attention=True)
+        logits, feats, attn_weights_torch = model(input_ids, attn_mask, return_attention=True)
       
     attn_weights = attn_weights_torch[0].cpu().numpy()  # shape=(L,L)
     
