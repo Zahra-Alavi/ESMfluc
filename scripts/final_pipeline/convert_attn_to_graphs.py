@@ -33,64 +33,32 @@ def load_json(path: str) -> Any:
 
 
 def find_matrices(obj: Any) -> List[Tuple[str, np.ndarray]]:
-    """Return list of (id, np.array) tuples found in JSON structure.
-
-    Heuristic: look for list of records, or dict with `sequences`/`data` keys.
-    For each record try keys: 'attn','attention','attentions'. For id use
-    'id','seq_id','name' or fallback to index.
+    """Extract (name, attention_weights) from JSON list of records.
+    
+    Expected format: list of dicts with keys 'name', 'sequence', 'attention_weights', etc.
     """
-    records = []
-    if isinstance(obj, dict):
-        if "sequences" in obj and isinstance(obj["sequences"], list):
-            records = obj["sequences"]
-        elif "data" in obj and isinstance(obj["data"], list):
-            records = obj["data"]
-        elif isinstance(obj.get("records"), list):
-            records = obj["records"]
-        else:
-            # maybe it's already a single record
-            if any(k in obj for k in ("attn", "attention", "attentions")):
-                records = [obj]
-            else:
-                # fallback: try to interpret each value as record
-                for v in obj.values():
-                    if isinstance(v, list):
-                        records = v
-                        break
-    elif isinstance(obj, list):
-        records = obj
-
+    if not isinstance(obj, list):
+        raise ValueError("Input JSON must be a list of records")
+    
     out = []
-    for i, rec in enumerate(records):
+    for rec in obj:
         if not isinstance(rec, dict):
             continue
-        # find matrix key
-        mat = None
-        for key in ("attn", "attention", "attentions", "attn_matrix"):
-            if key in rec:
-                mat = rec[key]
-                break
-        if mat is None:
-            # maybe nested under 'value' or similar
-            for k, v in rec.items():
-                if isinstance(v, (list, list)) and len(v) > 0:
-                    # assume this might be a matrix/list of matrices
-                    mat = v
-                    break
-        if mat is None:
+        
+        # Extract name and attention_weights
+        rec_id = rec.get("name")
+        mat = rec.get("attention_weights")
+        
+        if rec_id is None or mat is None:
             continue
+        
         try:
             arr = np.array(mat, dtype=float)
-        except Exception:
+            out.append((str(rec_id), arr))
+        except Exception as e:
+            print(f"Warning: failed to parse record {rec_id}: {e}")
             continue
-        rec_id = None
-        for idk in ("id", "seq_id", "name", "sequence_id"):
-            if idk in rec:
-                rec_id = str(rec[idk])
-                break
-        if rec_id is None:
-            rec_id = f"seq_{i}"
-        out.append((rec_id, arr))
+    
     return out
 
 
