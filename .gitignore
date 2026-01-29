@@ -14,4 +14,4 @@ venv/
 
 # Ignore output directories
 plot/
-results/
+results/data/
