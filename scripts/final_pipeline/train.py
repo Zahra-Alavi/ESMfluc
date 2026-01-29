@@ -172,7 +172,6 @@ def set_up_classification_model(args):
             num_layers=args.num_layers,
             dropout=args.dropout,
             num_classes=args.num_classes,
-            head = args.head, 
             bidirectional=args.bidirectional       
         )
     elif args.architecture == "bilstm_attention":
@@ -183,7 +182,6 @@ def set_up_classification_model(args):
             num_layers=args.num_layers,
             dropout=args.dropout,
             num_classes=args.num_classes,
-            head = args.head,
             bidirectional=args.bidirectional
         )
     
@@ -195,16 +193,14 @@ def set_up_classification_model(args):
             num_encoder_layers=args.transformer_num_encoder_layers,
             dim_feedforward=args.transformer_dim_feedforward,
             num_classes=args.num_classes,
-            dropout=args.dropout,
-            head = args.head
+            dropout=args.dropout
         )
         
     elif args.architecture == "esm_linear":
         print("Using ESM-only linear token classifier")
         model = ESMLinearTokenClassifier(
             embedding_model=embedding_model,
-            num_classes=args.num_classes,
-            head=args.head,   
+            num_classes=args.num_classes
         )
     
     else:

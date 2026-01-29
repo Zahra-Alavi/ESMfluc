@@ -18,7 +18,7 @@ import math
 
 class BiLSTMClassificationModel(nn.Module):
     def __init__(self, embedding_model, hidden_size, num_layers,
-                 num_classes=4, dropout=0.3, head='softmax', bidirectional=1):
+                 num_classes=4, dropout=0.3, bidirectional=1):
         super().__init__()
         self.embedding_model = embedding_model
         self.bidirectional = bool(bidirectional)
@@ -31,7 +31,6 @@ class BiLSTMClassificationModel(nn.Module):
             dropout=dropout
         )
         self.dropout = nn.Dropout(dropout)
-        self.head = head
         self.output_dim = hidden_size * (2 if self.bidirectional else 1)  # <-- important
         self.fc = nn.Linear(self.output_dim, num_classes)
 
@@ -45,10 +44,9 @@ class BiLSTMClassificationModel(nn.Module):
         return logits, feats
 
 class ESMLinearTokenClassifier(nn.Module):
-    def __init__(self, embedding_model, num_classes, head="softmax"):
+    def __init__(self, embedding_model, num_classes):
         super().__init__()
         self.embedding_model = embedding_model
-        self.head = head
         self.output_dim = embedding_model.config.hidden_size
         self.fc = nn.Linear(embedding_model.config.hidden_size, num_classes)
 
@@ -100,7 +98,7 @@ class SelfAttentionLayer(nn.Module):
 
 
 class BiLSTMWithSelfAttentionModel(nn.Module):
-    def __init__(self, embedding_model, hidden_size, num_layers, head='fc',
+    def __init__(self, embedding_model, hidden_size, num_layers,
                  num_classes=4, dropout=0.3, bidirectional=1):
         super().__init__()
         self.embedding_model = embedding_model
@@ -116,7 +114,6 @@ class BiLSTMWithSelfAttentionModel(nn.Module):
         self.output_dim = hidden_size * (2 if self.bidirectional else 1)
         self.attention = SelfAttentionLayer(self.output_dim, dropout=dropout)
         self.dropout = nn.Dropout(dropout)
-        self.head = head
         self.fc = nn.Linear(self.output_dim, num_classes)
 
     def forward(self, input_ids, attention_mask, return_attention=False, return_features="none"):
@@ -156,7 +153,7 @@ class PositionalEncoding(nn.Module):
 
 class TransformerClassificationModel(nn.Module):
     def __init__(self, embedding_model, nhead=8, num_encoder_layers=6, 
-                 dim_feedforward=1024, num_classes=4, dropout=0.3, head='softmax'):
+                 dim_feedforward=1024, num_classes=4, dropout=0.3):
         super().__init__()
         self.embedding_model = embedding_model  # ESM or other backbone
         d_model = embedding_model.config.hidden_size
@@ -173,7 +170,6 @@ class TransformerClassificationModel(nn.Module):
             encoder_layer,
             num_layers=num_encoder_layers
         )
-        self.head = head
         self.fc = nn.Linear(d_model, num_classes)
 
     def forward(self, input_ids, attention_mask, return_features="none"):
