@@ -33,20 +33,15 @@ class BiLSTMClassificationModel(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.head = head
         self.output_dim = hidden_size * (2 if self.bidirectional else 1)  # <-- important
-
-        self.use_fc = (head != "centroid")
-        if self.use_fc:
-            self.fc = nn.Linear(self.output_dim, num_classes)
+        self.fc = nn.Linear(self.output_dim, num_classes)
 
     def forward(self, input_ids, attention_mask, return_features="none"):
         emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
         h, _ = self.lstm(emb)              # [B, L, output_dim]
         h = self.dropout(h)
 
-        logits = self.fc(h) if self.use_fc else None
+        logits = self.fc(h)
         feats = h if return_features == "pre" else (logits if return_features == "post" else None)
-        if return_features == "post" and logits is None:
-            raise RuntimeError("return_features='post' requires logits (centroid head has no FC).")
         return logits, feats
 
 class ESMLinearTokenClassifier(nn.Module):
@@ -54,10 +49,8 @@ class ESMLinearTokenClassifier(nn.Module):
         super().__init__()
         self.embedding_model = embedding_model
         self.head = head
-        self.use_fc = (head != "centroid")
         self.output_dim = embedding_model.config.hidden_size
-        if self.use_fc:
-            self.fc = nn.Linear(embedding_model.config.hidden_size, num_classes)
+        self.fc = nn.Linear(embedding_model.config.hidden_size, num_classes)
 
     def forward(self, input_ids, attention_mask, return_features="none", return_attn=False):
         outputs = self.embedding_model(
@@ -67,14 +60,12 @@ class ESMLinearTokenClassifier(nn.Module):
             return_dict=True,
         )
         h = outputs.last_hidden_state  # [B,L,D] from ESM
-        logits = self.fc(h) if self.use_fc else None
+        logits = self.fc(h)
 
         feats = None
         if return_features == "pre":
             feats = h
         elif return_features == "post":
-            if logits is None:
-                raise RuntimeError("post features need logits")
             feats = logits
 
         if return_attn:
@@ -126,8 +117,7 @@ class BiLSTMWithSelfAttentionModel(nn.Module):
         self.attention = SelfAttentionLayer(self.output_dim, dropout=dropout)
         self.dropout = nn.Dropout(dropout)
         self.head = head
-        if head != "centroid":
-            self.fc = nn.Linear(self.output_dim, num_classes)
+        self.fc = nn.Linear(self.output_dim, num_classes)
 
     def forward(self, input_ids, attention_mask, return_attention=False, return_features="none"):
         emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
@@ -136,7 +126,7 @@ class BiLSTMWithSelfAttentionModel(nn.Module):
                      else (self.attention(h, attention_mask), None))
         ctx = self.dropout(ctx)
 
-        logits = None if self.head == "centroid" else self.fc(ctx)
+        logits = self.fc(ctx)
         feats = ctx if return_features == "pre" else (logits if return_features == "post" else None)
         return (logits, feats, attn) if return_attention else (logits, feats)
 
@@ -184,9 +174,7 @@ class TransformerClassificationModel(nn.Module):
             num_layers=num_encoder_layers
         )
         self.head = head
-        self.use_fc = (head != "centroid")
-        if self.use_fc:
-            self.fc = nn.Linear(d_model, num_classes)
+        self.fc = nn.Linear(d_model, num_classes)
 
     def forward(self, input_ids, attention_mask, return_features="none"):
         """
@@ -211,16 +199,12 @@ class TransformerClassificationModel(nn.Module):
             src_key_padding_mask=src_key_padding_mask
         )
 
-        logits = None
-        if self.use_fc:
-            logits = self.fc(transformer_output)                                         # [B, L, K]
+        logits = self.fc(transformer_output)                                         # [B, L, K]
 
         feats = None
         if return_features == "pre":
             feats = transformer_output                                                   # pre-FC features
         elif return_features == "post":
-            if logits is None:
-                raise RuntimeError("return_features='post' requires a classifier head (logits).")
             feats = logits                                              # post-FC features
 
         return logits, feats

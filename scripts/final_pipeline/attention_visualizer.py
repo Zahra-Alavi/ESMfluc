@@ -251,20 +251,25 @@ def pheatmap_visualizer(attention_weights, tokens: list, seq_id: str, ss_list=No
     else:
         anno_row_dict = {}
     
-    anno_row = pd.DataFrame(anno_row_dict, index=row_names)
-    anno_col = pd.DataFrame(anno_col_dict, index=col_names)
-    
+    # Only build annotation DataFrames if we actually have annotations
+    anno_row = pd.DataFrame(anno_row_dict, index=row_names) if anno_row_dict else None
+    anno_col = pd.DataFrame(anno_col_dict, index=col_names) if anno_col_dict else None
+
+    # Only pass colormap dicts if they are non-empty
+    annotation_col_cmaps_arg = annotation_col_cmaps if annotation_col_cmaps else None
+    annotation_row_cmaps_arg = annotation_row_cmaps if annotation_row_cmaps else None
+
     fig = pheatmap(
         df_mat, cmap="viridis",
         annotation_row=anno_row,
         annotation_col=anno_col,
-        annotation_col_cmaps=annotation_col_cmaps,
-        annotation_row_cmaps=annotation_row_cmaps,
+        annotation_col_cmaps=annotation_col_cmaps_arg,
+        annotation_row_cmaps=annotation_row_cmaps_arg,
         rownames_style=dict(rotation=45, size=4),
         colnames_style=dict(rotation=90, size=6),
         annotation_bar_space=0.3,
         show_rownames=True,
-        show_colnames=True   
+        show_colnames=True
     )
 
     out_file = f"{seq_id}_pheatmap.pdf"

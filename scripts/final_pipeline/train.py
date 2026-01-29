@@ -40,7 +40,7 @@ from models import (
     ESMLinearTokenClassifier
 )
 
-from nc_losses import NCLoss
+
 
 
 
@@ -53,7 +53,7 @@ def compute_validation_loss(model, data_loader, criterion, args):
     m = model.module if isinstance(model, nn.DataParallel) else model
 
     N = len(data_loader)
-    total_loss = val_nc1 = val_nc2 = val_sup = 0.0
+    total_loss = 0.0
     model.eval()
     with torch.no_grad():
         for batch in data_loader:
@@ -61,27 +61,14 @@ def compute_validation_loss(model, data_loader, criterion, args):
             attention_mask = batch['attention_mask'].to(args.device)
             y              = batch['labels'].to(args.device)
 
-            logits, feats = m(input_ids, attention_mask,
-                                  return_features=("pre" if args.head=="softmax" else
-                                                   "post" if args.head=="postfc" else "pre"))
-
-            logits_flat = None if logits is None else logits.reshape(-1, args.num_classes)
-            feats_flat  = feats.reshape(-1, feats.size(-1))
+            logits, feats = m(input_ids, attention_mask, return_features="pre")
+            logits_flat = logits.reshape(-1, args.num_classes)
             y_flat      = y.reshape(-1)
-
-            loss, (sup, nc1, nc2, _, _) = criterion(logits_flat, y_flat, feats_flat) \
-                if hasattr(criterion, "NC1") else (criterion(logits_flat, y_flat), (torch.tensor(0., device=args.device),)*3 + (None, None))
-
+            loss = criterion(logits_flat, y_flat)
             total_loss += loss.item()
-            val_sup    += sup.item()
-            val_nc1    += nc1.item()
-            val_nc2    += nc2.item()
 
     avg_loss = total_loss / max(N, 1)
-    sup_loss = val_sup / max(N, 1)
-    nc1_loss = val_nc1 / max(N, 1)
-    nc2_loss = val_nc2 / max(N, 1)
-    return avg_loss, sup_loss, nc1_loss, nc2_loss
+    return avg_loss, avg_loss, 0.0, 0.0
 
 
 def evaluate(model, data_loader, criterion, args):
@@ -248,51 +235,7 @@ def set_up_classification_model(args):
        
     return model
 
-def centroid_predict(feats, centres):
-    B,L,D = feats.shape
-    feats  = torch.nn.functional.normalize(feats.reshape(-1,D), p=2, dim=1)
-    centres= torch.nn.functional.normalize(centres, p=2, dim=1)
-    cos    = torch.matmul(feats, centres.t())                 # (B·L,K)
-    return cos.argmax(-1).reshape(B,L)
 
-def build_nc_criterion(args, feat_dim, occurrence_list, weight_factor):
-    def sup_name():
-        if args.loss_function == "focal":
-            return FocalLoss(ignore_index=-1)
-        else:
-            return nn.CrossEntropyLoss(ignore_index=-1)
-    
-    # decide lambda_CE by loss_mode and head
-    if args.loss_mode == "nc" or args.head == "centroid":
-        lambda_ce = 0.0                    # no supervised term in pure-NC or centroid
-    elif args.loss_mode == "both":
-        lambda_ce = args.lambda_ce         # combine NC + supervised
-    else:
-        lambda_ce = 0.0                    # supervised-only won’t come here
-    
-    crit = NCLoss(
-        sup_criterion = sup_name,
-        lambda_CE     = lambda_ce,
-        lambda1       = args.lambda_nc1,
-        lambda2       = args.beta_nc2,
-        nc1           = "NC1Loss_v5_cosine",
-        nc2           = "NC2Loss",
-        num_classes   = args.num_classes,
-        feat_dim      = feat_dim,
-        device        = args.device,
-        occurrence_list = occurrence_list,
-        weight_factor   = weight_factor
-    )
-    return crit
-
-def compute_sup_nc_loss(criterion, logits_flat, y_flat, feats_flat):
-    if isinstance(criterion, NCLoss):
-        loss, (sup, nc1, nc2, _, _) = criterion(logits_flat, y_flat, feats_flat)
-        return loss, sup, nc1, nc2
-    else:
-        loss = criterion(logits_flat, y_flat)  # CE/Focal only
-        z = torch.zeros((), device=logits_flat.device, dtype=loss.dtype)
-        return loss, z, z, z
     
     
 def infer_feat_dim(model, args):
@@ -411,23 +354,8 @@ def train(args):
        
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer), drop_last=False)
     
-    # --- choose criterion by loss_mode ---
-    
-    if args.loss_mode == "supervised":
-        # pure CE/Focal
-        criterion = get_loss_fn(args, train_dataset)
-
-    else:
-        # NC only or NC + supervised
-        feat_dim = infer_feat_dim(model, args)
-        criterion = build_nc_criterion(
-            args, feat_dim=feat_dim,
-            occurrence_list=occurrence_list,
-            weight_factor=weight_factor)
-
-    # sanity: centroid head requires NC (no logits for CE/Focal)
-    if args.loss_mode == "supervised" and args.head == "centroid":
-        raise ValueError("centroid head has no logits: use --loss_mode nc or --loss_mode both.")
+    # --- choose criterion: always supervised ---
+    criterion = get_loss_fn(args, train_dataset)
 
     
     

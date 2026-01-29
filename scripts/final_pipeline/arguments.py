@@ -84,21 +84,7 @@ def parse_arguments():
     
     # NC loss
 
-    parser.add_argument("--head",
-    choices=["centroid", "postfc", "softmax"], default="softmax",
-    help="centroid = NC-only, no FC; postfc = NC on logits; "
-         "softmax = NC on pre-FC + focal/CE")
 
-    parser.add_argument("--lambda_nc1", type=float, default=1.0)
-    parser.add_argument("--beta_nc2",   type=float, default=0.5)   # β
-    parser.add_argument("--lambda_ce",  type=float, default=1.0)   # ignored in centroid
-
-    parser.add_argument(
-        "--loss_mode",
-        type=str,
-        choices=["supervised", "nc", "both"],  # supervised = CE/Focal only; nc = NC only; both = NC + CE/Focal
-        default="both",
-        help="Select loss composition: 'supervised' (CE/Focal only), 'nc' (NC losses only), or 'both' (NC + CE/Focal). default=both")
     
     
 
@@ -123,8 +109,7 @@ def parse_arguments():
 
     
     
-    parser.add_argument("--warmup_epochs", type=int, default=0,
-    help="Number of epochs to keep lambda_ce > 0 before setting it to 0 (centroid/postfc only)")
+
     
     
     

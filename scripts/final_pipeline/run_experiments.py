@@ -206,10 +206,7 @@ def grid_models():
 def grid_losses_on_bilstm_attn():
     """
     Loss/head sweep on bilstm_attention (same other params).
-    Adds explicit NC-only runs with all three heads:
-      - softmax  (NC on pre-FC)
-      - postfc   (NC on logits)
-      - centroid (no FC; nearest-centroid)
+    Only supervised runs (no NC loss).
     """
     items = []
     arch = {"--architecture": "bilstm_attention"}
@@ -224,30 +221,6 @@ def grid_losses_on_bilstm_attn():
     items.append((
         "Attn_supervised_Focal",
         base_copy(**arch, **{"--loss_mode": "supervised", "--loss_function": "focal", "--head": "softmax"})
-    ))
-
-    # NC only: sweep heads explicitly
-    items.append((
-        "Attn_NC_only_softmax",
-        base_copy(**arch, **{"--loss_mode": "nc", "--head": "softmax"})
-    ))
-    items.append((
-        "Attn_NC_only_postfc",
-        base_copy(**arch, **{"--loss_mode": "nc", "--head": "postfc"})
-    ))
-    items.append((
-        "Attn_NC_only_centroid",
-        base_copy(**arch, **{"--loss_mode": "nc", "--head": "centroid"})
-    ))
-
-    # NC + supervised 
-    items.append((
-        "Attn_NC_plus_CE",
-        base_copy(**arch, **{"--loss_mode": "both", "--loss_function": "crossentropy", "--head": "softmax"})
-    ))
-    items.append((
-        "Attn_NC_plus_Focal",
-        base_copy(**arch, **{"--loss_mode": "both", "--loss_function": "focal", "--head": "softmax"})
     ))
 
     return items
