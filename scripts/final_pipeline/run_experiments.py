@@ -22,9 +22,7 @@ BASE_ARGS = {
     "--patience": "3",
     "--batch_size": "2",
     "--freeze_layers": "0-4",
-    "--loss_mode": "supervised",
     "--loss_function": "focal",
-    "--head": "softmax",
     "--num_classes": "2",
     "--neq_thresholds": "1.0",
     "--train_data_file": "./train_data.csv",
@@ -216,11 +214,11 @@ def grid_losses_on_bilstm_attn():
     # supervised only
     items.append((
         "Attn_supervised_CE",
-        base_copy(**arch, **{"--loss_mode": "supervised", "--loss_function": "crossentropy", "--head": "softmax"})
+        base_copy(**arch, **{"--loss_function": "crossentropy"})
     ))
     items.append((
         "Attn_supervised_Focal",
-        base_copy(**arch, **{"--loss_mode": "supervised", "--loss_function": "focal", "--head": "softmax"})
+        base_copy(**arch, **{"--loss_function": "focal"})
     ))
 
     return items

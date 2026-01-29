@@ -84,17 +84,9 @@ def evaluate(model, data_loader, criterion, args):
             attention_mask = batch['attention_mask'].to(args.device)
             y              = batch['labels'].to(args.device)
 
-            logits, feats = m(input_ids, attention_mask,
-                                  return_features = ("pre"  if args.head=="softmax"
-                                                     else "post" if args.head=="postfc"
-                                                     else "pre"))
-
-            if args.head == "centroid":
-                # nearest-centre classification
-                preds = centroid_predict(feats, criterion.NC1.means)
-            else:
-                probs = torch.softmax(logits, -1)
-                preds = probs.argmax(-1)
+            logits, feats = m(input_ids, attention_mask, return_features="pre")
+            probs = torch.softmax(logits, -1)
+            preds = probs.argmax(-1)
 
             preds = preds.reshape(-1)
             y     = y.reshape(-1)
@@ -218,14 +210,6 @@ def set_up_classification_model(args):
     else:
         raise ValueError(f"Invalid architecture: {args.architecture}")
         
-    if args.head == "centroid" and hasattr(model, "fc"):
-        print("Removing FC layer for centroid mode")
-        del model.fc
-        model.use_fc = False
-    else:
-        model.use_fc = True
-        
-        
     model.to(args.device)
     
     # Wrap in DataParallel for bigger models
@@ -238,16 +222,6 @@ def set_up_classification_model(args):
 
     
     
-def infer_feat_dim(model, args):
-    if args.head == "postfc":
-        return args.num_classes
-    m = model.module if isinstance(model, nn.DataParallel) else model
-    if hasattr(m, "output_dim"):
-        return m.output_dim
-    if args.architecture == "transformer":
-        return m.embedding_model.config.hidden_size
-    raise ValueError("Cannot infer feature dimension.")
-     
 def train(args):
     
     run_folder = create_run_folder(args.result_foldername)
@@ -396,7 +370,6 @@ def train(args):
             torch.cuda.reset_peak_memory_stats()
         model.train()
         total_loss = 0
-        sum_sup = sum_nc1 = sum_nc2 = 0.0
 
         
         for i, batch in enumerate(train_loader):
@@ -408,44 +381,33 @@ def train(args):
             
             if amp_enabled and args.device.startswith("cuda"):
                 with autocast(dtype=amp_dtype):
-                    logits, feats = model(input_ids, attention_mask,
-                              return_features=("pre" if args.head=="softmax"
-                                               else "post" if args.head=="postfc"
-                                               else "pre"))
-                    logits_flat = None if logits is None else logits.reshape(-1, args.num_classes)
-                    feats_flat  = feats.reshape(-1, feats.size(-1))
+                    logits, feats = model(input_ids, attention_mask, return_features="pre")
+                    logits_flat = logits.reshape(-1, args.num_classes)
                     y_flat      = y.reshape(-1)
-                    loss, sup, nc1, nc2 = compute_sup_nc_loss(criterion, logits_flat, y_flat, feats_flat)
+                    loss = criterion(logits_flat, y_flat)
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
             else:
-                logits, feats = model(input_ids, attention_mask,
-                          return_features=("pre" if args.head=="softmax"
-                                           else "post" if args.head=="postfc"
-                                           else "pre"))
-                logits_flat = None if logits is None else logits.reshape(-1, args.num_classes)
-                feats_flat  = feats.reshape(-1, feats.size(-1))
+                logits, feats = model(input_ids, attention_mask, return_features="pre")
+                logits_flat = logits.reshape(-1, args.num_classes)
                 y_flat      = y.reshape(-1)
-                loss, sup, nc1, nc2 = compute_sup_nc_loss(criterion, logits_flat, y_flat, feats_flat)
+                loss = criterion(logits_flat, y_flat)
                 loss.backward()
                 optimizer.step()
 
             
             total_loss += loss.item()
-            sum_sup  += sup.item()
-            sum_nc1 += nc1.item()
-            sum_nc2 += nc2.item()
 
             N = len(train_loader)
         avg_train_loss = total_loss / N
         train_losses.append(avg_train_loss)
-        print(f"[Epoch {epoch}] Training Loss: {avg_train_loss:.4f} ⟨sup⟩={sum_sup/N:.4f}  ⟨nc1⟩={sum_nc1/N:.4f}  ⟨nc2⟩={sum_nc2/N:.4f}")
+        print(f"[Epoch {epoch}] Training Loss: {avg_train_loss:.4f}")
         
         if val_loader is not None:
-            avg_val_loss, val_sup_loss, val_nc1_loss, val_nc2_loss = compute_validation_loss(model, val_loader, criterion, args)
+            avg_val_loss, _, _, _ = compute_validation_loss(model, val_loader, criterion, args)
             val_losses.append(avg_val_loss)
-            print(f"[Epoch {epoch}] Validation Loss: {avg_val_loss:.4f}, ⟨sup⟩={val_sup_loss:.4f} ⟨nc1⟩={val_nc1_loss:.4f} ⟨nc2⟩={val_nc2_loss:.4f}")
+            print(f"[Epoch {epoch}] Validation Loss: {avg_val_loss:.4f}")
 
             if scheduler:
                 scheduler.step(avg_val_loss)
@@ -468,13 +430,6 @@ def train(args):
             torch.save(model.module.state_dict() if isinstance(model, nn.DataParallel) else model.state_dict(),
                        f"{run_folder}/last_model.pth")
  
-            
-            
-        if args.warmup_epochs and epoch == args.warmup_epochs - 1:
-            if args.head in ["centroid", "postfc"]:
-                criterion.set_lambda_CE(0.0)
-                print("CE component turned off – continuing with NC-only.")
-                
         if on_cuda:
             torch.cuda.synchronize()
         epoch_time = time.perf_counter() - epoch_t0
@@ -548,11 +503,9 @@ def train(args):
         "embedding_model": args.esm_model,
         "model_architecture": args.architecture,
 
-        # Loss description (explicit fields + compact summary)
-        "loss_mode": args.loss_mode,                # "supervised" | "nc" | "both"
+        # Loss description
         "loss_function": args.loss_function,        # "focal" | "crossentropy"
-        "head": args.head,                          # "softmax" | "postfc" | "centroid"
-        "loss_desc": f"{args.loss_mode}|{args.loss_function}|head={args.head}",
+        "loss_desc": f"supervised|{args.loss_function}",
 
         # Timing & memory
         "total_time_seconds": total_seconds,
