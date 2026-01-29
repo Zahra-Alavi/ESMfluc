@@ -17,7 +17,7 @@ import torch
 from transformers import EsmModel, EsmTokenizer
 
 
-from models import BiLSTMWithSelfAttentionModel
+from models import BiLSTMWithSelfAttentionModel, ESMLinearTokenClassifier
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -30,6 +30,11 @@ def parse_args():
                         help="Path to the model checkpoint (e.g., best_model.pth).")
     parser.add_argument("--fasta_file", type=str, required=True,
                         help="Path to the FASTA file containing sequences.")
+    parser.add_argument("--architecture", type=str, default="bilstm_attention",
+                        choices=["bilstm_attention", "esm_linear"],
+                        help="Model architecture used for training.")
+    parser.add_argument("--layer", type=int, default=-1,
+                        help="ESM layer to extract attention from (for esm_linear). Use -1 for last layer.")
     parser.add_argument("--ss_csv", type=str, required=False,
                         help="(Optional) Path to the CSV file containing ss predictions (NetSurfP output).")
     parser.add_argument("--output", type=str, required=True,
@@ -60,7 +65,8 @@ def parse_fasta_file(fasta_path):
 
 
             
-def run_model(model, tokenizer, sequence, device):     
+def run_model_bilstm_attn(model, tokenizer, sequence, device):
+    """Extract attention from BiLSTMWithSelfAttentionModel (custom attention layer)."""
     enc = tokenizer(sequence, return_tensors="pt", padding=False, add_special_tokens=False)
     input_ids = enc["input_ids"].to(device)
     attn_mask = enc["attention_mask"].to(device)
@@ -73,6 +79,31 @@ def run_model(model, tokenizer, sequence, device):
     
     token_ids = input_ids[0].tolist()
     tokens = tokenizer.convert_ids_to_tokens(token_ids)  # length=L
+    
+    y_probs = torch.softmax(logits, dim=-1)
+    y_preds = torch.argmax(y_probs, dim=-1)
+    y_preds = y_preds.view(-1)
+    
+    return attn_weights, tokens, y_preds
+
+
+def run_model_esm_linear(model, tokenizer, sequence, device, layer_idx=-1):
+    """Extract attention from ESMLinearTokenClassifier (ESM transformer attention)."""
+    enc = tokenizer(sequence, return_tensors="pt", padding=False, add_special_tokens=False)
+    input_ids = enc["input_ids"].to(device)
+    attn_mask = enc["attention_mask"].to(device)
+    
+    model.eval()
+    with torch.no_grad():
+        logits, feats, all_attentions = model(input_ids, attn_mask, return_attn=True)
+    
+    # all_attentions is a tuple of (num_layers,) each with shape [B, num_heads, L, L]
+    # Extract the specified layer and average over heads
+    selected_layer_attn = all_attentions[layer_idx]  # [B, num_heads, L, L]
+    attn_weights = selected_layer_attn[0].mean(dim=0).cpu().numpy()  # Average over heads -> [L, L]
+    
+    token_ids = input_ids[0].tolist()
+    tokens = tokenizer.convert_ids_to_tokens(token_ids)
     
     y_probs = torch.softmax(logits, dim=-1)
     y_preds = torch.argmax(y_probs, dim=-1)
@@ -107,23 +138,31 @@ def main():
     embedding_model = EsmModel.from_pretrained("facebook/esm2_t33_650M_UR50D")
     embedding_model.to(device)
         
-
-    model = BiLSTMWithSelfAttentionModel(
-        embedding_model=embedding_model,
-        hidden_size=512,
-        num_layers=3,
-        num_classes=2,
-        dropout=0.3
-    )
+    # Build model based on architecture
+    if args.architecture == "bilstm_attention":
+        model = BiLSTMWithSelfAttentionModel(
+            embedding_model=embedding_model,
+            hidden_size=512,
+            num_layers=3,
+            num_classes=2,
+            dropout=0.3
+        )
+        run_fn = lambda m, t, s, d: run_model_bilstm_attn(m, t, s, d)
+    elif args.architecture == "esm_linear":
+        model = ESMLinearTokenClassifier(
+            embedding_model=embedding_model,
+            num_classes=2
+        )
+        run_fn = lambda m, t, s, d: run_model_esm_linear(m, t, s, d, layer_idx=args.layer)
+    else:
+        raise ValueError(f"Unsupported architecture: {args.architecture}")
+    
     model.to(device)
-
 
     checkpoint = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(checkpoint)
 
-
     tokenizer = EsmTokenizer.from_pretrained("facebook/esm2_t33_650M_UR50D")
-
 
     ss_map = {}
     ss_available = args.ss_csv is not None
@@ -141,7 +180,7 @@ def main():
             print(f"Warning: length mismatch for {seq_id}, skipping.")
             continue
 
-        attention_weights, tokens, neq_preds = run_model(model, tokenizer, seq_str, device)
+        attention_weights, tokens, neq_preds = run_fn(model, tokenizer, seq_str, device)
         print(f"{seq_id:15s}  "
               f"seq_len = {len(seq_str):3d}  "
               f"tokens = {len(tokens):3d}  "
