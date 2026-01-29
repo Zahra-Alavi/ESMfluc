@@ -157,7 +157,7 @@ def set_up_embedding_model(args):
                 param.requires_grad = True
         print(f"Freezing layers {args.freeze_layers}")
         
-    n_trainable = sum(p.requires_grad for p in embedding_model.parameters())
+    n_trainable = sum(p.numel() for p in embedding_model.parameters() if p.requires_grad)
     print(f"Trainable ESM params: {n_trainable}") 
         
     return embedding_model
