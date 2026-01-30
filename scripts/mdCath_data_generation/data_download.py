@@ -12,7 +12,7 @@ import argparse
 import re
 from pathlib import Path
 from tqdm import tqdm
-from huggingface_hub import hf_hub_download, HfApi
+from huggingface_hub import hf_hub_download
 
 from constants import REPO_ID, REPO_TYPE, get_output_base, DIR_DOWNLOADED_DATA
 
@@ -21,21 +21,35 @@ DOWNLOADS_DIR = None
 DOWNLOADS_LIST = None
 
 
-def get_available_domains():
-    """Get list of all available mdCATH domain IDs from HuggingFace."""
-    api = HfApi()
-    all_files = api.list_repo_files(REPO_ID, repo_type="dataset")
+def get_available_domains(all_domains_file=None):
+    """Get list of all available mdCATH domain IDs from local file or HuggingFace.
     
-    # Files are in data/ subdirectory
-    domain_pattern = r'data/mdcath_dataset_(\w+)\.h5'
-    domains = []
-    
-    for filename in all_files:
-        match = re.search(domain_pattern, filename)
-        if match:
-            domains.append(match.group(1))
-    
-    return sorted(domains)
+    Args:
+        all_domains_file: Path to local file with domain IDs (one per line).
+                         If provided, reads from file instead of API.
+    """
+    if all_domains_file and Path(all_domains_file).exists():
+        # Read from local file
+        with open(all_domains_file, 'r') as f:
+            domains = [line.strip() for line in f if line.strip()]
+        print(f"Loaded {len(domains)} domains from {all_domains_file}")
+        return sorted(domains)
+    else:
+        # Fall back to HuggingFace API
+        from huggingface_hub import HfApi
+        api = HfApi()
+        all_files = api.list_repo_files(REPO_ID, repo_type="dataset")
+        
+        # Files are in data/ subdirectory
+        domain_pattern = r'data/mdcath_dataset_(\w+)\.h5'
+        domains = []
+        
+        for filename in all_files:
+            match = re.search(domain_pattern, filename)
+            if match:
+                domains.append(match.group(1))
+        
+        return sorted(domains)
 
 
 def is_downloaded(domain_id):
@@ -94,6 +108,13 @@ def main():
         help="Base directory for all outputs (default: data/mdcath relative to workspace)"
     )
     
+    parser.add_argument(
+        "--all-domains-file",
+        type=str,
+        default="data/mdcath/all_domains.txt",
+        help="Path to file with all domain IDs (default: data/mdcath/all_domains.txt)"
+    )
+    
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         "--domain",
@@ -108,7 +129,7 @@ def main():
     group.add_argument(
         "--all",
         action="store_true",
-        help="Download all mdCATH domains"
+        help="Download all mdCATH domains from local file or HuggingFace API"
     )
     
     parser.add_argument(
@@ -124,7 +145,7 @@ def main():
     DOWNLOADS_DIR = output_base / DIR_DOWNLOADED_DATA
     DOWNLOADS_LIST = DOWNLOADS_DIR / "downloaded_files.txt"
     
-    # Determine which domains to download
+    # Determine which domains to downloaargs.all_domains_filed
     if args.domain:
         domains = [args.domain]
     elif args.domains:
