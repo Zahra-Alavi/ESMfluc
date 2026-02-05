@@ -1,6 +1,6 @@
 import os
+import argparse
 import pandas as pd
-import subprocess
 import glob
 import shutil
 import numpy as np
@@ -23,7 +23,7 @@ MAX_WORKERS = os.cpu_count() - 2
 HF_BASE_URL = "https://huggingface.co/datasets/compsciencelab/mdCATH/resolve/main/data"
 RESIDUE_MAPPING = {'HSP': 'H', 'HSD': 'H', 'HSE': 'H', 'CYX': 'C', 'ASH': 'D', 'GLH': 'E'}
 
-def download_h5(url, dest_path):
+def _download_h5(url, dest_path):
     try:
         print(f"Downloading {url} to {dest_path}...")
         with requests.get(url, stream=True, timeout=30) as r:
@@ -35,19 +35,19 @@ def download_h5(url, dest_path):
         print(f"Failed to download: {url} - Error: {e}")
         raise 
 
-def get_1letter(resname):
+def _get_1letter(resname):
     if resname in RESIDUE_MAPPING: return RESIDUE_MAPPING[resname]
     try: return convert_aa_code(resname)
     except: return 'X'
 
-def get_aa_seq(pdb_path):
+def _get_aa_seq(pdb_path):
     try:
         u = mda.Universe(pdb_path)
         protein = u.select_atoms("protein")
-        return "".join([get_1letter(r.resname) for r in protein.residues])
+        return "".join([_get_1letter(r.resname) for r in protein.residues])
     except: return None
 
-def calculate_temp_neq(xtc_files, pdb_file):
+def _calculate_temp_neq(xtc_files, pdb_file):
     """Groups XTCs by temperature and calculates the mean Neq."""
     temp_groups = {}
     for f in xtc_files:
@@ -73,7 +73,7 @@ def calculate_temp_neq(xtc_files, pdb_file):
             })
     return results
 
-def cleanup_files(h5_path, domain_dir):
+def _cleanup_files(h5_path, domain_dir):
     """Removes the heavy raw data files to stay under disk quota."""
     if os.path.exists(h5_path):
         os.remove(h5_path)
@@ -91,7 +91,7 @@ def process_single_domain(domain):
 
         # 1. DOWNLOAD
         if not os.path.exists(h5_path):
-            download_h5(f"{HF_BASE_URL}/{h5_filename}", h5_path)
+            _download_h5(f"{HF_BASE_URL}/{h5_filename}", h5_path)
 
         # 2. CONVERT
         convert_to_files(h5_path, basename=domain, output_dir=domain_dir)
@@ -99,11 +99,11 @@ def process_single_domain(domain):
         if not os.path.exists(pdb_file): return []
 
         # 3. SEQUENCE & ANALYSIS
-        aa_sequence = get_aa_seq(pdb_file)
+        aa_sequence = _get_aa_seq(pdb_file)
         if not aa_sequence: return []
         
         xtc_files = glob.glob(os.path.join(domain_dir, "*.xtc"))
-        neq_data = calculate_temp_neq(xtc_files, pdb_file)
+        neq_data = _calculate_temp_neq(xtc_files, pdb_file)
         
         # 4. DATA WRAPPING
         domain_results = []
@@ -116,12 +116,12 @@ def process_single_domain(domain):
             })
 
         # 5. CLEANUP
-        cleanup_files(h5_path, domain_dir)
+        _cleanup_files(h5_path, domain_dir)
             
         return domain_results
     except Exception as e:
         print(f"Error processing {domain}: {e}")
-        cleanup_files(h5_path, domain_dir)
+        _cleanup_files(h5_path, domain_dir)
         return []
 
 if __name__ == "__main__":
@@ -145,13 +145,11 @@ if __name__ == "__main__":
             results = list(executor.map(process_single_domain, domain_list))
             for sublist in results: all_results.extend(sublist)
 
-        # Append new results to the CSV (Pivot and Save)
         if all_results:
             new_df = pd.DataFrame(all_results)
             pivot_df = new_df.pivot(index=['domain', 'sequence'], columns='temperature', values='neq_values').reset_index()
             pivot_df.columns = [f"neq_{c}" if str(c).isdigit() else c for c in pivot_df.columns]
             
-            # If CSV exists, merge them. Otherwise, save new.
             if os.path.exists(FINAL_CSV):
                 final_df = pd.concat([pd.read_csv(FINAL_CSV), pivot_df], ignore_index=True)
                 final_df.to_csv(FINAL_CSV, index=False)
