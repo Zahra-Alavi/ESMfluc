@@ -12,16 +12,58 @@ from concurrent.futures import ProcessPoolExecutor
 from convert_mdCath import convert_to_files
 
 # --- Configuration ---
-DATA_ROOT = "../../data/mdcath"
-DOMAIN_TXT = os.path.join(DATA_ROOT, "test_domain.txt")
-H5_FOLDER = os.path.join(DATA_ROOT, "h5_files")
-OUTPUT_ROOT = os.path.join(DATA_ROOT, "processed_data")
-FINAL_CSV = os.path.join(DATA_ROOT, "mdcath_neq_dataset.csv")
-MDCATH_SCRIPT = "convert_mdCath.py"
+data_root = "../../data/mdcath"
+domain_list_file = "test_domain.txt"
+h5_folder = "h5_files"
+output_root = "processed_data"
+final_csv = "mdcath_neq_dataset.csv" 
 MAX_WORKERS = os.cpu_count() - 2 
 
 HF_BASE_URL = "https://huggingface.co/datasets/compsciencelab/mdCATH/resolve/main/data"
 RESIDUE_MAPPING = {'HSP': 'H', 'HSD': 'H', 'HSE': 'H', 'CYX': 'C', 'ASH': 'D', 'GLH': 'E'}
+
+def arg_parser():
+    parser = argparse.ArgumentParser(
+        description="Compute Neq values from mdCATH simulation data using Pbxplore and save to CSV."
+    )
+    parser.add_argument(
+        "--data_root",
+        type=str,
+        help=f"Root directory for mdCATH data, containing domain list and where outputs will be saved. Defaults to {data_root}.",
+        default=data_root,
+    )
+    parser.add_argument(
+        "--domain_list_file",
+        type=str,
+        help=f"Name of the text file containing the list of domain IDs to process, located in data_root. Defaults to {domain_list_file}.",
+        default=domain_list_file,
+    )
+    parser.add_argument(
+        "--h5_folder",
+        type=str,
+        help=f"Subdirectory within data_root where H5 files will be stored. Defaults to {h5_folder}.",
+        default=h5_folder,
+    )
+    parser.add_argument(
+        "--output_root",
+        type=str,
+        help=f"Subdirectory within data_root where processed outputs will be saved. Defaults to {output_root}.",
+        default=output_root,
+    )
+    parser.add_argument(
+        "--final_csv",
+        type=str,
+        help=f"Name of the final CSV file to save results to, located in data_root. Defaults to {final_csv}.",
+        default=final_csv,
+    )
+    parser.add_argument(
+        "--max_workers",
+        type=int,
+        help=f"Maximum number of parallel workers for processing domains. Defaults to number of CPU cores minus 2: {MAX_WORKERS}.",
+        default=MAX_WORKERS,
+    )
+    
+    return parser.parse_args()
 
 def _download_h5(url, dest_path):
     try:
@@ -81,13 +123,13 @@ def _cleanup_files(h5_path, domain_dir):
         shutil.rmtree(domain_dir)
 
 def process_single_domain(domain):
-    domain_dir = os.path.join(OUTPUT_ROOT, domain)
+    domain_dir = os.path.join(output_root, domain)
     h5_filename = f"mdcath_dataset_{domain}.h5"
-    h5_path = os.path.join(H5_FOLDER, h5_filename)
+    h5_path = os.path.join(h5_folder, h5_filename)
     
     try:
         os.makedirs(domain_dir, exist_ok=True)
-        os.makedirs(H5_FOLDER, exist_ok=True)
+        os.makedirs(h5_folder, exist_ok=True)
 
         # 1. DOWNLOAD
         if not os.path.exists(h5_path):
@@ -126,33 +168,60 @@ def process_single_domain(domain):
 
 if __name__ == "__main__":
     print(f"Starting mdCATH data processing with {MAX_WORKERS} workers...")
+    
+    # --- Argument Parsing ---
+    args = arg_parser()
+    data_root = args.data_root
+    domain_list_file = os.path.join(data_root, args.domain_list_file)
+    h5_folder = os.path.join(data_root, args.h5_folder)
+    output_root = os.path.join(data_root, args.output_root)
+    final_csv = os.path.join(data_root, args.final_csv)
+    max_workers = args.max_workers
+
     # --- Checkpointing Logic ---
     processed_domains = set()
-    if os.path.exists(FINAL_CSV):
-        existing_df = pd.read_csv(FINAL_CSV)
+    if os.path.exists(final_csv):
+        existing_df = pd.read_csv(final_csv)
         processed_domains = set(existing_df['domain'].unique())
         print(f"Resuming: {len(processed_domains)} domains already finished.")
 
-    with open(DOMAIN_TXT, "r") as f:
+    with open(domain_list_file, "r") as f:
         domain_list = [d.strip() for d in f if d.strip() and d.strip() not in processed_domains]
     
     if not domain_list:
         print("All domains in list already processed!")
     else:
-        print(f"Processing {len(domain_list)} new domains...")
-        all_results = []
-        with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            results = list(executor.map(process_single_domain, domain_list))
-            for sublist in results: all_results.extend(sublist)
+        CHUNK_SIZE = 50
+        print(f"Processing {len(domain_list)} domains in chunks of {CHUNK_SIZE}...")
 
-        if all_results:
-            new_df = pd.DataFrame(all_results)
-            pivot_df = new_df.pivot(index=['domain', 'sequence'], columns='temperature', values='neq_values').reset_index()
-            pivot_df.columns = [f"neq_{c}" if str(c).isdigit() else c for c in pivot_df.columns]
+        for i in range(0, len(domain_list), CHUNK_SIZE):
+            current_chunk = domain_list[i : i + CHUNK_SIZE]
+            print(f"--- Starting Chunk {i//CHUNK_SIZE + 1}: {current_chunk[0]} to {current_chunk[-1]} ---")
             
-            if os.path.exists(FINAL_CSV):
-                final_df = pd.concat([pd.read_csv(FINAL_CSV), pivot_df], ignore_index=True)
-                final_df.to_csv(FINAL_CSV, index=False)
-            else:
-                pivot_df.to_csv(FINAL_CSV, index=False)
-            print("Batch complete and saved.")
+            chunk_results = []
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                results = list(executor.map(process_single_domain, current_chunk))
+                for sublist in results:
+                    chunk_results.extend(sublist)
+
+            if chunk_results:
+                new_batch_df = pd.DataFrame(chunk_results)
+                
+                pivot_df = new_batch_df.pivot(
+                    index=['domain', 'sequence'], 
+                    columns='temperature', 
+                    values='neq_values'
+                ).reset_index()
+                
+                pivot_df.columns = [f"neq_{c}" if str(c).isdigit() else c for c in pivot_df.columns]
+                
+                if os.path.exists(final_csv):
+                    existing_df = pd.read_csv(final_csv)
+                    final_df = pd.concat([existing_df, pivot_df], ignore_index=True, sort=False)
+                    final_df.drop_duplicates(subset=['domain'], inplace=True)
+                    final_df.to_csv(final_csv, index=False)
+                else:
+                    pivot_df.to_csv(final_csv, index=False)
+                
+                print(f"Chunk {i//CHUNK_SIZE + 1} saved successfully.")
+        print("All chunks processed. Final dataset saved to:", final_csv)
