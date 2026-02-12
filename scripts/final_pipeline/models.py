@@ -235,5 +235,177 @@ class FocalLoss(nn.Module):
             return -loss.sum()
         else:
             return -loss
-        
 
+
+# =============================================================================
+# Regression Models
+# =============================================================================
+
+class BiLSTMRegressionModel(nn.Module):
+    """BiLSTM for per-residue regression (e.g., predicting continuous Neq values)"""
+    def __init__(self, embedding_model, hidden_size, num_layers,
+                 num_outputs=1, dropout=0.3, bidirectional=1):
+        super().__init__()
+        self.embedding_model = embedding_model
+        self.bidirectional = bool(bidirectional)
+        self.lstm = nn.LSTM(
+            input_size=embedding_model.config.hidden_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=self.bidirectional,
+            dropout=dropout
+        )
+        self.dropout = nn.Dropout(dropout)
+        self.output_dim = hidden_size * (2 if self.bidirectional else 1)
+        self.fc = nn.Linear(self.output_dim, num_outputs)
+
+    def forward(self, input_ids, attention_mask, return_features="none"):
+        emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        h, _ = self.lstm(emb)
+        h = self.dropout(h)
+        output = self.fc(h)  # [B, L, num_outputs]
+        
+        feats = h if return_features == "pre" else (output if return_features == "post" else None)
+        return output, feats
+
+
+class BiLSTMWithSelfAttentionRegressionModel(nn.Module):
+    """BiLSTM with self-attention for regression"""
+    def __init__(self, embedding_model, hidden_size, num_layers,
+                 num_outputs=1, dropout=0.3, bidirectional=1):
+        super().__init__()
+        self.embedding_model = embedding_model
+        self.bidirectional = bool(bidirectional)
+        self.lstm = nn.LSTM(
+            input_size=embedding_model.config.hidden_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=self.bidirectional,
+            dropout=dropout
+        )
+        self.output_dim = hidden_size * (2 if self.bidirectional else 1)
+        self.attention = SelfAttentionLayer(self.output_dim, dropout=dropout)
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(self.output_dim, num_outputs)
+
+    def forward(self, input_ids, attention_mask, return_attention=False, return_features="none"):
+        emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        h, _ = self.lstm(emb)
+        ctx, attn = (self.attention(h, attention_mask, True) if return_attention
+                     else (self.attention(h, attention_mask), None))
+        ctx = self.dropout(ctx)
+        output = self.fc(ctx)  # [B, L, num_outputs]
+        
+        feats = ctx if return_features == "pre" else (output if return_features == "post" else None)
+        return (output, feats, attn) if return_attention else (output, feats)
+
+
+class TransformerRegressionModel(nn.Module):
+    """Transformer for regression"""
+    def __init__(self, embedding_model, nhead=8, num_encoder_layers=6,
+                 dim_feedforward=1024, num_outputs=1, dropout=0.3):
+        super().__init__()
+        self.embedding_model = embedding_model
+        d_model = embedding_model.config.hidden_size
+
+        self.pos_encoder = PositionalEncoding(d_model)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_encoder_layers
+        )
+        self.fc = nn.Linear(d_model, num_outputs)
+
+    def forward(self, input_ids, attention_mask, return_features="none"):
+        outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
+        embeddings = outputs.last_hidden_state
+        embeddings = self.pos_encoder(embeddings)
+        src_key_padding_mask = (attention_mask == 0)
+        
+        transformer_output = self.transformer_encoder(
+            embeddings,
+            src_key_padding_mask=src_key_padding_mask
+        )
+        output = self.fc(transformer_output)  # [B, L, num_outputs]
+
+        feats = transformer_output if return_features == "pre" else (output if return_features == "post" else None)
+        return output, feats
+
+
+class ESMLinearTokenRegressor(nn.Module):
+    """ESM embeddings + linear layer for regression"""
+    def __init__(self, embedding_model, num_outputs=1):
+        super().__init__()
+        self.embedding_model = embedding_model
+        self.output_dim = embedding_model.config.hidden_size
+        self.fc = nn.Linear(embedding_model.config.hidden_size, num_outputs)
+
+    def forward(self, input_ids, attention_mask, return_features="none", return_attn=False):
+        outputs = self.embedding_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=return_attn,
+            return_dict=True,
+        )
+        h = outputs.last_hidden_state
+        output = self.fc(h)  # [B, L, num_outputs]
+
+        feats = h if return_features == "pre" else (output if return_features == "post" else None)
+        
+        if return_attn:
+            return output, feats, outputs.attentions
+        return output, feats
+
+
+# =============================================================================
+# Regression Loss Functions
+# =============================================================================
+
+class WeightedMSELoss(nn.Module):
+    """MSE loss with optional per-residue weighting and padding mask"""
+    def __init__(self, reduction='mean', ignore_value=-100.0):
+        super().__init__()
+        self.reduction = reduction
+        self.ignore_value = ignore_value
+    
+    def forward(self, predictions, targets, weights=None):
+        """
+        predictions: [B, L, num_outputs] or [B, L]
+        targets: [B, L, num_outputs] or [B, L]
+        weights: optional [B, L] weighting mask
+        """
+        # Ensure same shape
+        if targets.dim() == 2 and predictions.dim() == 3:
+            targets = targets.unsqueeze(-1)
+        if predictions.dim() == 2 and targets.dim() == 3:
+            predictions = predictions.unsqueeze(-1)
+        
+        # Mask out padding (where target == ignore_value)
+        mask = (targets != self.ignore_value).float()
+        
+        # Compute squared error
+        sq_error = (predictions - targets) ** 2
+        
+        # Apply mask
+        sq_error = sq_error * mask
+        
+        # Apply optional weights
+        if weights is not None:
+            if weights.dim() == 2 and sq_error.dim() == 3:
+                weights = weights.unsqueeze(-1)
+            sq_error = sq_error * weights
+        
+        if self.reduction == 'mean':
+            return sq_error.sum() / mask.sum().clamp(min=1)
+        elif self.reduction == 'sum':
+            return sq_error.sum()
+        else:
+            return sq_error

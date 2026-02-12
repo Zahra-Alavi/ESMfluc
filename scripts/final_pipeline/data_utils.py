@@ -166,3 +166,32 @@ def compute_sampling_weights(dataset, num_classes, neq_thresholds, oversampling_
     weights = np.array(weights)
     weights = weights / np.sum(weights) * len(weights)  # Normalize
     return torch.tensor(weights, dtype=torch.float)
+
+
+# =============================================================================
+# Regression Dataset and Data Loading
+# =============================================================================
+
+class SequenceRegressionDataset(Dataset):
+    """Dataset for regression tasks (continuous labels per residue)"""
+    def __init__(self, encoded_inputs, labels):
+        self.encoded_inputs = encoded_inputs
+        self.labels = labels
+    
+    def __len__(self):
+        return len(self.encoded_inputs)
+    
+    def __getitem__(self, idx):
+        return {
+            'input_ids': self.encoded_inputs[idx]['input_ids'].squeeze(0),
+            'attention_mask': self.encoded_inputs[idx]['attention_mask'].squeeze(0),
+            'labels': torch.tensor(self.labels[idx], dtype=torch.float32)
+        }
+
+
+def load_regression_data(csv_file):
+    """Load data for regression - keeps continuous Neq values"""
+    df = pd.read_csv(csv_file)
+    if df['neq'].dtype == object:
+        df['neq'] = df['neq'].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
+    return df

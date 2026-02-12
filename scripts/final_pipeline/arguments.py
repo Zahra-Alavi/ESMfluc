@@ -152,4 +152,22 @@ def parse_arguments():
 # =============================================================================
 
 
+
+    # Task type (classification vs regression)
+    parser.add_argument("--task_type", type=str, default="classification",
+                        choices=["classification", "regression"],
+                        help="Task type: classification or regression. default=classification")
+
+    # Regression specific arguments
+    parser.add_argument("--num_outputs", type=int, default=1,
+                        help="Number of regression outputs per residue (for regression tasks). default=1")
+
+    parser.add_argument("--regression_loss", type=str, default="mse",
+                        choices=["mse", "mae", "huber", "weighted_mse"],
+                        help="Loss function for regression tasks. default=mse")
+
+    parser.add_argument("--huber_delta", type=float, default=1.0,
+                        help="Delta parameter for Huber loss. default=1.0")
+
+
     return parser

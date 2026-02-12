@@ -555,3 +555,366 @@ if __name__ == "__main__":
     parser = parse_arguments()
     args = parser.parse_args()
     train(args)
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Regression training functions - to be appended to train.py
+These are NEW functions that don't modify existing classification code.
+"""
+
+# Import additional modules needed for regression
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from scipy.stats import pearsonr
+
+from models import (
+    BiLSTMRegressionModel,
+    BiLSTMWithSelfAttentionRegressionModel,
+    TransformerRegressionModel,
+    ESMLinearTokenRegressor,
+    WeightedMSELoss
+)
+
+from data_utils import SequenceRegressionDataset, load_regression_data
+
+
+def set_up_regression_model(args):
+    """
+    Create regression model based on architecture.
+    This is a NEW function - does not modify set_up_classification_model
+    """
+    embedding_model = set_up_embedding_model(args)  # Reuses existing function
+    
+    if args.architecture == "bilstm":
+        print("Using BiLSTM regression model")
+        model = BiLSTMRegressionModel(
+            embedding_model=embedding_model,
+            hidden_size=args.hidden_size,
+            num_layers=args.num_layers,
+            dropout=args.dropout,
+            num_outputs=args.num_outputs,
+            bidirectional=args.bidirectional
+        )
+    elif args.architecture == "bilstm_attention":
+        print("Using BiLSTM with SelfAttention regression model")
+        model = BiLSTMWithSelfAttentionRegressionModel(
+            embedding_model=embedding_model,
+            hidden_size=args.hidden_size,
+            num_layers=args.num_layers,
+            dropout=args.dropout,
+            num_outputs=args.num_outputs,
+            bidirectional=args.bidirectional
+        )
+    elif args.architecture == "transformer":
+        print("Using Transformer regression model")
+        model = TransformerRegressionModel(
+            embedding_model=embedding_model,
+            nhead=args.transformer_nhead,
+            num_encoder_layers=args.transformer_num_encoder_layers,
+            dim_feedforward=args.transformer_dim_feedforward,
+            num_outputs=args.num_outputs,
+            dropout=args.dropout
+        )
+    elif args.architecture == "esm_linear":
+        print("Using ESM-only linear token regressor")
+        model = ESMLinearTokenRegressor(
+            embedding_model=embedding_model,
+            num_outputs=args.num_outputs
+        )
+    else:
+        raise ValueError(f"Invalid architecture for regression: {args.architecture}")
+    
+    model.to(args.device)
+    
+    if args.data_parallel and torch.cuda.device_count() > 1:
+        print(f"Using nn.DataParallel on {torch.cuda.device_count()} GPUs")
+        model = nn.DataParallel(model)
+    
+    return model
+
+
+def get_regression_loss_fn(args):
+    """Get loss function for regression tasks"""
+    if args.regression_loss == "mse" or args.regression_loss == "weighted_mse":
+        print(f"Using WeightedMSELoss")
+        return WeightedMSELoss(ignore_value=-100.0)
+    elif args.regression_loss == "mae":
+        print("Using L1Loss (MAE)")
+        return nn.L1Loss(reduction='mean')
+    elif args.regression_loss == "huber":
+        print(f"Using HuberLoss with delta={args.huber_delta}")
+        return nn.HuberLoss(delta=args.huber_delta, reduction='mean')
+    else:
+        raise ValueError(f"Unknown regression loss: {args.regression_loss}")
+
+
+def evaluate_regression(model, data_loader, criterion, args):
+    """
+    Evaluate regression model and compute metrics.
+    Returns dict with MSE, RMSE, MAE, R², Pearson correlation
+    """
+    m = model.module if isinstance(model, nn.DataParallel) else model
+    
+    with torch.no_grad():
+        m.eval()
+        all_preds, all_targets = [], []
+        total_loss = 0.0
+        n_batches = 0
+        
+        for batch in data_loader:
+            input_ids = batch['input_ids'].to(args.device)
+            attention_mask = batch['attention_mask'].to(args.device)
+            y = batch['labels'].to(args.device)  # [B, L] continuous values
+            
+            output, feats = m(input_ids, attention_mask, return_features="pre")
+            
+            # Handle different output shapes
+            if output.dim() == 3 and output.size(-1) == 1:
+                output = output.squeeze(-1)  # [B, L, 1] -> [B, L]
+            
+            # Compute loss
+            if args.regression_loss == "weighted_mse":
+                loss = criterion(output, y)
+            else:
+                # For other losses, manually handle padding
+                mask = (y != -100.0)
+                if mask.any():
+                    loss = criterion(output[mask], y[mask])
+                else:
+                    loss = torch.tensor(0.0)
+            
+            total_loss += loss.item()
+            n_batches += 1
+            
+            # Collect predictions and targets (excluding padding)
+            output_flat = output.reshape(-1)
+            y_flat = y.reshape(-1)
+            mask = y_flat != -100.0
+            
+            all_preds.extend(output_flat[mask].cpu().numpy())
+            all_targets.extend(y_flat[mask].cpu().numpy())
+        
+        # Compute regression metrics
+        all_preds = np.array(all_preds)
+        all_targets = np.array(all_targets)
+        
+        mse = mean_squared_error(all_targets, all_preds)
+        mae = mean_absolute_error(all_targets, all_preds)
+        r2 = r2_score(all_targets, all_preds)
+        
+        # Pearson correlation
+        if len(all_preds) > 1:
+            pearson_r, pearson_p = pearsonr(all_targets, all_preds)
+        else:
+            pearson_r, pearson_p = 0.0, 1.0
+        
+        avg_loss = total_loss / max(n_batches, 1)
+        
+        metrics = {
+            'loss': avg_loss,
+            'mse': mse,
+            'rmse': np.sqrt(mse),
+            'mae': mae,
+            'r2': r2,
+            'pearson_r': pearson_r,
+            'pearson_p': pearson_p
+        }
+        
+        return metrics
+
+
+def train_regression(args):
+    """
+    Training loop for regression tasks.
+    This is a NEW function - does not modify the existing train() function.
+    """
+    run_folder = create_run_folder(args.result_foldername)
+    
+    # Set up model, optimizer, scheduler
+    model = set_up_regression_model(args)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    
+    if args.lr_scheduler == "reduce_on_plateau":
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode='min', factor=0.1, patience=3, verbose=True
+        )
+        print("Using ReduceLROnPlateau scheduler")
+    else:
+        scheduler = None
+        print("Not using any scheduler")
+    
+    # Load data
+    print(f"Loading regression data from {args.train_data_file}")
+    train_data = load_regression_data(args.train_data_file)
+    test_data = load_regression_data(args.test_data_file)
+    
+    # Tokenize
+    tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
+    X_train = tokenize(train_data['sequence'], tokenizer)
+    X_test = tokenize(test_data['sequence'], tokenizer)
+    y_train = train_data['neq'].tolist()  # Keep continuous values
+    y_test = test_data['neq'].tolist()
+    
+    # Split validation if needed
+    val_loader = None
+    need_val = (args.lr_scheduler == "reduce_on_plateau") or (args.patience and args.patience > 0)
+    
+    if need_val:
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train, y_train, test_size=0.2, random_state=args.seed
+        )
+        val_dataset = SequenceRegressionDataset(X_val, y_val)
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            collate_fn=lambda x: collate_fn_sequence(x, tokenizer)
+        )
+    
+    # Create datasets
+    train_dataset = SequenceRegressionDataset(X_train, y_train)
+    test_dataset = SequenceRegressionDataset(X_test, y_test)
+    
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        collate_fn=lambda x: collate_fn_sequence(x, tokenizer)
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        collate_fn=lambda x: collate_fn_sequence(x, tokenizer)
+    )
+    
+    # Get loss function
+    criterion = get_regression_loss_fn(args)
+    
+    # Training setup
+    use_cuda = (isinstance(args.device, torch.device) and args.device.type == "cuda") \
+               or (isinstance(args.device, str) and args.device == "cuda")
+    amp_enabled = bool(args.mixed_precision and use_cuda)
+    amp_dtype = torch.bfloat16 if getattr(args, "amp_dtype", "fp16") == "bf16" else torch.float16
+    
+    scaler = GradScaler(enabled=amp_enabled)
+    
+    best_val_loss = float('inf')
+    epochs_no_improve = 0
+    val_losses = []
+    train_losses = []
+    
+    print(f"\nStarting regression training for {args.epochs} epochs...")
+    print(f"Train samples: {len(train_dataset)}, Test samples: {len(test_dataset)}")
+    
+    # Training loop
+    for epoch in range(args.epochs):
+        model.train()
+        total_loss = 0
+        
+        for i, batch in enumerate(train_loader):
+            input_ids = batch['input_ids'].to(args.device)
+            attention_mask = batch['attention_mask'].to(args.device)
+            y = batch['labels'].to(args.device)
+            
+            optimizer.zero_grad()
+            
+            if amp_enabled:
+                with autocast(dtype=amp_dtype):
+                    output, feats = model(input_ids, attention_mask, return_features="pre")
+                    if output.dim() == 3 and output.size(-1) == 1:
+                        output = output.squeeze(-1)
+                    loss = criterion(output, y)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                output, feats = model(input_ids, attention_mask, return_features="pre")
+                if output.dim() == 3 and output.size(-1) == 1:
+                    output = output.squeeze(-1)
+                loss = criterion(output, y)
+                loss.backward()
+                optimizer.step()
+            
+            total_loss += loss.item()
+        
+        avg_train_loss = total_loss / len(train_loader)
+        train_losses.append(avg_train_loss)
+        print(f"[Epoch {epoch+1}/{args.epochs}] Training Loss: {avg_train_loss:.4f}")
+        
+        # Validation
+        if val_loader is not None:
+            val_metrics = evaluate_regression(model, val_loader, criterion, args)
+            avg_val_loss = val_metrics['loss']
+            val_losses.append(avg_val_loss)
+            print(f"[Epoch {epoch+1}/{args.epochs}] Validation Loss: {avg_val_loss:.4f}, "
+                  f"RMSE: {val_metrics['rmse']:.4f}, R²: {val_metrics['r2']:.4f}")
+            
+            if scheduler:
+                scheduler.step(avg_val_loss)
+            
+            # Early stopping
+            MIN_DELTA = 1e-3
+            improved = (best_val_loss - avg_val_loss) > MIN_DELTA
+            if improved:
+                best_val_loss = avg_val_loss
+                epochs_no_improve = 0
+                torch.save(
+                    model.module.state_dict() if isinstance(model, nn.DataParallel) else model.state_dict(),
+                    f"{run_folder}/best_model.pth"
+                )
+                print(f"  → Saved best model (val_loss={best_val_loss:.4f})")
+            else:
+                epochs_no_improve += 1
+                if epochs_no_improve >= args.patience:
+                    print(f"Early stopping at epoch {epoch+1}")
+                    break
+        else:
+            torch.save(
+                model.module.state_dict() if isinstance(model, nn.DataParallel) else model.state_dict(),
+                f"{run_folder}/last_model.pth"
+            )
+    
+    # Plot loss curve
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, len(train_losses)+1), train_losses, label='Training Loss', marker='o')
+    if len(val_losses) > 0:
+        plt.plot(range(1, len(val_losses)+1), val_losses, label='Validation Loss', marker='s')
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Regression Training Loss Curve")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.savefig(f"{run_folder}/loss_curve.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Final evaluation on test set
+    print("\nEvaluating on test set...")
+    test_metrics = evaluate_regression(model, test_loader, criterion, args)
+    
+    print("\nTest Set Results:")
+    print(f"  Loss: {test_metrics['loss']:.4f}")
+    print(f"  MSE: {test_metrics['mse']:.4f}")
+    print(f"  RMSE: {test_metrics['rmse']:.4f}")
+    print(f"  MAE: {test_metrics['mae']:.4f}")
+    print(f"  R²: {test_metrics['r2']:.4f}")
+    print(f"  Pearson r: {test_metrics['pearson_r']:.4f} (p={test_metrics['pearson_p']:.2e})")
+    
+    # Save metrics to CSV
+    metrics_df = pd.DataFrame([{
+        'task': 'regression',
+        'architecture': args.architecture,
+        'esm_model': args.esm_model,
+        'test_loss': test_metrics['loss'],
+        'test_mse': test_metrics['mse'],
+        'test_rmse': test_metrics['rmse'],
+        'test_mae': test_metrics['mae'],
+        'test_r2': test_metrics['r2'],
+        'pearson_r': test_metrics['pearson_r'],
+        'pearson_p': test_metrics['pearson_p'],
+        'epochs': epoch + 1,
+        'best_val_loss': best_val_loss if val_loader else 'N/A'
+    }])
+    
+    metrics_df.to_csv(f"{run_folder}/regression_metrics.csv", index=False)
+    print(f"\nSaved metrics to {run_folder}/regression_metrics.csv")
+    print("Regression training completed!")
