@@ -17,7 +17,10 @@ import torch
 from transformers import EsmModel, EsmTokenizer
 
 
-from models import BiLSTMWithSelfAttentionModel, ESMLinearTokenClassifier
+from models import (
+    BiLSTMWithSelfAttentionModel, ESMLinearTokenClassifier,
+    BiLSTMWithSelfAttentionRegressionModel, ESMLinearTokenRegressor
+)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -33,6 +36,21 @@ def parse_args():
     parser.add_argument("--architecture", type=str, default="bilstm_attention",
                         choices=["bilstm_attention", "esm_linear"],
                         help="Model architecture used for training.")
+    parser.add_argument("--task_type", type=str, default="classification",
+                        choices=["classification", "regression"],
+                        help="Task type: classification or regression.")
+    parser.add_argument("--num_outputs", type=int, default=1,
+                        help="Number of output values for regression (default: 1).")
+    parser.add_argument("--num_classes", type=int, default=2,
+                        help="Number of classes for classification (default: 2).")
+    parser.add_argument("--esm_model", type=str, default="esm2_t33_650M_UR50D",
+                        help="ESM model name (e.g., esm2_t12_35M_UR50D, esm2_t33_650M_UR50D).")
+    parser.add_argument("--hidden_size", type=int, default=512,
+                        help="Hidden size for BiLSTM (default: 512).")
+    parser.add_argument("--num_layers", type=int, default=3,
+                        help="Number of BiLSTM layers (default: 3).")
+    parser.add_argument("--dropout", type=float, default=0.3,
+                        help="Dropout rate (default: 0.3).")
     parser.add_argument("--layer", type=int, default=-1,
                         help="ESM layer to extract attention from (for esm_linear). Use -1 for last layer.")
     parser.add_argument("--ss_csv", type=str, required=False,
@@ -135,34 +153,63 @@ def main():
     
     args = parse_args()
 
-    embedding_model = EsmModel.from_pretrained("facebook/esm2_t33_650M_UR50D")
+    # Load ESM model
+    esm_model_name = f"facebook/{args.esm_model}"
+    embedding_model = EsmModel.from_pretrained(esm_model_name)
     embedding_model.to(device)
+    
+    print(f"Loaded ESM model: {esm_model_name}")
+    print(f"Task type: {args.task_type}")
+    print(f"Architecture: {args.architecture}")
         
-    # Build model based on architecture
-    if args.architecture == "bilstm_attention":
-        model = BiLSTMWithSelfAttentionModel(
-            embedding_model=embedding_model,
-            hidden_size=512,
-            num_layers=3,
-            num_classes=2,
-            dropout=0.3
-        )
-        run_fn = lambda m, t, s, d: run_model_bilstm_attn(m, t, s, d)
-    elif args.architecture == "esm_linear":
-        model = ESMLinearTokenClassifier(
-            embedding_model=embedding_model,
-            num_classes=2
-        )
-        run_fn = lambda m, t, s, d: run_model_esm_linear(m, t, s, d, layer_idx=args.layer)
+    # Build model based on architecture and task type
+    if args.task_type == "classification":
+        if args.architecture == "bilstm_attention":
+            model = BiLSTMWithSelfAttentionModel(
+                embedding_model=embedding_model,
+                hidden_size=args.hidden_size,
+                num_layers=args.num_layers,
+                num_classes=args.num_classes,
+                dropout=args.dropout
+            )
+            run_fn = lambda m, t, s, d: run_model_bilstm_attn(m, t, s, d)
+        elif args.architecture == "esm_linear":
+            model = ESMLinearTokenClassifier(
+                embedding_model=embedding_model,
+                num_classes=args.num_classes
+            )
+            run_fn = lambda m, t, s, d: run_model_esm_linear(m, t, s, d, layer_idx=args.layer)
+        else:
+            raise ValueError(f"Unsupported architecture: {args.architecture}")
+    
+    elif args.task_type == "regression":
+        if args.architecture == "bilstm_attention":
+            model = BiLSTMWithSelfAttentionRegressionModel(
+                embedding_model=embedding_model,
+                hidden_size=args.hidden_size,
+                num_layers=args.num_layers,
+                num_outputs=args.num_outputs,
+                dropout=args.dropout
+            )
+            run_fn = lambda m, t, s, d: run_model_bilstm_attn(m, t, s, d)
+        elif args.architecture == "esm_linear":
+            model = ESMLinearTokenRegressor(
+                embedding_model=embedding_model,
+                num_outputs=args.num_outputs
+            )
+            run_fn = lambda m, t, s, d: run_model_esm_linear(m, t, s, d, layer_idx=args.layer)
+        else:
+            raise ValueError(f"Unsupported architecture: {args.architecture}")
     else:
-        raise ValueError(f"Unsupported architecture: {args.architecture}")
+        raise ValueError(f"Unknown task_type: {args.task_type}")
     
     model.to(device)
 
     checkpoint = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(checkpoint)
+    print(f"Loaded checkpoint from {args.checkpoint}")
 
-    tokenizer = EsmTokenizer.from_pretrained("facebook/esm2_t33_650M_UR50D")
+    tokenizer = EsmTokenizer.from_pretrained(esm_model_name)
 
     ss_map = {}
     ss_available = args.ss_csv is not None

@@ -26,3 +26,6 @@ def main():
         train_regression(args)  # New regression training
     else:
         raise ValueError(f"Unknown task_type: {args.task_type}")
+
+if __name__ == "__main__":
+    main()
