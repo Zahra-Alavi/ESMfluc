@@ -50,7 +50,7 @@ def main():
         help="Optional version number for feature engineering (default: 1.1)."
     )
     parser.add_argument(
-        "--hyperameter_tuning",
+        "--hyperparameter_tuning",
         action="store_true",
         help="Optional hyperparameter tuning for logistic regression/random forest model (default: False)."
     )
@@ -107,7 +107,7 @@ def main():
         X_test, y_test = DataLoader(args.test_data_file, args.feature_engineering_version, args.esm_model, binary_classification=is_classification).get_data()
 
         if is_classification:
-            classifier = ClassifierFactory.get_classifier(args.model, X_train, y_train, X_test, y_test, args.hyperameter_tuning)
+            classifier = ClassifierFactory.get_classifier(args.model, X_train, y_train, X_test, y_test, args.hyperparameter_tuning)
             classifier.fit()
             print(f"Training time: {time.time() - start_time:.2f} seconds")
             print(classifier.evaluate(classifier.predict()))
@@ -115,7 +115,7 @@ def main():
             if (args.model == "LogisticRegressionClassifier"):
                 print(f"Model iterations: {classifier.model.n_iter_}")
         else:
-            regressor = RegressorFactory.get_regressor(args.model, X_train, y_train, X_test, y_test, args.hyperameter_tuning)
+            regressor = RegressorFactory.get_regressor(args.model, X_train, y_train, X_test, y_test, args.hyperparameter_tuning)
             regressor.fit()
             print(f"Training time: {time.time() - start_time:.2f} seconds")
             y_pred = regressor.predict()

@@ -67,7 +67,7 @@ python classifiers_runner.py [OPTIONS]
 -   `--model {LogisticRegressionClassifier, RandomForestClassifier, LinearRegression, RidgeRegression, LassoRegression, RandomForestRegressor}`: Choose the classification or regression model to run
 -   `--all`: Run all tasks including data learning, Logistic Regression Classifier model, and Random Forest Classifier
 -   `--feature_engineering_version <version>`: Specify feature engineering version (default: 1.1). Currently, we have 1.1, 1.2, and 1.3.
--   `--hyperameter_tuning`: Enable hyperparameter tuning for the classifiers/regressors (default: False)
+-   `--hyperparameter_tuning`: Enable hyperparameter tuning for the classifiers/regressors (default: False)
 -   `--esm_model_learning`: Enable ESM model learning to find the best ESM model (default: False)
 -   `--esm_model <model_name>`: For feature engineering version 1.3, specify the ESM model to use
 
@@ -92,7 +92,7 @@ python classifiers_runner.py [OPTIONS]
 
 5. Run a classifier with hyperparameter tuning:
 
-    `python classifiers_runner.py --model LogisticRegressionClassifier --hyperameter_tuning`
+    `python classifiers_runner.py --model LogisticRegressionClassifier --hyperparameter_tuning`
 
 6. Run ESM model learning:
 
@@ -106,7 +106,7 @@ python classifiers_runner.py [OPTIONS]
 
 2. Run Ridge Regression with hyperparameter tuning:
 
-    `python classifiers_runner.py --model RidgeRegression --hyperameter_tuning`
+    `python classifiers_runner.py --model RidgeRegression --hyperparameter_tuning`
 
 3. Run Lasso Regression:
 
