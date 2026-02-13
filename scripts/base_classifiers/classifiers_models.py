@@ -5,10 +5,10 @@ Date: 2025-02-07
 
 import numpy as np
 import os
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression, LinearRegression, Ridge, Lasso
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, mean_squared_error, mean_absolute_error, r2_score
 
 class BaseClassifier:
     def __init__(self, x_train, y_train, x_test, y_test):
@@ -111,6 +111,153 @@ class RandomForestClassifierModel(SklearnClassifier):
             f.write(str(grid_search.best_params_))
         return grid_search.best_estimator_
 
+class BaseRegressor:
+    def __init__(self, x_train, y_train, x_test, y_test):
+        self.x_train = x_train
+        self.y_train = y_train
+        self.x_test = x_test
+        self.y_test = y_test
+        self.model = None
+    
+    def fit(self):
+        """Train the model on the training data."""
+        self.model.fit(self.x_train, self.y_train)
+    
+    def predict(self):
+        """Generate predictions on the test data."""
+        return self.model.predict(self.x_test)
+    
+    def evaluate(self, y_pred):
+        """Evaluate the model using regression metrics."""
+        mse = mean_squared_error(self.y_test, y_pred)
+        mae = mean_absolute_error(self.y_test, y_pred)
+        r2 = r2_score(self.y_test, y_pred)
+        return {
+            'mse': mse,
+            'rmse': np.sqrt(mse),
+            'mae': mae,
+            'r2': r2
+        }
+
+class SklearnRegressor(BaseRegressor):
+    def __init__(self, x_train, y_train, x_test, y_test, model):
+        super().__init__(x_train, y_train, x_test, y_test)
+        self.model = model
+
+class LinearRegressionModel(SklearnRegressor):
+    def __init__(self, x_train, y_train, x_test, y_test, tune_hyperparameters=False):
+        if tune_hyperparameters:
+            model = self._tune_hyperparameters(x_train, y_train)
+        else:
+            model = LinearRegression()
+        super().__init__(x_train, y_train, x_test, y_test, model)
+    
+    def _tune_hyperparameters(self, x_train, y_train):
+        """Uses GridSearchCV to find the best hyperparameters for Linear Regression."""
+        param_grid = {
+            'fit_intercept': [True, False],
+            'positive': [True, False],
+        }
+        grid_search = GridSearchCV(LinearRegression(), param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
+        grid_search.fit(x_train, y_train)
+        print(f"Best Linear Regression Parameters: {grid_search.best_params_}")
+        
+        # Saving the best parameters
+        if not os.path.exists('../../models'):
+            os.makedirs('../../models')
+        
+        with open('../../models/best_linear_regression_params.txt', 'w') as f:
+            f.write(str(grid_search.best_params_))
+        return grid_search.best_estimator_
+
+class RidgeRegressionModel(SklearnRegressor):
+    def __init__(self, x_train, y_train, x_test, y_test, tune_hyperparameters=False):
+        if tune_hyperparameters:
+            model = self._tune_hyperparameters(x_train, y_train)
+        else:
+            model = Ridge(random_state=42)
+        super().__init__(x_train, y_train, x_test, y_test, model)
+    
+    def _tune_hyperparameters(self, x_train, y_train):
+        """Uses GridSearchCV to find the best hyperparameters for Ridge Regression."""
+        param_grid = {
+            'alpha': [0.001, 0.01, 0.1, 1, 10, 100, 1000],
+            'fit_intercept': [True, False],
+            'solver': ['auto', 'svd', 'cholesky', 'lsqr', 'sag', 'saga'],
+            'max_iter': [1000, 2000, 5000],
+            'tol': [1e-4, 1e-3, 1e-2],
+        }
+        grid_search = GridSearchCV(Ridge(random_state=42), param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
+        grid_search.fit(x_train, y_train)
+        print(f"Best Ridge Regression Parameters: {grid_search.best_params_}")
+        
+        # Saving the best parameters
+        if not os.path.exists('../../models'):
+            os.makedirs('../../models')
+        
+        with open('../../models/best_ridge_regression_params.txt', 'w') as f:
+            f.write(str(grid_search.best_params_))
+        return grid_search.best_estimator_
+
+class LassoRegressionModel(SklearnRegressor):
+    def __init__(self, x_train, y_train, x_test, y_test, tune_hyperparameters=False):
+        if tune_hyperparameters:
+            model = self._tune_hyperparameters(x_train, y_train)
+        else:
+            model = Lasso(random_state=42, max_iter=10000)
+        super().__init__(x_train, y_train, x_test, y_test, model)
+    
+    def _tune_hyperparameters(self, x_train, y_train):
+        """Uses GridSearchCV to find the best hyperparameters for Lasso Regression."""
+        param_grid = {
+            'alpha': [0.001, 0.01, 0.1, 1, 10, 100],
+            'fit_intercept': [True, False],
+            'max_iter': [5000, 10000, 20000],
+            'tol': [1e-4, 1e-3, 1e-2],
+            'selection': ['cyclic', 'random'],
+        }
+        grid_search = GridSearchCV(Lasso(random_state=42), param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
+        grid_search.fit(x_train, y_train)
+        print(f"Best Lasso Regression Parameters: {grid_search.best_params_}")
+        
+        # Saving the best parameters
+        if not os.path.exists('../../models'):
+            os.makedirs('../../models')
+        
+        with open('../../models/best_lasso_regression_params.txt', 'w') as f:
+            f.write(str(grid_search.best_params_))
+        return grid_search.best_estimator_
+
+class RandomForestRegressorModel(SklearnRegressor):
+    def __init__(self, x_train, y_train, x_test, y_test, tune_hyperparameters=False):
+        if tune_hyperparameters:
+            model = self._tune_hyperparameters(x_train, y_train)
+        else:
+            model = RandomForestRegressor(random_state=42, n_jobs=-1)
+        super().__init__(x_train, y_train, x_test, y_test, model)
+    
+    def _tune_hyperparameters(self, x_train, y_train):
+        """Uses GridSearchCV to find the best hyperparameters for Random Forest Regressor."""
+        param_grid = {
+            'n_estimators': [50, 100, 200],
+            'max_depth': [None, 10, 20, 30],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4],
+            'max_features': ['sqrt', 'log2', None],
+            'bootstrap': [True, False],
+        }
+        grid_search = GridSearchCV(RandomForestRegressor(random_state=42, n_jobs=-1), param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
+        grid_search.fit(x_train, y_train)
+        print(f"Best Random Forest Regressor Parameters: {grid_search.best_params_}")
+        
+        # Saving the best parameters
+        if not os.path.exists('../../models'):
+            os.makedirs('../../models')
+        
+        with open('../../models/best_random_forest_regressor_params.txt', 'w') as f:
+            f.write(str(grid_search.best_params_))
+        return grid_search.best_estimator_
+
 class ClassifierFactory:
     @staticmethod
     def get_classifier(model_name, x_train, y_train, x_test, y_test, tune_hyperparameters=False):
@@ -118,5 +265,19 @@ class ClassifierFactory:
             return RandomForestClassifierModel(x_train, y_train, x_test, y_test, tune_hyperparameters)
         elif model_name == "LogisticRegressionClassifier":
             return LogisticRegressionClassifier(x_train, y_train, x_test, y_test, tune_hyperparameters)
+        else:
+            raise ValueError(f"Unknown model: {model_name}")
+
+class RegressorFactory:
+    @staticmethod
+    def get_regressor(model_name, x_train, y_train, x_test, y_test, tune_hyperparameters=False):
+        if model_name == "LinearRegression":
+            return LinearRegressionModel(x_train, y_train, x_test, y_test, tune_hyperparameters)
+        elif model_name == "RidgeRegression":
+            return RidgeRegressionModel(x_train, y_train, x_test, y_test, tune_hyperparameters)
+        elif model_name == "LassoRegression":
+            return LassoRegressionModel(x_train, y_train, x_test, y_test, tune_hyperparameters)
+        elif model_name == "RandomForestRegressor":
+            return RandomForestRegressorModel(x_train, y_train, x_test, y_test, tune_hyperparameters)
         else:
             raise ValueError(f"Unknown model: {model_name}")
