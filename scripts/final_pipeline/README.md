@@ -7,6 +7,7 @@ This folder provides comprehensive pipeline for predicting the flexibility of am
 - **Handling Data Imbalance**: Built-in support for oversampling and undersampling to manage imbalanced datasets.
 - **Scalability**: Support for multi-GPU training via nn.DataParallel and mixed-precision training for faster, more efficient model training.
 - **Inference and Analysis**: The pipeline allows for saving the best-performing model for inference and includes a dedicated script for extracting attention weights and visualizing them.
+- **Cluster-Aware Data Splitting**: Prevent data leakage with MMseqs2-based clustering and cluster-aware train/test splitting (see [MDCATH Workflow](MDCATH_WORKFLOW.md)).
 
 # Folder Structure
 
@@ -27,7 +28,15 @@ Training:
 Inference and Analysis:
 
 - `get_attn.py`: Main inference scripts, takes a fasta file and the best model check point, returns a JSON file with sequences, their attention weights and predicted neq class.
-- `pheatmap_functions.py`: Contains functions to plot attention heat maps and perform PCA. It can also analyze variant effect for an input file including a WT and mutants.  
+- `pheatmap_functions.py`: Contains functions to plot attention heat maps and perform PCA. It can also analyze variant effect for an input file including a WT and mutants.
+
+MDCATH Workflow (Cluster-Aware Data Splitting):
+
+- `cluster_sequences.py`: Cluster protein sequences using MMseqs2 to identify similar proteins.
+- `cluster_aware_split.py`: Split data by clusters to prevent data leakage.
+- `run_temperature_experiments.py`: Run classification experiments at different temperature thresholds.
+- `run_mdcath_pipeline.sh`: Complete pipeline script combining all steps.
+- `MDCATH_WORKFLOW.md`: Comprehensive documentation for the cluster-aware workflow.  
 
 # Training Instructions
 To train a model, use the `main.py` script and pass the desired arguments.
@@ -56,6 +65,42 @@ python main.py \
     --test_data_file ./test_data.csv \
     --device cuda
 ```
+
+# MDCATH Workflow (Preventing Data Leakage)
+
+For datasets like mdcath where sequence similarity can lead to data leakage, use our cluster-aware workflow:
+
+**Quick Start:**
+```bash
+# Run the complete pipeline
+bash run_mdcath_pipeline.sh ../../data/train_data.csv ./mdcath_experiments 0.3 0.8 0.2 42
+```
+
+**Step-by-Step:**
+```bash
+# 1. Cluster sequences (requires MMseqs2)
+python cluster_sequences.py \
+    --input ../../data/train_data.csv \
+    --output clustered_data.csv \
+    --min_seq_id 0.3 \
+    --coverage 0.8
+
+# 2. Split by clusters (prevent data leakage)
+python cluster_aware_split.py \
+    --input clustered_data.csv \
+    --train_output train_data.csv \
+    --test_output test_data.csv \
+    --test_size 0.2
+
+# 3. Run experiments at different temperatures
+python run_temperature_experiments.py \
+    --train_data train_data.csv \
+    --test_data test_data.csv \
+    --output_dir ./temperature_experiments
+```
+
+**For detailed documentation, see [MDCATH_WORKFLOW.md](MDCATH_WORKFLOW.md)**
+
 # Inference Instructions
 
 Once the model is trained and saved, you can apply it to sequences from a FASTA file to get predicted neq class and attention weights. The results will be saved in your desired path as a JSON file.

@@ -1,0 +1,52 @@
+[
+  {
+    "name": "binary_standard",
+    "description": "Binary classification - standard threshold at 1.0 (rigid vs flexible)",
+    "num_classes": 2,
+    "neq_thresholds": [1.0],
+    "architecture": "bilstm",
+    "hidden_size": 512,
+    "num_layers": 3,
+    "dropout": 0.3,
+    "loss_function": "focal",
+    "lr": 1e-5
+  },
+  {
+    "name": "binary_conservative",
+    "description": "Binary classification - conservative threshold at 2.0",
+    "num_classes": 2,
+    "neq_thresholds": [2.0],
+    "architecture": "bilstm",
+    "hidden_size": 512,
+    "num_layers": 3,
+    "dropout": 0.3,
+    "loss_function": "focal",
+    "lr": 1e-5
+  },
+  {
+    "name": "three_class_balanced",
+    "description": "3-class classification with balanced thresholds",
+    "num_classes": 3,
+    "neq_thresholds": [1.0, 2.0],
+    "architecture": "bilstm",
+    "hidden_size": 512,
+    "num_layers": 3,
+    "dropout": 0.3,
+    "loss_function": "focal",
+    "lr": 1e-5,
+    "oversampling": true
+  },
+  {
+    "name": "four_class_fine_grained",
+    "description": "4-class classification with fine-grained temperature gradations",
+    "num_classes": 4,
+    "neq_thresholds": [1.0, 1.5, 2.5],
+    "architecture": "bilstm",
+    "hidden_size": 512,
+    "num_layers": 3,
+    "dropout": 0.3,
+    "loss_function": "focal",
+    "lr": 1e-5,
+    "oversampling": true
+  }
+]
