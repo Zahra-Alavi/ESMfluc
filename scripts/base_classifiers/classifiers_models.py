@@ -61,12 +61,10 @@ class LogisticRegressionClassifier(SklearnClassifier):
     def _tune_hyperparameters(self, x_train, y_train):
         """Uses GridSearchCV to find the best hyperparameters for Logistic Regression."""
         param_grid = {
-            'max_iter': [100, 200, 300, 400, 500],  # Maximum number of iterations
-            'C': [0.001, 0.01, 0.1, 1, 10, 100],  # Regularization strength
-            'penalty': ['l1', 'l2'],  # Regularization type
-            'tol': [1e-4, 1e-3, 1e-2],  # Tolerance for stopping criteria
-            'class_weight': ['balanced', None],  # Weights associated with classes
-            #'n_jobs': [-1],
+            'max_iter': [200, 500],
+            'C': [0.01, 0.1, 1, 10, 100],
+            'penalty': ['l1', 'l2'],
+            'class_weight': ['balanced', None],
         }
         grid_search = GridSearchCV(LogisticRegression(solver='liblinear', random_state=42), param_grid, cv=5, scoring='accuracy', n_jobs=-1)
         grid_search.fit(x_train, y_train)
@@ -90,14 +88,12 @@ class RandomForestClassifierModel(SklearnClassifier):
     def _tune_hyperparameters(self, x_train, y_train):
         """Uses GridSearchCV to find the best hyperparameters for Random Forest."""
         param_grid = {
-            'n_estimators': [10, 50, 100, 200],  # Number of trees
-            'max_depth': [None, 10, 20, 30],  # Tree depth
-            'min_samples_split': [2, 5, 10],  # Min samples to split a node
-            'min_samples_leaf': [1, 2, 4],  # Min samples at a leaf node
-            'bootstrap': [True, False],  # Whether to use bootstrap sampling
-            'n_jobs': [-1],
-            'class_weight': ['balanced', None, 'balanced_subsample'],  # Weights associated with classes
-            'criterion': ['gini', 'entropy'],  # Splitting criteria
+            'n_estimators': [100, 200],
+            'max_depth': [10, 20, None],
+            'min_samples_split': [2, 5],
+            'min_samples_leaf': [1, 2],
+            'class_weight': ['balanced', None],
+            'criterion': ['gini', 'entropy'],
         }
         grid_search = GridSearchCV(RandomForestClassifier(random_state=42), param_grid, cv=5, scoring='accuracy', n_jobs=-1)
         grid_search.fit(x_train, y_train)
@@ -181,11 +177,9 @@ class RidgeRegressionModel(SklearnRegressor):
     def _tune_hyperparameters(self, x_train, y_train):
         """Uses GridSearchCV to find the best hyperparameters for Ridge Regression."""
         param_grid = {
-            'alpha': [0.001, 0.01, 0.1, 1, 10, 100, 1000],
-            'fit_intercept': [True, False],
-            'solver': ['auto', 'svd', 'cholesky', 'lsqr', 'sag', 'saga'],
-            'max_iter': [1000, 2000, 5000],
-            'tol': [1e-4, 1e-3, 1e-2],
+            'alpha': [0.01, 0.1, 1, 10, 100],
+            'solver': ['auto', 'lsqr', 'sag'],
+            'max_iter': [2000],
         }
         grid_search = GridSearchCV(Ridge(random_state=42), param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
         grid_search.fit(x_train, y_train)
@@ -210,10 +204,8 @@ class LassoRegressionModel(SklearnRegressor):
     def _tune_hyperparameters(self, x_train, y_train):
         """Uses GridSearchCV to find the best hyperparameters for Lasso Regression."""
         param_grid = {
-            'alpha': [0.001, 0.01, 0.1, 1, 10, 100],
-            'fit_intercept': [True, False],
-            'max_iter': [5000, 10000, 20000],
-            'tol': [1e-4, 1e-3, 1e-2],
+            'alpha': [0.001, 0.01, 0.1, 1, 10],
+            'max_iter': [10000],
             'selection': ['cyclic', 'random'],
         }
         grid_search = GridSearchCV(Lasso(random_state=42), param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
@@ -239,14 +231,13 @@ class RandomForestRegressorModel(SklearnRegressor):
     def _tune_hyperparameters(self, x_train, y_train):
         """Uses GridSearchCV to find the best hyperparameters for Random Forest Regressor."""
         param_grid = {
-            'n_estimators': [50, 100, 200],
-            'max_depth': [None, 10, 20, 30],
-            'min_samples_split': [2, 5, 10],
-            'min_samples_leaf': [1, 2, 4],
-            'max_features': ['sqrt', 'log2', None],
-            'bootstrap': [True, False],
+            'n_estimators': [100, 200],
+            'max_depth': [10, 20, None],
+            'min_samples_split': [2, 5],
+            'min_samples_leaf': [1, 2],
+            'max_features': ['sqrt', 'log2'],
         }
-        grid_search = GridSearchCV(RandomForestRegressor(random_state=42, n_jobs=-1), param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
+        grid_search = GridSearchCV(RandomForestRegressor(random_state=42, n_jobs=-1), param_grid, cv=3, scoring='neg_mean_squared_error', n_jobs=-1)
         grid_search.fit(x_train, y_train)
         print(f"Best Random Forest Regressor Parameters: {grid_search.best_params_}")
         
