@@ -237,7 +237,7 @@ class RandomForestRegressorModel(SklearnRegressor):
             'min_samples_leaf': [1, 2],
             'max_features': ['sqrt', 'log2'],
         }
-        grid_search = GridSearchCV(RandomForestRegressor(random_state=42, n_jobs=-1), param_grid, cv=3, scoring='neg_mean_squared_error', n_jobs=-1)
+        grid_search = GridSearchCV(RandomForestRegressor(random_state=42), param_grid, cv=3, scoring='neg_mean_squared_error', n_jobs=-1)
         grid_search.fit(x_train, y_train)
         print(f"Best Random Forest Regressor Parameters: {grid_search.best_params_}")
         
