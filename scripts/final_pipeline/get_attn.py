@@ -51,6 +51,8 @@ def parse_args():
                         help="Number of BiLSTM layers (default: 3).")
     parser.add_argument("--dropout", type=float, default=0.3,
                         help="Dropout rate (default: 0.3).")
+    parser.add_argument("--bidirectional", type=int, default=1,
+                        help="Use bidirectional LSTM (1=True, 0=False, default: 1).")
     parser.add_argument("--layer", type=int, default=-1,
                         help="ESM layer to extract attention from (for esm_linear). Use -1 for last layer.")
     parser.add_argument("--ss_csv", type=str, required=False,
@@ -82,8 +84,7 @@ def parse_fasta_file(fasta_path):
             yield seq_id, "".join(seq_lines)
 
 
-            
-def run_model_bilstm_attn(model, tokenizer, sequence, device):
+def run_model_bilstm_attn(model, tokenizer, sequence, device, task_type="classification"):
     """Extract attention from BiLSTMWithSelfAttentionModel (custom attention layer)."""
     enc = tokenizer(sequence, return_tensors="pt", padding=False, add_special_tokens=False)
     input_ids = enc["input_ids"].to(device)
@@ -98,14 +99,21 @@ def run_model_bilstm_attn(model, tokenizer, sequence, device):
     token_ids = input_ids[0].tolist()
     tokens = tokenizer.convert_ids_to_tokens(token_ids)  # length=L
     
-    y_probs = torch.softmax(logits, dim=-1)
-    y_preds = torch.argmax(y_probs, dim=-1)
-    y_preds = y_preds.view(-1)
+    if task_type == "classification":
+        y_probs = torch.softmax(logits, dim=-1)
+        y_preds = torch.argmax(y_probs, dim=-1)
+        y_preds = y_preds.view(-1)
+    else:  # regression
+        # logits shape: [B, L, num_outputs] -> squeeze to [B, L] then flatten to [L]
+        if logits.dim() == 3 and logits.size(-1) == 1:
+            y_preds = logits.squeeze(-1).view(-1)  # [B, L, 1] -> [B, L] -> [L]
+        else:
+            y_preds = logits.view(-1)  # Fallback: flatten everything
     
     return attn_weights, tokens, y_preds
 
 
-def run_model_esm_linear(model, tokenizer, sequence, device, layer_idx=-1):
+def run_model_esm_linear(model, tokenizer, sequence, device, layer_idx=-1, task_type="classification"):
     """Extract attention from ESMLinearTokenClassifier (ESM transformer attention)."""
     enc = tokenizer(sequence, return_tensors="pt", padding=False, add_special_tokens=False)
     input_ids = enc["input_ids"].to(device)
@@ -123,9 +131,16 @@ def run_model_esm_linear(model, tokenizer, sequence, device, layer_idx=-1):
     token_ids = input_ids[0].tolist()
     tokens = tokenizer.convert_ids_to_tokens(token_ids)
     
-    y_probs = torch.softmax(logits, dim=-1)
-    y_preds = torch.argmax(y_probs, dim=-1)
-    y_preds = y_preds.view(-1)
+    if task_type == "classification":
+        y_probs = torch.softmax(logits, dim=-1)
+        y_preds = torch.argmax(y_probs, dim=-1)
+        y_preds = y_preds.view(-1)
+    else:  # regression
+        # logits shape: [B, L, num_outputs] -> squeeze to [B, L] then flatten to [L]
+        if logits.dim() == 3 and logits.size(-1) == 1:
+            y_preds = logits.squeeze(-1).view(-1)  # [B, L, 1] -> [B, L] -> [L]
+        else:
+            y_preds = logits.view(-1)  # Fallback: flatten everything
     
     return attn_weights, tokens, y_preds
 
@@ -170,15 +185,16 @@ def main():
                 hidden_size=args.hidden_size,
                 num_layers=args.num_layers,
                 num_classes=args.num_classes,
-                dropout=args.dropout
+                dropout=args.dropout,
+                bidirectional=args.bidirectional
             )
-            run_fn = lambda m, t, s, d: run_model_bilstm_attn(m, t, s, d)
+            run_fn = lambda m, t, s, d: run_model_bilstm_attn(m, t, s, d, task_type="classification")
         elif args.architecture == "esm_linear":
             model = ESMLinearTokenClassifier(
                 embedding_model=embedding_model,
                 num_classes=args.num_classes
             )
-            run_fn = lambda m, t, s, d: run_model_esm_linear(m, t, s, d, layer_idx=args.layer)
+            run_fn = lambda m, t, s, d: run_model_esm_linear(m, t, s, d, layer_idx=args.layer, task_type="classification")
         else:
             raise ValueError(f"Unsupported architecture: {args.architecture}")
     
@@ -189,15 +205,16 @@ def main():
                 hidden_size=args.hidden_size,
                 num_layers=args.num_layers,
                 num_outputs=args.num_outputs,
-                dropout=args.dropout
+                dropout=args.dropout,
+                bidirectional=args.bidirectional
             )
-            run_fn = lambda m, t, s, d: run_model_bilstm_attn(m, t, s, d)
+            run_fn = lambda m, t, s, d: run_model_bilstm_attn(m, t, s, d, task_type="regression")
         elif args.architecture == "esm_linear":
             model = ESMLinearTokenRegressor(
                 embedding_model=embedding_model,
                 num_outputs=args.num_outputs
             )
-            run_fn = lambda m, t, s, d: run_model_esm_linear(m, t, s, d, layer_idx=args.layer)
+            run_fn = lambda m, t, s, d: run_model_esm_linear(m, t, s, d, layer_idx=args.layer, task_type="regression")
         else:
             raise ValueError(f"Unsupported architecture: {args.architecture}")
     else:
