@@ -69,7 +69,15 @@ def collate_fn_sequence(batch, tokenizer):
 
     input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=pad_token_id)
     attention_masks_padded = pad_sequence(attention_masks, batch_first=True, padding_value=0)
-    labels_padded = pad_sequence(labels, batch_first=True, padding_value=-1)
+    
+    # Use -100.0 for regression (matches WeightedMSELoss) and -1 for classification
+    # Determine padding value based on label dtype
+    if len(labels) > 0 and labels[0].dtype == torch.float32:
+        # Regression task - use -100.0
+        labels_padded = pad_sequence(labels, batch_first=True, padding_value=-100.0)
+    else:
+        # Classification task - use -1
+        labels_padded = pad_sequence(labels, batch_first=True, padding_value=-1)
 
     return {
         'input_ids': input_ids_padded,
