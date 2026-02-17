@@ -1,4 +1,9 @@
-# This file is obtained from https://github.com/compsciencelab/mdCATH/tree/main/user-utils
+# This file is derived from code in the mdCATH project:
+#   https://github.com/compsciencelab/mdCATH/tree/main/user-utils
+# and is redistributed here under the same license terms as the original project.
+# See the mdCATH repository for the applicable license and copyright information.
+# Modifications from the original version may include changes to documentation,
+# argument parsing defaults, and adaptation to this project's layout.
 
 import h5py
 import tempfile
