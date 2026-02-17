@@ -197,9 +197,23 @@ class SequenceRegressionDataset(Dataset):
         }
 
 
-def load_regression_data(csv_file):
-    """Load data for regression - keeps continuous Neq values"""
+def load_regression_data(csv_file, use_log=False):
+    """
+    Load data for regression - keeps continuous Neq values
+    
+    Args:
+        csv_file: Path to CSV file
+        use_log: If True, transform Neq to log(Neq)
+    
+    Returns:
+        DataFrame with 'sequence' and 'neq' columns
+    """
     df = pd.read_csv(csv_file)
     if df['neq'].dtype == object:
         df['neq'] = df['neq'].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
+    
+    if use_log:
+        df['neq'] = df['neq'].apply(lambda x: [np.log(val) for val in x])
+    
     return df
+

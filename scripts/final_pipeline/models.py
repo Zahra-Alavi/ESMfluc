@@ -244,10 +244,11 @@ class FocalLoss(nn.Module):
 class BiLSTMRegressionModel(nn.Module):
     """BiLSTM for per-residue regression (e.g., predicting continuous Neq values)"""
     def __init__(self, embedding_model, hidden_size, num_layers,
-                 num_outputs=1, dropout=0.3, bidirectional=1):
+                 num_outputs=1, dropout=0.3, bidirectional=1, activation='none'):
         super().__init__()
         self.embedding_model = embedding_model
         self.bidirectional = bool(bidirectional)
+        self.activation = activation  # 'none', 'bounded_sigmoid', 'exp'
         self.lstm = nn.LSTM(
             input_size=embedding_model.config.hidden_size,
             hidden_size=hidden_size,
@@ -266,6 +267,15 @@ class BiLSTMRegressionModel(nn.Module):
         h = self.dropout(h)
         output = self.fc(h)  # [B, L, num_outputs]
         
+        # Apply activation if specified
+        if self.activation == 'bounded_sigmoid':
+            # For Neq ∈ [1.0, 8.0] - use WITHOUT log transform
+            output = 1.0 + 7.0 * torch.sigmoid(output)
+        elif self.activation == 'log_bounded_sigmoid':
+            # For log(Neq) ∈ [0.0, 2.23] - use WITH log transform
+            output = 2.23 * torch.sigmoid(output)
+        # else: 'none' - raw output
+        
         feats = h if return_features == "pre" else (output if return_features == "post" else None)
         return output, feats
 
@@ -273,10 +283,11 @@ class BiLSTMRegressionModel(nn.Module):
 class BiLSTMWithSelfAttentionRegressionModel(nn.Module):
     """BiLSTM with self-attention for regression"""
     def __init__(self, embedding_model, hidden_size, num_layers,
-                 num_outputs=1, dropout=0.3, bidirectional=1):
+                 num_outputs=1, dropout=0.3, bidirectional=1, activation='none'):
         super().__init__()
         self.embedding_model = embedding_model
         self.bidirectional = bool(bidirectional)
+        self.activation = activation  # 'none', 'bounded_sigmoid', 'exp'
         self.lstm = nn.LSTM(
             input_size=embedding_model.config.hidden_size,
             hidden_size=hidden_size,
@@ -297,6 +308,15 @@ class BiLSTMWithSelfAttentionRegressionModel(nn.Module):
                      else (self.attention(h, attention_mask), None))
         ctx = self.dropout(ctx)
         output = self.fc(ctx)  # [B, L, num_outputs]
+        
+        # Apply activation if specified
+        if self.activation == 'bounded_sigmoid':
+            # For Neq ∈ [1.0, 8.0] - use WITHOUT log transform
+            output = 1.0 + 7.0 * torch.sigmoid(output)
+        elif self.activation == 'log_bounded_sigmoid':
+            # For log(Neq) ∈ [0.0, 2.23] - use WITH log transform
+            output = 2.23 * torch.sigmoid(output)
+        # else: 'none' - raw output
         
         feats = ctx if return_features == "pre" else (output if return_features == "post" else None)
         return (output, feats, attn) if return_attention else (output, feats)

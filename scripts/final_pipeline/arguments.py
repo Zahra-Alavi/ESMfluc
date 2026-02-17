@@ -168,6 +168,13 @@ def parse_arguments():
 
     parser.add_argument("--huber_delta", type=float, default=1.0,
                         help="Delta parameter for Huber loss. default=1.0")
+    
+    parser.add_argument("--use_log_neq", action="store_true",
+                        help="Transform Neq to log(Neq) for regression. Predictions will be exp(output).")
+    
+    parser.add_argument("--activation", type=str, default="none",
+                        choices=["none", "bounded_sigmoid", "log_bounded_sigmoid"],
+                        help="Output activation: 'none' for raw output, 'bounded_sigmoid' for Neq∈[1,8] (use without --use_log_neq), 'log_bounded_sigmoid' for log(Neq)∈[0,2.23] (use with --use_log_neq)")
 
 
     return parser
