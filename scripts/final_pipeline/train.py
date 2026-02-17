@@ -445,7 +445,17 @@ def train(args):
     plt.savefig(f"{run_folder}/loss_curve.png")
 
     
-    # Evaluation
+    # Evaluation - load best model if validation was used
+    print("\nEvaluating on test set...")
+    if val_loader is not None:
+        best_model_path = f"{run_folder}/best_model.pth"
+        if os.path.exists(best_model_path):
+            print(f"Loading best model from {best_model_path}")
+            if isinstance(model, nn.DataParallel):
+                model.module.load_state_dict(torch.load(best_model_path, map_location=args.device))
+            else:
+                model.load_state_dict(torch.load(best_model_path, map_location=args.device))
+    
     cls_report, conf_matrix = evaluate(model, test_loader, criterion, args)
     cls_report_df = pd.DataFrame(cls_report).transpose()
     latex_table = cls_report_df.to_latex(float_format="%.2f")
@@ -758,10 +768,20 @@ def train_regression(args):
     val_loader = None
     need_val = (args.lr_scheduler == "reduce_on_plateau") or (args.patience and args.patience > 0)
     
+    print(f"\n{'='*60}")
+    print(f"DATA SPLIT INFORMATION")
+    print(f"{'='*60}")
+    print(f"Original train size: {len(X_train)} sequences")
+    print(f"Original test size: {len(X_test)} sequences")
+    
     if need_val:
         X_train, X_val, y_train, y_val = train_test_split(
             X_train, y_train, test_size=0.2, random_state=args.seed
         )
+        print(f"After split:")
+        print(f"  - Train: {len(X_train)} sequences ({len(X_train)/(len(X_train)+len(X_val))*100:.1f}%)")
+        print(f"  - Val: {len(X_val)} sequences ({len(X_val)/(len(X_train)+len(X_val))*100:.1f}%)")
+        print(f"  - Test: {len(X_test)} sequences (held out)")
         val_dataset = SequenceRegressionDataset(X_val, y_val)
         val_loader = DataLoader(
             val_dataset,
@@ -769,10 +789,24 @@ def train_regression(args):
             shuffle=False,
             collate_fn=lambda x: collate_fn_sequence(x, tokenizer)
         )
+    else:
+        print(f"No validation split (need_val=False)")
+    print(f"{'='*60}\n")
     
     # Create datasets
     train_dataset = SequenceRegressionDataset(X_train, y_train)
     test_dataset = SequenceRegressionDataset(X_test, y_test)
+    
+    # SANITY CHECK: Verify no data overlap between train and test
+    train_first_seq = train_data['sequence'].iloc[0] if need_val else train_data['sequence'].iloc[0]
+    test_first_seq = test_data['sequence'].iloc[0]
+    print(f"\\nSanity check - first sequences:")
+    print(f"  Train[0]: {train_first_seq[:30]}...")
+    print(f"  Test[0]: {test_first_seq[:30]}...")
+    if train_first_seq == test_first_seq:
+        print("  ⚠️ WARNING: Train and test data appear identical!")
+    else:
+        print("  ✓ Train and test data are different")
     
     train_loader = DataLoader(
         train_dataset,
@@ -888,16 +922,40 @@ def train_regression(args):
     plt.close()
     
     # Final evaluation on test set
-    print("\nEvaluating on test set...")
+    print("\n" + "="*60)
+    print("FINAL TEST EVALUATION")
+    print("="*60)
+    print(f"Test loader has {len(test_loader.dataset)} sequences")
+    print(f"Test loader batches: {len(test_loader)}")
+    
+    # Load best model if validation was used
+    if val_loader is not None:
+        best_model_path = f"{run_folder}/best_model.pth"
+        if os.path.exists(best_model_path):
+            print(f"✓ Loading best model from {best_model_path}")
+            if isinstance(model, nn.DataParallel):
+                model.module.load_state_dict(torch.load(best_model_path, map_location=args.device))
+            else:
+                model.load_state_dict(torch.load(best_model_path, map_location=args.device))
+        else:
+            print(f"✗ WARNING: Best model not found at {best_model_path}")
+            print(f"  Using current model state (may be overfit)")
+    else:
+        print("⚠ No validation used - evaluating current model state")
+    
+    print(f"\nEvaluating on {len(test_loader.dataset)} test sequences...")
     test_metrics = evaluate_regression(model, test_loader, criterion, args)
     
-    print("\nTest Set Results:")
+    print("\n" + "="*60)
+    print("TEST SET RESULTS")
+    print("="*60)
     print(f"  Loss: {test_metrics['loss']:.4f}")
     print(f"  MSE: {test_metrics['mse']:.4f}")
     print(f"  RMSE: {test_metrics['rmse']:.4f}")
     print(f"  MAE: {test_metrics['mae']:.4f}")
-    print(f"  R²: {test_metrics['r2']:.4f}")
+    print(f"  R²: {test_metrics['r2']:.4f}  ← THIS IS TEST SET R²")
     print(f"  Pearson r: {test_metrics['pearson_r']:.4f} (p={test_metrics['pearson_p']:.2e})")
+    print(f"="*60)
     
     # Save metrics to CSV
     metrics_df = pd.DataFrame([{
