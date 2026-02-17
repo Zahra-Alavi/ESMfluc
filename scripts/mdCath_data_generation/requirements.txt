@@ -1,0 +1,7 @@
+h5py>=3.9.0
+MDAnalysis>=2.5.0
+mdtraj
+numpy>=1.24.0
+pandas>=2.0.0
+pbxplore>=1.3.5
+requests>=2.31.0
