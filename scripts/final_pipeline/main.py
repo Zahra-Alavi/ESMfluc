@@ -7,8 +7,6 @@ Created on Tue Feb  4 10:43:57 2025
 
 import logging
 from arguments import parse_arguments
-from train import train, train_regression
-
 import torch 
 
 def main():
@@ -19,13 +17,22 @@ def main():
 
     logging.basicConfig(level=logging.INFO)
     
-    # Route to appropriate training function based on task type
-    if args.task_type == "classification":
-        train(args)  # Existing classification training
-    elif args.task_type == "regression":
-        train_regression(args)  # New regression training
-    else:
-        raise ValueError(f"Unknown task_type: {args.task_type}")
+    # Import from train_unified if available, otherwise fall back to train
+    try:
+        from train_unified import train_model
+        print("Using train_unified.py for training")
+        train_model(args)
+    except ImportError:
+        print("train_unified.py not found, using train.py")
+        from train import train, train_regression
+        
+        # Route to appropriate training function based on task type
+        if args.task_type == "classification":
+            train(args)  # Existing classification training
+        elif args.task_type == "regression":
+            train_regression(args)  # New regression training
+        else:
+            raise ValueError(f"Unknown task_type: {args.task_type}")
 
 if __name__ == "__main__":
     main()
