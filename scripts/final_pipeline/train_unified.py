@@ -495,14 +495,40 @@ def train_model(args):
     else:
         model.load_state_dict(torch.load(best_model_path, map_location=args.device))
     
+    # Plot loss curves
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(10, 6))
+    epochs_list = [h['epoch'] for h in train_history]
+    train_losses = [h['train_loss'] for h in train_history]
+    val_losses = [h.get('loss', h.get('val_loss')) for h in train_history]
+    
+    plt.plot(epochs_list, train_losses, label='Training Loss', marker='o')
+    if val_losses:
+        plt.plot(epochs_list, val_losses, label='Validation Loss', marker='s')
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Training Loss Curve")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    loss_curve_path = os.path.join(result_dir, 'loss_curve.png')
+    plt.savefig(loss_curve_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"Saved loss curve to {loss_curve_path}")
+    
     # Final test evaluation
     print("\n" + "="*70)
     print("FINAL TEST EVALUATION")
     print("="*70)
     test_metrics = evaluate_model(model, test_loader, criterion, args)
     
+    # Save args.txt
+    args_path = os.path.join(result_dir, 'args.txt')
+    with open(args_path, 'w') as f:
+        f.write(str(args))
+    print(f"Saved arguments to {args_path}")
+    
     if args.task_type == "regression":
-        print(f"Test Set Results:")
+        print(f"\nTest Set Results:")
         print(f"  MSE:  {test_metrics['mse']:.4f}")
         print(f"  RMSE: {test_metrics['rmse']:.4f}")
         print(f"  MAE:  {test_metrics['mae']:.4f}")
@@ -510,72 +536,107 @@ def train_model(args):
         print(f"  Pearson r: {test_metrics['pearson_r']:.4f}")
         print(f"  Total residues: {test_metrics['n_residues']}")
         
-        # Save metrics to CSV
+        # Save comprehensive metrics CSV (matching train.py format)
         metrics_df = pd.DataFrame([{
-            'mse': test_metrics['mse'],
-            'rmse': test_metrics['rmse'],
-            'mae': test_metrics['mae'],
-            'r2': test_metrics['r2'],
+            'task': 'regression',
+            'architecture': args.architecture,
+            'esm_model': args.esm_model,
+            'batch_size': args.batch_size,
+            'lr': args.lr,
+            'epochs_ran': len(train_history),
+            'best_val_loss': best_val_loss,
+            'test_loss': test_metrics['loss'],
+            'test_mse': test_metrics['mse'],
+            'test_rmse': test_metrics['rmse'],
+            'test_mae': test_metrics['mae'],
+            'test_r2': test_metrics['r2'],
             'pearson_r': test_metrics['pearson_r'],
-            'n_residues': test_metrics['n_residues']
+            'pearson_p': test_metrics.get('pearson_p', 0.0),
+            'n_residues': test_metrics['n_residues'],
+            'seed': getattr(args, 'seed', None),
+            'device': str(args.device)
         }])
-        metrics_csv_path = os.path.join(result_dir, 'regression_metrics.csv')
+        metrics_csv_path = os.path.join(result_dir, 'run_summary.csv')
         metrics_df.to_csv(metrics_csv_path, index=False)
-        print(f"\nSaved metrics to {metrics_csv_path}")
+        print(f"Saved run summary to {metrics_csv_path}")
     else:
-        print(f"Test Set Results:")
+        print(f"\nTest Set Results:")
         print(f"  Accuracy: {test_metrics['accuracy']:.4f}")
+        
+        # Print classification report
+        from sklearn.metrics import classification_report as sk_classification_report
+        cls_report_dict = test_metrics['report']
+        cls_report_str = sk_classification_report([], [], output_dict=False) if not cls_report_dict else \
+                         pd.DataFrame(cls_report_dict).transpose().to_string()
         print("\nClassification Report:")
-        print(classification_report([], [], output_dict=False))
+        print(cls_report_str)
+        
+        # Save classification report (.txt and .tex)
+        report_txt_path = os.path.join(result_dir, 'classification_report.txt')
+        with open(report_txt_path, 'w') as f:
+            f.write(str(cls_report_dict))
+        
+        report_df = pd.DataFrame(cls_report_dict).transpose()
+        latex_table = report_df.to_latex(float_format="%.2f")
+        report_tex_path = os.path.join(result_dir, 'classification_report.tex')
+        with open(report_tex_path, 'w') as f:
+            f.write(latex_table)
+        print(f"Saved classification report to {report_txt_path} and {report_tex_path}")
         
         # Save and display confusion matrix
         from sklearn.metrics import ConfusionMatrixDisplay
-        import matplotlib.pyplot as plt
         
         disp = ConfusionMatrixDisplay(confusion_matrix=test_metrics['confusion_matrix'])
         disp.plot(cmap='Blues')
         plt.title('Test Set Confusion Matrix')
         confusion_path = os.path.join(result_dir, 'confusion_matrix.png')
         plt.savefig(confusion_path, dpi=150, bbox_inches='tight')
-        print(f"\nSaved confusion matrix to {confusion_path}")
+        plt.close()
+        print(f"Saved confusion matrix to {confusion_path}")
         
-        # Save classification report
-        report_df = pd.DataFrame(test_metrics['report']).transpose()
-        report_csv_path = os.path.join(result_dir, 'classification_report.csv')
-        report_df.to_csv(report_csv_path)
-        print(f"Saved classification report to {report_csv_path}")
-    
-    # Save results
-    # Convert args to JSON-safe dict (exclude device objects)
-    args_dict = {k: v for k, v in vars(args).items() if k != 'device'}
-    args_dict['device'] = str(args.device)  # Convert device to string
-    
-    results = {
-        'args': args_dict,
-        'train_history': train_history,
-        'test_metrics': test_metrics,
-        'best_val_loss': best_val_loss
-    }
-    
-    with open(os.path.join(result_dir, 'training_results.json'), 'w') as f:
-        # Convert numpy types to native Python for JSON serialization
-        def convert(obj):
-            if isinstance(obj, np.integer):
-                return int(obj)
-            elif isinstance(obj, np.floating):
-                return float(obj)
-            elif isinstance(obj, np.ndarray):
-                return obj.tolist()
-            elif isinstance(obj, torch.device):
-                return str(obj)
-            return obj
+        # Save comprehensive run_summary.csv for classification
+        row = {
+            'run_dir': result_dir,
+            'task': 'classification',
+            'batch_size': args.batch_size,
+            'embedding_model': args.esm_model,
+            'model_architecture': args.architecture,
+            'loss_function': args.loss_function,
+            'epochs_ran': len(train_history),
+            'best_val_loss': best_val_loss,
+            'test_accuracy': test_metrics['accuracy'],
+            'seed': getattr(args, 'seed', None),
+            'device': str(args.device),
+            'lr': args.lr,
+        }
         
-        json.dump(results, f, indent=2, default=convert)
+        # Flatten classification report into columns
+        for key, val in cls_report_dict.items():
+            if key == "accuracy":
+                row["accuracy"] = val
+                continue
+            if isinstance(val, dict):
+                key_safe = str(key).replace(" ", "_")
+                for subk, subval in val.items():
+                    subk_safe = subk.replace("-", "_")
+                    row[f"{key_safe}_{subk_safe}"] = subval
+        
+        # Flatten confusion matrix
+        cm = test_metrics['confusion_matrix']
+        for i in range(cm.shape[0]):
+            for j in range(cm.shape[1]):
+                row[f"cm_true_{i}_pred_{j}"] = int(cm[i, j])
+        
+        summary_df = pd.DataFrame([row])
+        summary_csv_path = os.path.join(result_dir, 'run_summary.csv')
+        summary_df.to_csv(summary_csv_path, index=False)
+        print(f"Saved run summary to {summary_csv_path}")
     
-    print(f"\nResults saved to {result_dir}")
+    
+    print(f"\nTraining completed! Results saved to {result_dir}")
     print("="*70)
     
-    return model, results
+    return model
 
 
 if __name__ == "__main__":
@@ -587,4 +648,4 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     
     # Train
-    model, results = train_model(args)
+    model = train_model(args)
