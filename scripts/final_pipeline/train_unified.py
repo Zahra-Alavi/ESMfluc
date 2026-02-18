@@ -10,6 +10,13 @@ import time
 import json
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+from collections import Counter
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 from sklearn.model_selection import train_test_split
 import torch 
@@ -17,10 +24,12 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.cuda.amp import autocast, GradScaler
 
-from sklearn.metrics import classification_report, confusion_matrix, mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, mean_squared_error, mean_absolute_error, r2_score
+from sklearn.utils.class_weight import compute_class_weight
 from scipy.stats import pearsonr
 
 from data_utils import (
+    create_classification_func,
     load_and_preprocess_data,
     load_regression_data,
     SequenceClassificationDataset,
@@ -211,11 +220,12 @@ def train_model(args):
         
     else:
         # Classification: discrete classes
+        classify_neq = create_classification_func(args.num_classes, args.neq_thresholds)
         train_data = load_and_preprocess_data(
-            args.train_data_file, args.neq_thresholds, args.num_classes
+            args.train_data_file, classify_neq
         )
         test_data = load_and_preprocess_data(
-            args.test_data_file, args.neq_thresholds, args.num_classes
+            args.test_data_file, classify_neq
         )
         
         # Tokenize
@@ -239,7 +249,18 @@ def train_model(args):
     print(f"  Val:   {len(val_dataset)} sequences ({len(val_dataset)/(len(train_dataset)+len(val_dataset))*100:.1f}%)")
     print(f"  Test:  {len(test_dataset)} sequences")
     
+    # Print class distribution for classification
+    if args.task_type == "classification":
+        print(f"\nClass Distribution (Train):")
+        all_train_labels_flat = [lab for sublab in train_dataset.labels for lab in sublab]
+        class_counts = Counter(all_train_labels_flat)
+        for cls in sorted(class_counts.keys()):
+            print(f"  Class {cls}: {class_counts[cls]:,} residues ({class_counts[cls]/len(all_train_labels_flat)*100:.1f}%)")
+    
     # Create data loaders
+    # Use drop_last for DataParallel to avoid issues with uneven batch sizes across GPUs
+    drop_last_train = args.data_parallel and torch.cuda.device_count() > 1
+    
     if args.task_type == "classification" and args.oversampling:
         # Use weighted sampling for classification
         weights = compute_sampling_weights(
@@ -249,22 +270,28 @@ def train_model(args):
         )
         sampler = WeightedRandomSampler(weights, len(weights), replacement=True)
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler,
-                                   collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+                                   collate_fn=lambda x: collate_fn_sequence(x, tokenizer),
+                                   drop_last=drop_last_train)
+        print(f"Using oversampling with weighted sampler (drop_last={drop_last_train})")
     else:
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                                   collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
+                                   collate_fn=lambda x: collate_fn_sequence(x, tokenizer),
+                                   drop_last=drop_last_train)
     
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
                              collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                               collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
     
-    # Load embedding model
+    # Load embedding model and move to device
     embedding_model = EsmModel.from_pretrained(f"facebook/{args.esm_model}")
+    embedding_model.to(args.device)
+    
     if args.freeze_all_backbone:
         for param in embedding_model.parameters():
             param.requires_grad = False
-        print("ESM embeddings frozen")
+        embedding_model.eval()  # Set to eval mode when frozen (disables dropout/batchnorm)
+        print("ESM embeddings frozen (all parameters)")
     elif args.freeze_layers:
         # Ex: '0-5' means freeze layers 0..5, and unfreeze the rest
         start_layer, end_layer = map(int, args.freeze_layers.split("-"))
@@ -275,9 +302,11 @@ def train_model(args):
                 param.requires_grad = not layer_num in freeze_list
             else:
                 param.requires_grad = True
+        embedding_model.train()  # Set to train mode for fine-tuning
         print(f"Freezing ESM layers {args.freeze_layers}")
     else:
-        print("ESM embeddings will be fine-tuned")
+        embedding_model.train()  # Set to train mode for fine-tuning
+        print("ESM embeddings will be fine-tuned (all parameters)")
     
     # Print trainable ESM parameters
     n_trainable_esm = sum(p.numel() for p in embedding_model.parameters() if p.requires_grad)
@@ -363,7 +392,17 @@ def train_model(args):
             raise ValueError(f"Unknown regression loss: {args.regression_loss}")
     else:
         if args.loss_function == "focal":
-            criterion = FocalLoss(alpha=None, gamma=2.0, ignore_index=-1)
+            # Compute class weights if requested
+            if getattr(args, 'focal_class_weights', False):
+                print("Computing class weights for FocalLoss...")
+                all_train_labels_flat = [lab for sublab in train_dataset.labels for lab in sublab]
+                class_weights = compute_class_weight('balanced', classes=np.unique(all_train_labels_flat), y=all_train_labels_flat)
+                alpha_tensor = torch.tensor(class_weights, dtype=torch.float).to(args.device)
+                print(f"Class weights: {class_weights}")
+                criterion = FocalLoss(alpha=alpha_tensor, gamma=2.0, ignore_index=-1)
+            else:
+                print("Using FocalLoss without class weights")
+                criterion = FocalLoss(alpha=None, gamma=2.0, ignore_index=-1)
         elif args.loss_function == "crossentropy":
             criterion = nn.CrossEntropyLoss(ignore_index=-1)
         else:
@@ -399,6 +438,16 @@ def train_model(args):
     patience_counter = 0
     train_history = []
     
+    # Start timing
+    train_start_time = time.time()
+    
+    # Get initial memory usage
+    if psutil:
+        process = psutil.Process(os.getpid())
+        initial_cpu_mem = process.memory_info().rss / (1024 ** 3)  # GB
+    if args.device.type == 'cuda':
+        initial_gpu_mem = torch.cuda.memory_allocated(args.device) / (1024 ** 3)  # GB
+    
     print(f"\nStarting training for {args.epochs} epochs...")
     print(f"Results will be saved to: {result_dir}\n")
     
@@ -414,7 +463,9 @@ def train_model(args):
             optimizer.zero_grad()
             
             if scaler:
-                with autocast():
+                # Use fp16 or bf16 based on args.amp_dtype
+                amp_dtype = torch.float16 if getattr(args, 'amp_dtype', 'fp16') == 'fp16' else torch.bfloat16
+                with autocast(dtype=amp_dtype):
                     if args.task_type == "regression":
                         output, _ = model(input_ids, attention_mask, return_features="pre")
                         if output.dim() == 3 and output.size(-1) == 1:
@@ -499,15 +550,31 @@ def train_model(args):
                 print(f"\nEarly stopping at epoch {epoch+1}")
                 break
     
+    # Calculate training time
+    train_end_time = time.time()
+    training_time_minutes = (train_end_time - train_start_time) / 60
+    print(f"\nTotal training time: {training_time_minutes:.2f} minutes")
+    
+    # Get final memory usage
+    if psutil:
+        final_cpu_mem = process.memory_info().rss / (1024 ** 3)
+        print(f"CPU memory: {initial_cpu_mem:.2f} GB → {final_cpu_mem:.2f} GB (Δ {final_cpu_mem - initial_cpu_mem:.2f} GB)")
+    if args.device.type == 'cuda':
+        final_gpu_mem = torch.cuda.memory_allocated(args.device) / (1024 ** 3)
+        peak_gpu_mem = torch.cuda.max_memory_allocated(args.device) / (1024 ** 3)
+        print(f"GPU memory: {initial_gpu_mem:.2f} GB → {final_gpu_mem:.2f} GB (Peak: {peak_gpu_mem:.2f} GB)")
+    
     # Load best model for final evaluation
-    print(f"\nLoading best model from {best_model_path}")
-    if isinstance(model, nn.DataParallel):
-        model.module.load_state_dict(torch.load(best_model_path, map_location=args.device))
+    if os.path.exists(best_model_path):
+        print(f"\nLoading best model from {best_model_path}")
+        if isinstance(model, nn.DataParallel):
+            model.module.load_state_dict(torch.load(best_model_path, map_location=args.device))
+        else:
+            model.load_state_dict(torch.load(best_model_path, map_location=args.device))
     else:
-        model.load_state_dict(torch.load(best_model_path, map_location=args.device))
+        print(f"\nWarning: Best model file not found at {best_model_path}. Using current model state.")
     
     # Plot loss curves
-    import matplotlib.pyplot as plt
     plt.figure(figsize=(10, 6))
     epochs_list = [h['epoch'] for h in train_history]
     train_losses = [h['train_loss'] for h in train_history]
@@ -564,6 +631,8 @@ def train_model(args):
             'pearson_r': test_metrics['pearson_r'],
             'pearson_p': test_metrics.get('pearson_p', 0.0),
             'n_residues': test_metrics['n_residues'],
+            'training_time_minutes': training_time_minutes,
+            'peak_gpu_mem_gb': peak_gpu_mem if args.device.type == 'cuda' else None,
             'seed': getattr(args, 'seed', None),
             'device': str(args.device)
         }])
@@ -595,8 +664,6 @@ def train_model(args):
         print(f"Saved classification report to {report_txt_path} and {report_tex_path}")
         
         # Save and display confusion matrix
-        from sklearn.metrics import ConfusionMatrixDisplay
-        
         disp = ConfusionMatrixDisplay(confusion_matrix=test_metrics['confusion_matrix'])
         disp.plot(cmap='Blues')
         plt.title('Test Set Confusion Matrix')
@@ -616,6 +683,8 @@ def train_model(args):
             'epochs_ran': len(train_history),
             'best_val_loss': best_val_loss,
             'test_accuracy': test_metrics['accuracy'],
+            'training_time_minutes': training_time_minutes,
+            'peak_gpu_mem_gb': peak_gpu_mem if args.device.type == 'cuda' else None,
             'seed': getattr(args, 'seed', None),
             'device': str(args.device),
             'lr': args.lr,
