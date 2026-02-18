@@ -22,7 +22,9 @@ BASE_ARGS = {
     "--patience": "3",
     "--batch_size": "2",
     "--freeze_layers": "0-4",
+    "--loss_mode": "supervised",
     "--loss_function": "focal",
+    "--head": "softmax",
     "--num_classes": "2",
     "--neq_thresholds": "1.0",
     "--train_data_file": "./train_data.csv",
@@ -204,7 +206,10 @@ def grid_models():
 def grid_losses_on_bilstm_attn():
     """
     Loss/head sweep on bilstm_attention (same other params).
-    Only supervised runs (no NC loss).
+    Adds explicit NC-only runs with all three heads:
+      - softmax  (NC on pre-FC)
+      - postfc   (NC on logits)
+      - centroid (no FC; nearest-centroid)
     """
     items = []
     arch = {"--architecture": "bilstm_attention"}
@@ -214,11 +219,35 @@ def grid_losses_on_bilstm_attn():
     # supervised only
     items.append((
         "Attn_supervised_CE",
-        base_copy(**arch, **{"--loss_function": "crossentropy"})
+        base_copy(**arch, **{"--loss_mode": "supervised", "--loss_function": "crossentropy", "--head": "softmax"})
     ))
     items.append((
         "Attn_supervised_Focal",
-        base_copy(**arch, **{"--loss_function": "focal"})
+        base_copy(**arch, **{"--loss_mode": "supervised", "--loss_function": "focal", "--head": "softmax"})
+    ))
+
+    # NC only: sweep heads explicitly
+    items.append((
+        "Attn_NC_only_softmax",
+        base_copy(**arch, **{"--loss_mode": "nc", "--head": "softmax"})
+    ))
+    items.append((
+        "Attn_NC_only_postfc",
+        base_copy(**arch, **{"--loss_mode": "nc", "--head": "postfc"})
+    ))
+    items.append((
+        "Attn_NC_only_centroid",
+        base_copy(**arch, **{"--loss_mode": "nc", "--head": "centroid"})
+    ))
+
+    # NC + supervised 
+    items.append((
+        "Attn_NC_plus_CE",
+        base_copy(**arch, **{"--loss_mode": "both", "--loss_function": "crossentropy", "--head": "softmax"})
+    ))
+    items.append((
+        "Attn_NC_plus_Focal",
+        base_copy(**arch, **{"--loss_mode": "both", "--loss_function": "focal", "--head": "softmax"})
     ))
 
     return items
