@@ -81,7 +81,11 @@ def evaluate_model(model, data_loader, criterion, args):
                 output, feats = m(input_ids, attention_mask, return_features="pre")
                 if output.dim() == 3 and output.size(-1) == 1:
                     output = output.squeeze(-1)
-                loss = criterion(output, y)
+                
+                # Compute loss with masking (handle padding)
+                loss_unreduced = criterion(output, y)
+                mask = (y != -100.0)
+                loss = (loss_unreduced * mask).sum() / mask.sum().clamp(min=1)
                 
                 # Collect predictions (flatten and mask)
                 output_flat = output.reshape(-1)
@@ -346,14 +350,15 @@ def train_model(args):
     
     # Create loss function
     if args.task_type == "regression":
+        # Use reduction='none' for all losses to enable manual masking
         if args.regression_loss == "mse":
-            criterion = nn.MSELoss()
+            criterion = nn.MSELoss(reduction='none')
         elif args.regression_loss == "mae":
-            criterion = nn.L1Loss()
+            criterion = nn.L1Loss(reduction='none')
         elif args.regression_loss == "huber":
-            criterion = nn.HuberLoss(delta=args.huber_delta)
+            criterion = nn.HuberLoss(delta=args.huber_delta, reduction='none')
         elif args.regression_loss == "weighted_mse":
-            criterion = WeightedMSELoss(ignore_value=-100.0)
+            criterion = nn.MSELoss(reduction='none')  # Use same as mse, masking handled below
         else:
             raise ValueError(f"Unknown regression loss: {args.regression_loss}")
     else:
@@ -414,7 +419,10 @@ def train_model(args):
                         output, _ = model(input_ids, attention_mask, return_features="pre")
                         if output.dim() == 3 and output.size(-1) == 1:
                             output = output.squeeze(-1)
-                        loss = criterion(output, y)
+                        # Compute loss with masking
+                        loss_unreduced = criterion(output, y)
+                        mask = (y != -100.0)
+                        loss = (loss_unreduced * mask).sum() / mask.sum().clamp(min=1)
                     else:
                         logits, _ = model(input_ids, attention_mask, return_features="pre")
                         logits_flat = logits.reshape(-1, args.num_classes)
@@ -429,7 +437,10 @@ def train_model(args):
                     output, _ = model(input_ids, attention_mask, return_features="pre")
                     if output.dim() == 3 and output.size(-1) == 1:
                         output = output.squeeze(-1)
-                    loss = criterion(output, y)
+                    # Compute loss with masking
+                    loss_unreduced = criterion(output, y)
+                    mask = (y != -100.0)
+                    loss = (loss_unreduced * mask).sum() / mask.sum().clamp(min=1)
                 else:
                     logits, _ = model(input_ids, attention_mask, return_features="pre")
                     logits_flat = logits.reshape(-1, args.num_classes)
