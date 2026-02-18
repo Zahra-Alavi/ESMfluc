@@ -375,7 +375,7 @@ def train(args):
             
             optimizer.zero_grad()
             
-            if amp_enabled and args.device.startswith("cuda"):
+            if amp_enabled and on_cuda:
                 with autocast(dtype=amp_dtype):
                     logits, feats = model(input_ids, attention_mask, return_features="pre")
                     logits_flat = logits.reshape(-1, args.num_classes)
