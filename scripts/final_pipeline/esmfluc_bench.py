@@ -30,7 +30,7 @@ import pandas as pd
 import torch
 from transformers import EsmModel, EsmTokenizer
 
-from models import LSTMWithSelfAttentionModel
+from models import BiLSTMWithSelfAttentionModel
 
 
 # --------------------------------------------------------------------------------------
@@ -254,8 +254,8 @@ def main():
     embedding_model = EsmModel.from_pretrained("facebook/esm2_t33_650M_UR50D").to(device)
 
     # Build downstream head
-    print("[INFO] Building LSTMWithSelfAttentionModel …")
-    model = LSTMWithSelfAttentionModel(
+    print("[INFO] Building BiLSTMWithSelfAttentionModel …")
+    model = BiLSTMWithSelfAttentionModel(
         embedding_model=embedding_model,
         hidden_size=512,
         num_layers=3,

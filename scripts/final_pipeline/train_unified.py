@@ -40,7 +40,8 @@ from models import (
     BiLSTMWithSelfAttentionRegressionModel,
     TransformerClassificationModel,
     TransformerRegressionModel,
-    ESMLinearTokenClassifier
+    ESMLinearTokenClassifier,
+    ESMLinearTokenRegressor
 )
 
 from arguments import parse_arguments
@@ -298,6 +299,10 @@ def train_model(args):
                 embedding_model, args.transformer_nhead,
                 args.transformer_num_encoder_layers, args.transformer_dim_feedforward,
                 num_outputs=args.num_outputs, dropout=args.dropout
+            )
+        elif args.architecture == "esm_linear":
+            model = ESMLinearTokenRegressor(
+                embedding_model, num_outputs=args.num_outputs
             )
         else:
             raise ValueError(f"Architecture {args.architecture} not supported for regression")
