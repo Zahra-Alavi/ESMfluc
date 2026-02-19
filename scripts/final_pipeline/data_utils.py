@@ -197,13 +197,14 @@ class SequenceRegressionDataset(Dataset):
         }
 
 
-def load_regression_data(csv_file, use_log=False):
+def load_regression_data(csv_file, use_log=False, max_len=1024):
     """
     Load data for regression - keeps continuous Neq values
     
     Args:
         csv_file: Path to CSV file
         use_log: If True, transform Neq to log(Neq)
+        max_len: Maximum sequence length (default: 1024)
     
     Returns:
         DataFrame with 'sequence' and 'neq' columns
@@ -211,6 +212,19 @@ def load_regression_data(csv_file, use_log=False):
     df = pd.read_csv(csv_file)
     if df['neq'].dtype == object:
         df['neq'] = df['neq'].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
+    
+    # Drop invalid rows (missing data or mismatched lengths)
+    df = df.dropna(subset=['sequence', 'neq']).reset_index(drop=True)
+    df = df[
+        df['sequence'].str.len() == df['neq'].apply(len)
+    ].reset_index(drop=True)
+    
+    # Filter out sequences longer than max_len
+    long_mask = df['sequence'].str.len() > max_len
+    n_long = long_mask.sum()
+    if n_long:
+        print(f"{n_long} sequences longer than {max_len} aa removed from {csv_file}")
+        df = df[~long_mask].reset_index(drop=True)
     
     if use_log:
         df['neq'] = df['neq'].apply(lambda x: [np.log(val) for val in x])
