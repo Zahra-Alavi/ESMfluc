@@ -58,7 +58,7 @@ def main():
     num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
     
     if num_gpus > 0:
-        accelerator, devices, strategy, precision = "gpu", num_gpus, ("ddp" if num_gpus > 1 else "auto"), "16-mixed"
+        accelerator, devices, strategy, precision = "gpu", num_gpus, ("ddp_find_unused_parameters_true" if num_gpus > 1 else "auto"), "16-mixed"
         print(f"Training on {num_gpus} GPU(s) using {strategy} strategy.")
     elif torch.backends.mps.is_available():
         accelerator, devices, strategy, precision = "mps", 1, "auto", "32-true"
