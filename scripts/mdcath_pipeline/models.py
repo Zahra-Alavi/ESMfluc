@@ -3,7 +3,7 @@ import torch.nn as nn
 from transformers import EsmModel
 
 class EsmFlucModel(nn.Module):
-    def __init__(self, pretrained_model_name='facebook/essm2_t6_8M_UR50D', hidden_size=180, num_unfreeze_layers=0):
+    def __init__(self, pretrained_model_name='facebook/essm2_t6_8M_UR50D', hidden_size=180, num_unfreeze_layers=0, dropout_rate=0.1):
         super().__init__()
 
         self.esm = EsmModel.from_pretrained(pretrained_model_name)
@@ -15,7 +15,7 @@ class EsmFlucModel(nn.Module):
         
         # Unfreeze the last `num_unfreeze_layers` layers of ESM
         if num_unfreeze_layers > 0:
-            for layer in self.esm.encoder.layers[-num_unfreeze_layers:]:
+            for layer in self.esm.encoder.layer[-num_unfreeze_layers:]:
                 for param in layer.parameters():
                     param.requires_grad = True
 
@@ -27,6 +27,7 @@ class EsmFlucModel(nn.Module):
         self.regression_head = nn.Sequential(
             nn.Linear(esm_hidden_size + 1, hidden_size),
             nn.ReLU(),
+            nn.Dropout(dropout_rate),
             nn.Linear(hidden_size, 1)  # Output is a single scalar per residue
         )
     

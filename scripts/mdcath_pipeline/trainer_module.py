@@ -72,6 +72,10 @@ class EsmFlucTrainer(L.LightningModule):
             self.model.parameters(), 
             lr=self.lr,
             weight_decay=self.weight_decay)
+    
+    def on_train_epoch_start(self):
+        # Ensure the ESM backbone is in training mode
+        self.model.esm.train()
         
     def _calculate_loss(self, preds, targets, weight_factor):
         if self.loss_type == 'weighted':
