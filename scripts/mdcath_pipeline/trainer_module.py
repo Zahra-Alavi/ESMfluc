@@ -38,6 +38,14 @@ class EsmFlucTrainer(L.LightningModule):
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True,  sync_dist=True)
         return loss
     
+    def _masked(self, preds, targets):
+        preds_flat = preds.view(-1)
+        targets_flat = targets.view(-1)
+        mask = (targets_flat != self.masked_value)
+        masked_preds = preds_flat[mask]
+        masked_targets = targets_flat[mask]
+        return masked_preds, masked_targets
+
     def validation_step(self, batch, batch_idx):
         preds = self.model(
             input_ids=batch['input_ids'],
@@ -46,11 +54,17 @@ class EsmFlucTrainer(L.LightningModule):
         )
         
         loss = None
+        m_preds, m_targets = self._masked(preds, batch['labels'])
         if self.loss_type == 'weighted':
-            loss = weighted_masked_mse_loss(preds, batch['labels'], self.weight_threshold, self.weight_factor, self.masked_value)
+            loss = weighted_masked_mse_loss(m_preds, m_targets, self.weight_threshold, self.weight_factor)
         else:
-            loss = masked_mse_loss(preds, batch['labels'], self.masked_value)
+            loss = masked_mse_loss(m_preds, m_targets)
         
+        if m_targets.numel() > 0:  # Only update if there are real amino acids! 
+            self.val_mae.update(m_preds, m_targets)
+            self.val_spearman.update(m_preds, m_targets)
+            self.val_pearson.update(m_preds, m_targets)
+
         self.log("val_loss", loss, prog_bar=True, sync_dist=True)
         self.log("val_mae", self.val_mae, prog_bar=True, on_epoch=True, sync_dist=True)
         self.log("val_spearman", self.val_spearman, prog_bar=True, on_epoch=True, sync_dist=True)
