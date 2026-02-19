@@ -10,6 +10,8 @@ from models import EsmFlucModel
 from dataset import MdCathSequenceDataset
 from trainer_module import EsmFlucTrainer
 
+torch.set_float32_matmul_precision('high')
+
 def parse_args():
     parser = argparse.ArgumentParser(description="ESM-Flex: Protein Flexibility Prediction")
 

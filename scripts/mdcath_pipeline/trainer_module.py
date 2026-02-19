@@ -35,7 +35,7 @@ class EsmFlucTrainer(L.LightningModule):
         else:
             loss = masked_mse_loss(preds, batch['labels'])
         
-        self.log("train_loss", loss, on_step=True, on_epoch=True)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True,  sync_dist=True)
         return loss
     
     def validation_step(self, batch, batch_idx):
@@ -51,10 +51,10 @@ class EsmFlucTrainer(L.LightningModule):
         else:
             loss = masked_mse_loss(preds, batch['labels'], self.masked_value)
         
-        self.log("val_loss", loss, prog_bar=True)
-        self.log("val_mae", self.val_mae, prog_bar=True, on_epoch=True)
-        self.log("val_spearman", self.val_spearman, prog_bar=True, on_epoch=True)
-        self.log("val_pearson", self.val_pearson, prog_bar=True, on_epoch=True)
+        self.log("val_loss", loss, prog_bar=True, sync_dist=True)
+        self.log("val_mae", self.val_mae, prog_bar=True, on_epoch=True, sync_dist=True)
+        self.log("val_spearman", self.val_spearman, prog_bar=True, on_epoch=True, sync_dist=True)
+        self.log("val_pearson", self.val_pearson, prog_bar=True, on_epoch=True, sync_dist=True)
         return loss
     
     def configure_optimizers(self):
