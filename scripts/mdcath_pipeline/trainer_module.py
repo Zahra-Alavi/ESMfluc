@@ -21,6 +21,7 @@ class EsmFlucTrainer(L.LightningModule):
         self.val_pearson = PearsonCorrCoef()
         
     def training_step(self, batch, batch_idx):
+        weight_factor = 1 if self.current_epoch < 5 else self.weight_factor
         # Forward pass
         preds = self.model(
             input_ids=batch['input_ids'],
@@ -30,7 +31,7 @@ class EsmFlucTrainer(L.LightningModule):
         
         # Calculate loss
         m_preds, m_targets = self._masked(preds, batch['labels'])
-        loss = self._calculate_loss(m_preds, m_targets)
+        loss = self._calculate_loss(m_preds, m_targets, weight_factor=weight_factor)
         
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True,  sync_dist=True)
         return loss
@@ -44,6 +45,7 @@ class EsmFlucTrainer(L.LightningModule):
         return masked_preds, masked_targets
 
     def validation_step(self, batch, batch_idx):
+        weight_factor = 1 if self.current_epoch < 5 else self.weight_factor
         preds = self.model(
             input_ids=batch['input_ids'],
             attention_mask=batch['attention_mask'],
@@ -51,7 +53,7 @@ class EsmFlucTrainer(L.LightningModule):
         )
 
         m_preds, m_targets = self._masked(preds, batch['labels'])
-        loss = self._calculate_loss(m_preds, m_targets)
+        loss = self._calculate_loss(m_preds, m_targets, weight_factor=weight_factor)
         if m_targets.numel() > 0:
             m_preds = m_preds.float()
             m_targets = m_targets.float()
@@ -71,8 +73,8 @@ class EsmFlucTrainer(L.LightningModule):
             lr=self.lr,
             weight_decay=self.weight_decay)
         
-    def _calculate_loss(self, preds, targets):
+    def _calculate_loss(self, preds, targets, weight_factor):
         if self.loss_type == 'weighted':
-            return weighted_mse_loss(preds, targets, self.weight_threshold, self.weight_factor)
+            return weighted_mse_loss(preds, targets, self.weight_threshold, weight_factor)
         else:
             return mse_loss(preds, targets)
