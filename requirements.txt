@@ -99,3 +99,4 @@ git+https://github.com/facebookresearch/esm.git
 fairscale
 evaluate
 datasets
+lightning

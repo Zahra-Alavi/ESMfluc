@@ -1,0 +1,116 @@
+import argparse
+import pandas as pd
+import torch
+import lightning as L
+from torch.utils.data import DataLoader
+from lightning.pytorch.callbacks import ModelCheckpoint
+from transformers import AutoTokenizer
+
+from models import EsmFlucModel
+from dataset import MdCathSequenceDataset
+from trainer_module import EsmFlucTrainer
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="ESM-Flex: Protein Flexibility Prediction")
+
+    # --- Data & Path Arguments ---
+    data_group = parser.add_argument_group("Data & Paths")
+    data_group.add_argument("--train_path", type=str, default="../../data/mdcath/train_split_mmseqs2.csv")
+    data_group.add_argument("--val_path", type=str, default="../../data/mdcath/test_split_mmseqs2.csv")
+    data_group.add_argument("--checkpoint_dir", type=str, default="checkpoints/")
+
+    # --- Model Architecture Arguments ---
+    model_group = parser.add_argument_group("Model Architecture")
+    model_group.add_argument("--model_name", type=str, default="facebook/esm2_t6_8M_UR50D")
+    model_group.add_argument("--hidden_size", type=int, default=512, help="Regressor head hidden dimension")
+    model_group.add_argument("--max_len", type=int, default=1024)
+    model_group.add_argument("--masked_value", type=int, default=-100)
+
+    # --- Training Hyperparameters ---
+    train_group = parser.add_argument_group("Training Hyperparameters")
+    train_group.add_argument("--batch_size", type=int, default=16)
+    train_group.add_argument("--lr", type=float, default=1e-5, help="Base LR (auto-scaled by num_gpus)")
+    train_group.add_argument("--weight_decay", type=float, default=1e-2)
+    train_group.add_argument("--epochs", type=int, default=20)
+    train_group.add_argument("--seed", type=int, default=42)
+
+    # --- Loss Function Configuration ---
+    loss_group = parser.add_argument_group("Loss Function")
+    loss_group.add_argument("--loss_type", type=str, choices=['weighted', 'standard'], default='weighted')
+    loss_group.add_argument("--weight_threshold", type=float, default=3.0)
+    loss_group.add_argument("--weight_factor", type=float, default=5.0)
+
+    # --- Computational Resources ---
+    comp_group = parser.add_argument_group("Computational Resources")
+    comp_group.add_argument("--num_workers", type=int, default=4)
+
+    return parser.parse_args()
+
+def main():
+    args = parse_args()
+    
+    # Set seed for reproducibility
+    L.seed_everything(args.seed)
+
+    # --- Hardware & Strategy Detection ---
+    num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    
+    if num_gpus > 0:
+        accelerator, devices, strategy, precision = "gpu", num_gpus, ("ddp" if num_gpus > 1 else "auto"), "16-mixed"
+        print(f"Training on {num_gpus} GPU(s) using {strategy} strategy.")
+    elif torch.backends.mps.is_available():
+        accelerator, devices, strategy, precision = "mps", 1, "auto", "32-true"
+        print("Training on Apple Silicon (MPS).")
+    else:
+        accelerator, devices, strategy, precision = "cpu", "auto", "auto", "32-true"
+        print("No GPU found. Training on CPU.")
+
+    # --- Initialize Tokenizer & Data ---
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    train_df = pd.read_csv(args.train_path)
+    val_df = pd.read_csv(args.val_path)
+
+    # Determine dynamic max length
+    data_max_len = max(train_df['sequence'].str.len().max(), val_df['sequence'].str.len().max()) + 2
+    final_max_len = min(data_max_len, args.max_len)
+    print(f"Max sequence length: {data_max_len}. Using max_len={final_max_len}.")
+    
+    train_dataset = MdCathSequenceDataset(train_df, tokenizer=tokenizer, max_length=final_max_len, masked_value=args.masked_value)
+    val_dataset = MdCathSequenceDataset(val_df, tokenizer=tokenizer, max_length=final_max_len, masked_value=args.masked_value)
+
+    train_loader = DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True, 
+        num_workers=args.num_workers, pin_memory=True if num_gpus > 0 else False
+    )
+    val_loader = DataLoader(
+        val_dataset, batch_size=args.batch_size, 
+        num_workers=args.num_workers, pin_memory=True if num_gpus > 0 else False
+    )
+
+    # --- Initialize Model and Trainer ---
+    # Scaled Learning Rate
+    effective_lr = args.lr * max(1, num_gpus)
+    
+    model = EsmFlucModel(pretrained_model_name=args.model_name, hidden_size=args.hidden_size)
+    trainer_module = EsmFlucTrainer(model, lr=effective_lr, weight_threshold=args.weight_threshold, weight_factor=args.weight_factor, weight_decay=args.weight_decay, masked_value=args.masked_value, loss_type=args.loss_type)
+
+    checkpoint_callback = ModelCheckpoint(
+        monitor="val_loss", dirpath=args.checkpoint_dir,
+        filename="esm-fluc-{epoch:02d}-{val_loss:.2f}",
+        save_top_k=3, mode="min"
+    )
+
+    trainer = L.Trainer(
+        max_epochs=args.epochs,
+        accelerator=accelerator,
+        devices=devices,
+        strategy=strategy,
+        callbacks=[checkpoint_callback],
+        precision=precision,
+        use_distributed_sampler=(num_gpus > 1) 
+    )
+
+    trainer.fit(trainer_module, train_loader, val_loader)
+
+if __name__ == "__main__":
+    main()
