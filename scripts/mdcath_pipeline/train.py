@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 import lightning as L
 from torch.utils.data import DataLoader
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 from transformers import AutoTokenizer
 
 from models import EsmFlucModel
@@ -34,6 +34,7 @@ def parse_args():
     train_group.add_argument("--lr", type=float, default=1e-5, help="Base LR (auto-scaled by num_gpus)")
     train_group.add_argument("--weight_decay", type=float, default=1e-2)
     train_group.add_argument("--epochs", type=int, default=20)
+    train_group.add_argument("--early_stop_patience", type=int, default=3)
     train_group.add_argument("--seed", type=int, default=42)
 
     # --- Loss Function Configuration ---
@@ -101,13 +102,18 @@ def main():
         filename="esm-fluc-{epoch:02d}-{val_loss:.2f}",
         save_top_k=3, mode="min"
     )
+    early_stop_callback = EarlyStopping(
+        monitor="val_loss", 
+        patience=args.early_stop_patience,
+        mode="min"
+    )
 
     trainer = L.Trainer(
         max_epochs=args.epochs,
         accelerator=accelerator,
         devices=devices,
         strategy=strategy,
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, early_stop_callback],
         precision=precision,
         use_distributed_sampler=(num_gpus > 1) 
     )
