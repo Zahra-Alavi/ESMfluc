@@ -63,16 +63,30 @@ class EsmFlucTrainer(L.LightningModule):
 
         self.log("val_loss", loss, prog_bar=True, sync_dist=True)
         self.log("val_mae", self.val_mae, prog_bar=True, on_epoch=True, sync_dist=True)
-        self.log("val_spearman", self.val_spearman, prog_bar=True, on_epoch=True, sync_dist=True)
+        self.log("val_spearman", self.val_spearman, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val_pearson", self.val_pearson, prog_bar=True, on_epoch=True, sync_dist=True)
         return loss
     
     def configure_optimizers(self):
-        return AdamW(
+        optimizer = AdamW(
             self.model.parameters(), 
             lr=self.lr,
             weight_decay=self.weight_decay)
-    
+        
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode='min', factor=0.5, patience=2, verbose=True
+        )
+        
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': {
+                'scheduler': scheduler,
+                'monitor': 'val_loss',
+                'interval': 'epoch',
+                'frequency': 1
+            }
+        }
+
     def on_train_epoch_start(self):
         # Ensure the ESM backbone is in training mode
         self.model.esm.train()

@@ -20,6 +20,7 @@ def parse_args():
     data_group.add_argument("--train_path", type=str, default="../../data/mdcath/train_split_mmseqs2.csv")
     data_group.add_argument("--val_path", type=str, default="../../data/mdcath/test_split_mmseqs2.csv")
     data_group.add_argument("--checkpoint_dir", type=str, default="checkpoints/")
+    data_group.add_argument("--temperatures", type=str, default="320,348,379,413,450", help="Comma-separated list of temperatures to include as input features. Default: '320,348,379,413,450'")
 
     # --- Model Architecture Arguments ---
     model_group = parser.add_argument_group("Model Architecture")
@@ -74,6 +75,12 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     train_df = pd.read_csv(args.train_path)
     val_df = pd.read_csv(args.val_path)
+    
+    # Select only the specified temperature columns and drop others
+    temperature_list = [float(t) for t in args.temperatures.split(",")]
+    chosen_temperature_cols = [f"neq_{int(t)}" for t in temperature_list]
+    train_df = train_df.drop(columns=[col for col in train_df.columns if col.startswith("neq_") and col not in chosen_temperature_cols])
+    val_df = val_df.drop(columns=[col for col in val_df.columns if col.startswith("neq_") and col not in chosen_temperature_cols])
 
     # Determine dynamic max length
     data_max_len = max(train_df['sequence'].str.len().max(), val_df['sequence'].str.len().max()) + 2
