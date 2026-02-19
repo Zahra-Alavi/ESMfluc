@@ -3,10 +3,22 @@ import torch.nn as nn
 from transformers import EsmModel
 
 class EsmFlucModel(nn.Module):
-    def __init__(self, pretrained_model_name='facebook/essm2_t6_8M_UR50D', hidden_size=180):
+    def __init__(self, pretrained_model_name='facebook/essm2_t6_8M_UR50D', hidden_size=180, num_unfreeze_layers=0):
         super().__init__()
 
         self.esm = EsmModel.from_pretrained(pretrained_model_name)
+        self.num_unfreeze_layers = num_unfreeze_layers
+        
+        # Freeze all layers
+        for param in self.esm.parameters():
+            param.requires_grad = False
+        
+        # Unfreeze the last `num_unfreeze_layers` layers of ESM
+        if num_unfreeze_layers > 0:
+            for layer in self.esm.encoder.layers[-num_unfreeze_layers:]:
+                for param in layer.parameters():
+                    param.requires_grad = True
+
         
         # Regression head - ESM last hidden state + 1 temperature feature (scalar)
         # hidden size for t6 is 320, for t33 is 1280

@@ -27,6 +27,7 @@ def parse_args():
     model_group.add_argument("--hidden_size", type=int, default=512, help="Regressor head hidden dimension")
     model_group.add_argument("--max_len", type=int, default=1024)
     model_group.add_argument("--masked_value", type=int, default=-100)
+    model_group.add_argument("--num_unfreeze_layers", type=int, default=0, help="Number of ESM layers to unfreeze for fine-tuning (starting from the last layer). 0 means all layers are frozen.")
 
     # --- Training Hyperparameters ---
     train_group = parser.add_argument_group("Training Hyperparameters")
@@ -94,7 +95,7 @@ def main():
     # Scaled Learning Rate
     effective_lr = args.lr * max(1, num_gpus)
     
-    model = EsmFlucModel(pretrained_model_name=args.model_name, hidden_size=args.hidden_size)
+    model = EsmFlucModel(pretrained_model_name=args.model_name, hidden_size=args.hidden_size, num_unfreeze_layers=args.num_unfreeze_layers)
     trainer_module = EsmFlucTrainer(model, lr=effective_lr, weight_threshold=args.weight_threshold, weight_factor=args.weight_factor, weight_decay=args.weight_decay, masked_value=args.masked_value, loss_type=args.loss_type)
 
     checkpoint_callback = ModelCheckpoint(
