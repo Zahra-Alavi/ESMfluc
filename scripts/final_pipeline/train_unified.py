@@ -414,7 +414,7 @@ def train_model(args):
     # Learning rate scheduler
     if args.lr_scheduler == "reduce_on_plateau":
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=0.5, patience=args.patience, verbose=True
+            optimizer, mode='min', factor=0.1, patience=3, verbose=True
         )
     elif args.lr_scheduler == "step":
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
@@ -536,8 +536,10 @@ def train_model(args):
             else:
                 scheduler.step()
         
-        # Early stopping
-        if val_loss < best_val_loss:
+        # Early stopping (require meaningful improvement, matching original train.py)
+        MIN_DELTA = 1e-3
+        improved = (best_val_loss - val_loss) > MIN_DELTA
+        if improved:
             best_val_loss = val_loss
             patience_counter = 0
             # Handle DataParallel model saving
