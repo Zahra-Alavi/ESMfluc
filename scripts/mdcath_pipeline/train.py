@@ -77,7 +77,7 @@ def main():
     val_df = pd.read_csv(args.val_path)
     
     # Select only the specified temperature columns and drop others
-    temperature_list = [float(t) for t in args.temperatures.split(",")]
+    temperature_list = [int(t) for t in args.temperatures.split(",")]
     chosen_temperature_cols = [f"neq_{int(t)}" for t in temperature_list]
     train_df = train_df.drop(columns=[col for col in train_df.columns if col.startswith("neq_") and col not in chosen_temperature_cols])
     val_df = val_df.drop(columns=[col for col in val_df.columns if col.startswith("neq_") and col not in chosen_temperature_cols])
@@ -103,7 +103,7 @@ def main():
     # Scaled Learning Rate
     effective_lr = args.lr * max(1, num_gpus)
     
-    model = EsmFlucModel(pretrained_model_name=args.model_name, hidden_size=args.hidden_size, num_unfreeze_layers=args.num_unfreeze_layers, dropout_rate=args.dropout_rate)
+    model = EsmFlucModel(pretrained_model_name=args.model_name, hidden_size=args.hidden_size, num_unfreeze_layers=args.num_unfreeze_layers, dropout_rate=args.dropout_rate, temperatures=temperature_list)
     trainer_module = EsmFlucTrainer(model, lr=effective_lr, weight_threshold=args.weight_threshold, weight_factor=args.weight_factor, weight_decay=args.weight_decay, masked_value=args.masked_value, loss_type=args.loss_type)
 
     checkpoint_callback = ModelCheckpoint(

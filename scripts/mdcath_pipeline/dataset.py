@@ -23,8 +23,9 @@ class MdCathSequenceDataset(Dataset):
         temp_idx = idx % len(self.temp_cols)
         
         row = self.df.iloc[domain_idx]
-        temperature = self.temperatures[temp_idx]
-        min_max_normalized_temp = (float(temperature) - self.min_temp) / (self.max_temp - self.min_temp)
+        temp = self.temperatures[temp_idx]
+        if len(self.temperatures) > 1:
+            temp = (float(temp) - self.min_temp) / (self.max_temp - self.min_temp)
         
         sequence = row['sequence']
         labels = ast.literal_eval(row[self.temp_cols[temp_idx]])  # Convert string representation of list to actual list
@@ -47,5 +48,5 @@ class MdCathSequenceDataset(Dataset):
             'input_ids': encoding['input_ids'].squeeze(),
             'attention_mask': encoding['attention_mask'].squeeze(),
             'labels': target_neq,
-            'temperature': torch.tensor(min_max_normalized_temp, dtype=torch.float)
+            'temperature': torch.tensor(temp, dtype=torch.float)
         }
