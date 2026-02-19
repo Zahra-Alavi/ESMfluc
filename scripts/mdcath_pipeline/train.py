@@ -103,7 +103,7 @@ def main():
     # Scaled Learning Rate
     effective_lr = args.lr * max(1, num_gpus)
     
-    model = EsmFlucModel(pretrained_model_name=args.model_name, hidden_size=args.hidden_size, num_unfreeze_layers=args.num_unfreeze_layers, dropout_rate=args.dropout_rate, temperatures=temperature_list)
+    model = EsmFlucModel(pretrained_model_name=args.model_name, hidden_size=args.hidden_size, num_unfreeze_layers=args.num_unfreeze_layers, dropout_rate=args.dropout_rate, use_temperature=len(temperature_list) > 1)
     trainer_module = EsmFlucTrainer(model, lr=effective_lr, weight_threshold=args.weight_threshold, weight_factor=args.weight_factor, weight_decay=args.weight_decay, masked_value=args.masked_value, loss_type=args.loss_type)
 
     checkpoint_callback = ModelCheckpoint(
