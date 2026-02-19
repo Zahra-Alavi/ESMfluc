@@ -171,7 +171,6 @@ def extract_attention(checkpoint, fasta_file, output_dir, task_type):
         "--fasta_file", str(fasta_file),
         "--output", str(output_base),
         "--esm_model", ESM_MODEL,
-        "--device", DEVICE,
         "--architecture", "bilstm_attention",
         "--task_type", task_type,
         "--hidden_size", str(HIDDEN_SIZE),
