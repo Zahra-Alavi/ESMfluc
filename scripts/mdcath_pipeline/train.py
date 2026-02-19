@@ -15,11 +15,13 @@ torch.set_float32_matmul_precision('high')
 def parse_args():
     parser = argparse.ArgumentParser(description="ESM-Flex: Protein Flexibility Prediction")
 
+    parser.add_argument("--test-only", action="store_true", help="Run validation only without training")
     # --- Data & Path Arguments ---
     data_group = parser.add_argument_group("Data & Paths")
     data_group.add_argument("--train_path", type=str, default="../../data/mdcath/train_split_mmseqs2.csv")
     data_group.add_argument("--val_path", type=str, default="../../data/mdcath/test_split_mmseqs2.csv")
     data_group.add_argument("--checkpoint_dir", type=str, default="checkpoints/")
+    data_group.add_argument("--checkpoint_path", type=str, default=None, help="Path to a specific .ckpt file for testing/generalization.")
     data_group.add_argument("--temperatures", type=str, default="320,348,379,413,450", help="Comma-separated list of temperatures to include as input features. Default: '320,348,379,413,450'")
 
     # --- Model Architecture Arguments ---
@@ -126,8 +128,15 @@ def main():
         precision=precision,
         use_distributed_sampler=(num_gpus > 1) 
     )
-
-    trainer.fit(trainer_module, train_loader, val_loader)
+    
+        
+    if args.test_only:
+        if args.checkpoint_path is None:
+            raise ValueError("You must provide --checkpoint_path for test_only mode.")
+        print(f"--- Running Generalization Test on {args.temperatures}K ---")
+        trainer.test(trainer_module, dataloaders=val_loader, ckpt_path=args.checkpoint_path)
+    else:
+        trainer.fit(trainer_module, train_loader, val_loader)
 
 if __name__ == "__main__":
     main()

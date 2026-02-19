@@ -21,7 +21,6 @@ class EsmFlucTrainer(L.LightningModule):
         self.val_pearson = PearsonCorrCoef()
         
     def training_step(self, batch, batch_idx):
-        weight_factor = 1 if self.current_epoch < 5 else self.weight_factor
         # Forward pass
         preds = self.model(
             input_ids=batch['input_ids'],
@@ -31,7 +30,7 @@ class EsmFlucTrainer(L.LightningModule):
         
         # Calculate loss
         m_preds, m_targets = self._masked(preds, batch['labels'])
-        loss = self._calculate_loss(m_preds, m_targets, weight_factor=weight_factor)
+        loss = self._calculate_loss(m_preds, m_targets)
         
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True,  sync_dist=True)
         return loss
@@ -45,7 +44,6 @@ class EsmFlucTrainer(L.LightningModule):
         return masked_preds, masked_targets
 
     def validation_step(self, batch, batch_idx):
-        weight_factor = 1 if self.current_epoch < 5 else self.weight_factor
         preds = self.model(
             input_ids=batch['input_ids'],
             attention_mask=batch['attention_mask'],
@@ -53,7 +51,7 @@ class EsmFlucTrainer(L.LightningModule):
         )
 
         m_preds, m_targets = self._masked(preds, batch['labels'])
-        loss = self._calculate_loss(m_preds, m_targets, weight_factor=weight_factor)
+        loss = self._calculate_loss(m_preds, m_targets)
         if m_targets.numel() > 0:
             m_preds = m_preds.float()
             m_targets = m_targets.float()
@@ -66,6 +64,9 @@ class EsmFlucTrainer(L.LightningModule):
         self.log("val_spearman", self.val_spearman, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val_pearson", self.val_pearson, prog_bar=True, on_epoch=True, sync_dist=True)
         return loss
+
+    def test_step(self, batch, batch_idx):
+        return self.validation_step(batch, batch_idx)
     
     def configure_optimizers(self):
         optimizer = AdamW(
@@ -91,8 +92,8 @@ class EsmFlucTrainer(L.LightningModule):
         # Ensure the ESM backbone is in training mode
         self.model.esm.train()
         
-    def _calculate_loss(self, preds, targets, weight_factor):
+    def _calculate_loss(self, preds, targets):
         if self.loss_type == 'weighted':
-            return weighted_mse_loss(preds, targets, self.weight_threshold, weight_factor)
+            return weighted_mse_loss(preds, targets, self.weight_threshold, self.weight_factor)
         else:
             return mse_loss(preds, targets)
