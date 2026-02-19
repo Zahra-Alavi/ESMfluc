@@ -1,7 +1,7 @@
 import torch
 import lightning as L
 from torch.optim import AdamW
-from losses import masked_mse_loss, weighted_masked_mse_loss
+from losses import mse_loss, weighted_mse_loss
 from torchmetrics.regression import MeanAbsoluteError, PearsonCorrCoef, SpearmanCorrCoef
 
 class EsmFlucTrainer(L.LightningModule):
@@ -29,11 +29,8 @@ class EsmFlucTrainer(L.LightningModule):
         )
         
         # Calculate loss
-        loss = None
-        if self.loss_type == 'weighted':
-            loss = weighted_masked_mse_loss(preds, batch['labels'], self.weight_threshold, self.weight_factor)
-        else:
-            loss = masked_mse_loss(preds, batch['labels'])
+        m_preds, m_targets = self._masked(preds, batch['labels'])
+        loss = self._calculate_loss(m_preds, m_targets)
         
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True,  sync_dist=True)
         return loss
@@ -52,15 +49,12 @@ class EsmFlucTrainer(L.LightningModule):
             attention_mask=batch['attention_mask'],
             temperature=batch['temperature']
         )
-        
-        loss = None
+
         m_preds, m_targets = self._masked(preds, batch['labels'])
-        if self.loss_type == 'weighted':
-            loss = weighted_masked_mse_loss(m_preds, m_targets, self.weight_threshold, self.weight_factor)
-        else:
-            loss = masked_mse_loss(m_preds, m_targets)
-        
-        if m_targets.numel() > 0:  # Only update if there are real amino acids! 
+        loss = self._calculate_loss(m_preds, m_targets)
+        if m_targets.numel() > 0:
+            m_preds = m_preds.float()
+            m_targets = m_targets.float()
             self.val_mae.update(m_preds, m_targets)
             self.val_spearman.update(m_preds, m_targets)
             self.val_pearson.update(m_preds, m_targets)
@@ -76,3 +70,9 @@ class EsmFlucTrainer(L.LightningModule):
             self.model.parameters(), 
             lr=self.lr,
             weight_decay=self.weight_decay)
+        
+    def _calculate_loss(self, preds, targets):
+        if self.loss_type == 'weighted':
+            return weighted_mse_loss(preds, targets, self.weight_threshold, self.weight_factor)
+        else:
+            return mse_loss(preds, targets)
