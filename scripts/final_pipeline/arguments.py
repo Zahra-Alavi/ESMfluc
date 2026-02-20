@@ -155,8 +155,8 @@ def parse_arguments():
 
     # Task type (classification vs regression)
     parser.add_argument("--task_type", type=str, default="classification",
-                        choices=["classification", "regression"],
-                        help="Task type: classification or regression. default=classification")
+                        choices=["classification", "regression", "ordinal"],
+                        help="Task type: classification, regression, or ordinal. default=classification")
 
     # Regression specific arguments
     parser.add_argument("--num_outputs", type=int, default=1,
