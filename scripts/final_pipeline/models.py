@@ -429,3 +429,218 @@ class WeightedMSELoss(nn.Module):
             return sq_error.sum()
         else:
             return sq_error
+
+
+# =============================================================================
+# Ordinal Regression Models and Loss (CORAL-style)
+# =============================================================================
+
+class OrdinalCrossEntropyLoss(nn.Module):
+    """
+    CORAL-style ordinal loss for labels in {0, ..., K-1}.
+
+    Model output is expected to be logits with shape [B, L, K-1] or [N, K-1],
+    where each logit predicts P(y > k) for threshold k in [0, K-2].
+    """
+    def __init__(self, ignore_index=-1, reduction='mean'):
+        super().__init__()
+        self.ignore_index = ignore_index
+        self.reduction = reduction
+        self.bce = nn.BCEWithLogitsLoss(reduction='none')
+
+    def forward(self, logits, targets):
+        # logits: [B, L, K-1] or [N, K-1]
+        # targets: [B, L] or [N] with integer ordinal labels
+        if logits.dim() == 3:
+            n_classes_minus_1 = logits.size(-1)
+            logits_flat = logits.reshape(-1, n_classes_minus_1)
+            targets_flat = targets.reshape(-1)
+        else:
+            n_classes_minus_1 = logits.size(-1)
+            logits_flat = logits
+            targets_flat = targets
+
+        valid_mask = (targets_flat != self.ignore_index)
+        if valid_mask.sum() == 0:
+            # Keep gradient graph valid
+            return logits_flat.sum() * 0.0
+
+        logits_valid = logits_flat[valid_mask]                     # [M, K-1]
+        targets_valid = targets_flat[valid_mask].long()            # [M]
+
+        # Build cumulative binary targets: t_k = 1 if y > k else 0
+        levels = torch.arange(n_classes_minus_1, device=logits_valid.device).unsqueeze(0)
+        ordinal_targets = (targets_valid.unsqueeze(1) > levels).float()  # [M, K-1]
+
+        loss_matrix = self.bce(logits_valid, ordinal_targets)
+        if self.reduction == 'sum':
+            return loss_matrix.sum()
+        if self.reduction == 'none':
+            return loss_matrix
+        return loss_matrix.mean()
+
+
+def ordinal_logits_to_probs(logits):
+    """
+    Convert ordinal logits [B, L, K-1] into class probabilities [B, L, K].
+    Uses cumulative-link identity with p_k = P(y=k).
+    """
+    q = torch.sigmoid(logits)  # q_k = P(y > k)
+    left = torch.ones(*q.shape[:-1], 1, device=q.device, dtype=q.dtype)
+    right = torch.zeros(*q.shape[:-1], 1, device=q.device, dtype=q.dtype)
+    q_ext = torch.cat([left, q, right], dim=-1)
+    probs = q_ext[..., :-1] - q_ext[..., 1:]
+    return probs.clamp_min(0.0)
+
+
+class BiLSTMOrdinalRegressionModel(nn.Module):
+    """BiLSTM ordinal model with CORAL-style thresholds."""
+    def __init__(self, embedding_model, hidden_size, num_layers,
+                 num_classes=4, dropout=0.3, bidirectional=1):
+        super().__init__()
+        if num_classes < 2:
+            raise ValueError("num_classes must be >= 2 for ordinal regression")
+        self.embedding_model = embedding_model
+        self.bidirectional = bool(bidirectional)
+        self.num_classes = num_classes
+        self.lstm = nn.LSTM(
+            input_size=embedding_model.config.hidden_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=self.bidirectional,
+            dropout=dropout
+        )
+        self.dropout = nn.Dropout(dropout)
+        self.output_dim = hidden_size * (2 if self.bidirectional else 1)
+        self.fc = nn.Linear(self.output_dim, num_classes - 1)
+
+    def forward(self, input_ids, attention_mask, return_features="none", return_probs=False):
+        emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        h, _ = self.lstm(emb)
+        h = self.dropout(h)
+        logits = self.fc(h)  # [B, L, K-1]
+
+        feats = h if return_features == "pre" else (logits if return_features == "post" else None)
+        if return_probs:
+            probs = ordinal_logits_to_probs(logits)
+            return logits, feats, probs
+        return logits, feats
+
+
+class BiLSTMWithSelfAttentionOrdinalRegressionModel(nn.Module):
+    """BiLSTM + SelfAttention ordinal model with CORAL-style thresholds."""
+    def __init__(self, embedding_model, hidden_size, num_layers,
+                 num_classes=4, dropout=0.3, bidirectional=1):
+        super().__init__()
+        if num_classes < 2:
+            raise ValueError("num_classes must be >= 2 for ordinal regression")
+        self.embedding_model = embedding_model
+        self.bidirectional = bool(bidirectional)
+        self.num_classes = num_classes
+        self.lstm = nn.LSTM(
+            input_size=embedding_model.config.hidden_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=self.bidirectional,
+            dropout=dropout
+        )
+        self.output_dim = hidden_size * (2 if self.bidirectional else 1)
+        self.attention = SelfAttentionLayer(self.output_dim, dropout=dropout)
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(self.output_dim, num_classes - 1)
+
+    def forward(self, input_ids, attention_mask, return_attention=False, return_features="none", return_probs=False):
+        emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        h, _ = self.lstm(emb)
+        ctx, attn = (self.attention(h, attention_mask, True) if return_attention
+                     else (self.attention(h, attention_mask), None))
+        ctx = self.dropout(ctx)
+        logits = self.fc(ctx)  # [B, L, K-1]
+
+        feats = ctx if return_features == "pre" else (logits if return_features == "post" else None)
+        if return_probs:
+            probs = ordinal_logits_to_probs(logits)
+            if return_attention:
+                return logits, feats, attn, probs
+            return logits, feats, probs
+        return (logits, feats, attn) if return_attention else (logits, feats)
+
+
+class TransformerOrdinalRegressionModel(nn.Module):
+    """Transformer ordinal model with CORAL-style thresholds."""
+    def __init__(self, embedding_model, nhead=8, num_encoder_layers=6,
+                 dim_feedforward=1024, num_classes=4, dropout=0.3):
+        super().__init__()
+        if num_classes < 2:
+            raise ValueError("num_classes must be >= 2 for ordinal regression")
+        self.embedding_model = embedding_model
+        self.num_classes = num_classes
+        d_model = embedding_model.config.hidden_size
+
+        self.pos_encoder = PositionalEncoding(d_model)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_encoder_layers
+        )
+        self.fc = nn.Linear(d_model, num_classes - 1)
+
+    def forward(self, input_ids, attention_mask, return_features="none", return_probs=False):
+        outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
+        embeddings = outputs.last_hidden_state
+        embeddings = self.pos_encoder(embeddings)
+        src_key_padding_mask = (attention_mask == 0)
+
+        h = self.transformer_encoder(
+            embeddings,
+            src_key_padding_mask=src_key_padding_mask
+        )
+        logits = self.fc(h)  # [B, L, K-1]
+
+        feats = h if return_features == "pre" else (logits if return_features == "post" else None)
+        if return_probs:
+            probs = ordinal_logits_to_probs(logits)
+            return logits, feats, probs
+        return logits, feats
+
+
+class ESMLinearTokenOrdinalRegressor(nn.Module):
+    """ESM embeddings + linear ordinal head (CORAL-style thresholds)."""
+    def __init__(self, embedding_model, num_classes=4):
+        super().__init__()
+        if num_classes < 2:
+            raise ValueError("num_classes must be >= 2 for ordinal regression")
+        self.embedding_model = embedding_model
+        self.output_dim = embedding_model.config.hidden_size
+        self.num_classes = num_classes
+        self.fc = nn.Linear(embedding_model.config.hidden_size, num_classes - 1)
+
+    def forward(self, input_ids, attention_mask, return_features="none", return_attn=False, return_probs=False):
+        outputs = self.embedding_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=return_attn,
+            return_dict=True,
+        )
+        h = outputs.last_hidden_state
+        logits = self.fc(h)  # [B, L, K-1]
+
+        feats = h if return_features == "pre" else (logits if return_features == "post" else None)
+
+        if return_probs:
+            probs = ordinal_logits_to_probs(logits)
+            if return_attn:
+                return logits, feats, outputs.attentions, probs
+            return logits, feats, probs
+
+        if return_attn:
+            return logits, feats, outputs.attentions
+        return logits, feats
