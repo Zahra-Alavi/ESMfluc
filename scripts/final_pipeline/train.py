@@ -976,3 +976,308 @@ def train_regression(args):
     metrics_df.to_csv(f"{run_folder}/regression_metrics.csv", index=False)
     print(f"\nSaved metrics to {run_folder}/regression_metrics.csv")
     print("Regression training completed!")
+
+
+# ============================================================================
+# Ordinal Training Functions (append-only)
+# ============================================================================
+
+from models import (
+    BiLSTMOrdinalRegressionModel,
+    BiLSTMWithSelfAttentionOrdinalRegressionModel,
+    TransformerOrdinalRegressionModel,
+    ESMLinearTokenOrdinalRegressor,
+    OrdinalCrossEntropyLoss,
+    ordinal_logits_to_probs,
+)
+
+
+def set_up_ordinal_model(args):
+    """Create ordinal model based on architecture."""
+    embedding_model = set_up_embedding_model(args)
+
+    if args.architecture == "bilstm":
+        print("Using BiLSTM ordinal model")
+        model = BiLSTMOrdinalRegressionModel(
+            embedding_model=embedding_model,
+            hidden_size=args.hidden_size,
+            num_layers=args.num_layers,
+            num_classes=args.num_classes,
+            dropout=args.dropout,
+            bidirectional=args.bidirectional,
+        )
+    elif args.architecture == "bilstm_attention":
+        print("Using BiLSTM with SelfAttention ordinal model")
+        model = BiLSTMWithSelfAttentionOrdinalRegressionModel(
+            embedding_model=embedding_model,
+            hidden_size=args.hidden_size,
+            num_layers=args.num_layers,
+            num_classes=args.num_classes,
+            dropout=args.dropout,
+            bidirectional=args.bidirectional,
+        )
+    elif args.architecture == "transformer":
+        print("Using Transformer ordinal model")
+        model = TransformerOrdinalRegressionModel(
+            embedding_model=embedding_model,
+            nhead=args.transformer_nhead,
+            num_encoder_layers=args.transformer_num_encoder_layers,
+            dim_feedforward=args.transformer_dim_feedforward,
+            num_classes=args.num_classes,
+            dropout=args.dropout,
+        )
+    elif args.architecture == "esm_linear":
+        print("Using ESM-only linear ordinal model")
+        model = ESMLinearTokenOrdinalRegressor(
+            embedding_model=embedding_model,
+            num_classes=args.num_classes,
+        )
+    else:
+        raise ValueError(f"Invalid architecture for ordinal: {args.architecture}")
+
+    model.to(args.device)
+
+    if args.data_parallel and torch.cuda.device_count() > 1:
+        print(f"Using nn.DataParallel on {torch.cuda.device_count()} GPUs")
+        model = nn.DataParallel(model)
+
+    return model
+
+
+def evaluate_ordinal(model, data_loader, criterion, args):
+    """Evaluate ordinal model and return metrics."""
+    m = model.module if isinstance(model, nn.DataParallel) else model
+
+    with torch.no_grad():
+        m.eval()
+        all_preds, all_targets = [], []
+        total_loss = 0.0
+        n_batches = 0
+
+        for batch in data_loader:
+            input_ids = batch['input_ids'].to(args.device)
+            attention_mask = batch['attention_mask'].to(args.device)
+            y = batch['labels'].to(args.device)
+
+            logits, feats = m(input_ids, attention_mask, return_features="pre")
+            loss = criterion(logits, y)
+            total_loss += loss.item()
+            n_batches += 1
+
+            probs = ordinal_logits_to_probs(logits)
+            preds = probs.argmax(dim=-1)
+
+            preds_flat = preds.reshape(-1)
+            y_flat = y.reshape(-1)
+            mask = y_flat != -1
+
+            all_preds.extend(preds_flat[mask].cpu().numpy())
+            all_targets.extend(y_flat[mask].cpu().numpy())
+
+        report = classification_report(all_targets, all_preds, output_dict=True)
+        conf_matrix = confusion_matrix(all_targets, all_preds)
+
+        metrics = {
+            'loss': total_loss / max(n_batches, 1),
+            'report': report,
+            'confusion_matrix': conf_matrix,
+            'accuracy': report.get('accuracy', 0.0),
+            'mae_class_distance': float(np.mean(np.abs(np.array(all_preds) - np.array(all_targets)))) if len(all_preds) else 0.0,
+        }
+        return metrics
+
+
+def train_ordinal(args):
+    """Training loop for ordinal tasks."""
+    run_folder = create_run_folder(args.result_foldername)
+
+    model = set_up_ordinal_model(args)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    dp = bool(args.data_parallel) and torch.cuda.device_count() > 1
+
+    if args.lr_scheduler == "reduce_on_plateau":
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3, verbose=True)
+        print("Using ReduceLROnPlateau scheduler")
+    else:
+        scheduler = None
+        print("Not using any scheduler")
+
+    # Load data as ordered classes from neq thresholds
+    labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
+    train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
+    test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
+
+    tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
+    X_train = tokenize(train_data['sequence'], tokenizer)
+    X_test = tokenize(test_data['sequence'], tokenizer)
+    y_train = train_data['neq_class'].tolist()
+    y_test = test_data['neq_class'].tolist()
+
+    val_loader = None
+    need_val = (args.lr_scheduler == "reduce_on_plateau") or (args.patience and args.patience > 0)
+    if need_val:
+        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, stratify=None, random_state=args.seed)
+        val_dataset = SequenceClassificationDataset(X_val, y_val)
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            drop_last=False,
+            collate_fn=lambda x: collate_fn_sequence(x, tokenizer),
+        )
+
+    train_dataset = SequenceClassificationDataset(X_train, y_train)
+    test_dataset = SequenceClassificationDataset(X_test, y_test)
+
+    if args.oversampling:
+        print("Applying oversampling using WeightedRandomSampler...")
+        sampling_weights = compute_sampling_weights(
+            train_dataset,
+            num_classes=args.num_classes,
+            neq_thresholds=args.neq_thresholds,
+            oversampling_threshold=args.oversampling_threshold,
+            undersampling_threshold=args.undersampling_threshold,
+            undersampling_intensity=args.undersampling_intensity,
+            oversampling_intensity=args.oversampling_intensity,
+        )
+        sampler = WeightedRandomSampler(
+            weights=sampling_weights,
+            num_samples=len(train_dataset),
+            replacement=True,
+        )
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=args.batch_size,
+            sampler=sampler,
+            collate_fn=lambda x: collate_fn_sequence(x, tokenizer),
+            drop_last=dp,
+        )
+    else:
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=args.batch_size,
+            shuffle=True,
+            collate_fn=lambda x: collate_fn_sequence(x, tokenizer),
+            drop_last=dp,
+        )
+
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        collate_fn=lambda x: collate_fn_sequence(x, tokenizer),
+        drop_last=False,
+    )
+
+    criterion = OrdinalCrossEntropyLoss(ignore_index=-1)
+
+    use_cuda = (isinstance(args.device, torch.device) and args.device.type == "cuda") \
+               or (isinstance(args.device, str) and args.device == "cuda")
+    amp_enabled = bool(args.mixed_precision and use_cuda)
+    amp_dtype = torch.bfloat16 if getattr(args, "amp_dtype", "fp16") == "bf16" else torch.float16
+    scaler = GradScaler(enabled=amp_enabled)
+
+    best_val_loss = float('inf')
+    epochs_no_improve = 0
+    val_losses = []
+    train_losses = []
+
+    for epoch in range(args.epochs):
+        model.train()
+        total_loss = 0.0
+
+        for batch in train_loader:
+            input_ids = batch['input_ids'].to(args.device)
+            attention_mask = batch['attention_mask'].to(args.device)
+            y = batch['labels'].to(args.device)
+
+            optimizer.zero_grad()
+
+            if amp_enabled and use_cuda:
+                with autocast(dtype=amp_dtype):
+                    logits, feats = model(input_ids, attention_mask, return_features="pre")
+                    loss = criterion(logits, y)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                logits, feats = model(input_ids, attention_mask, return_features="pre")
+                loss = criterion(logits, y)
+                loss.backward()
+                optimizer.step()
+
+            total_loss += loss.item()
+
+        avg_train_loss = total_loss / max(len(train_loader), 1)
+        train_losses.append(avg_train_loss)
+        print(f"[Epoch {epoch}] Training Loss: {avg_train_loss:.4f}")
+
+        if val_loader is not None:
+            val_metrics = evaluate_ordinal(model, val_loader, criterion, args)
+            avg_val_loss = val_metrics['loss']
+            val_losses.append(avg_val_loss)
+            print(f"[Epoch {epoch}] Validation Loss: {avg_val_loss:.4f} | Accuracy: {val_metrics['accuracy']:.4f} | MAE(class): {val_metrics['mae_class_distance']:.4f}")
+
+            if scheduler:
+                scheduler.step(avg_val_loss)
+
+            if avg_val_loss < best_val_loss:
+                best_val_loss = avg_val_loss
+                epochs_no_improve = 0
+                torch.save(model.module.state_dict() if isinstance(model, nn.DataParallel) else model.state_dict(),
+                           f"{run_folder}/best_model.pth")
+            else:
+                epochs_no_improve += 1
+                if epochs_no_improve >= args.patience:
+                    print(f"Early stopping at epoch {epoch}")
+                    break
+        else:
+            torch.save(model.module.state_dict() if isinstance(model, nn.DataParallel) else model.state_dict(),
+                       f"{run_folder}/last_model.pth")
+
+    # Final evaluation on test set
+    if val_loader is not None:
+        best_model_path = f"{run_folder}/best_model.pth"
+        if os.path.exists(best_model_path):
+            if isinstance(model, nn.DataParallel):
+                model.module.load_state_dict(torch.load(best_model_path, map_location=args.device))
+            else:
+                model.load_state_dict(torch.load(best_model_path, map_location=args.device))
+
+    test_metrics = evaluate_ordinal(model, test_loader, criterion, args)
+    cls_report = test_metrics['report']
+    conf_matrix = test_metrics['confusion_matrix']
+
+    cls_report_df = pd.DataFrame(cls_report).transpose()
+    latex_table = cls_report_df.to_latex(float_format="%.2f")
+
+    with open(f"{run_folder}/classification_report.txt", "w") as f:
+        f.write(str(cls_report))
+    with open(f"{run_folder}/classification_report.tex", "w") as f:
+        f.write(latex_table)
+
+    disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix)
+    disp.plot(cmap='Blues')
+    plt.title("Ordinal Confusion Matrix")
+    plt.savefig(f"{run_folder}/confusion_matrix.png")
+    plt.close()
+
+    with open(f"{run_folder}/args.txt", "w") as f:
+        f.write(str(args))
+
+    summary_row = {
+        'task': 'ordinal',
+        'run_dir': run_folder,
+        'accuracy': test_metrics['accuracy'],
+        'mae_class_distance': test_metrics['mae_class_distance'],
+        'loss': test_metrics['loss'],
+        'epochs_ran': len(train_losses),
+        'lr': args.lr,
+        'batch_size': args.batch_size,
+        'architecture': args.architecture,
+        'num_classes': args.num_classes,
+        'seed': getattr(args, 'seed', None),
+    }
+    pd.DataFrame([summary_row]).to_csv(f"{run_folder}/run_summary.csv", index=False)
+    print(f"Saved run summary to {run_folder}/run_summary.csv")
+    print("Ordinal training completed")
