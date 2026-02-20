@@ -75,7 +75,7 @@ class EsmFlucTrainer(L.LightningModule):
             weight_decay=self.weight_decay)
         
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=0.5, patience=2, verbose=True
+            optimizer, mode='min', factor=0.5, patience=2
         )
         
         return {

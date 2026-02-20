@@ -54,15 +54,7 @@ def parse_args():
 
     return parser.parse_args()
 
-def main():
-    args = parse_args()
-    
-    # Set seed for reproducibility
-    L.seed_everything(args.seed)
-
-    # --- Hardware & Strategy Detection ---
-    num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
-    
+def _setup_hardware(num_gpus):  
     if num_gpus > 0:
         accelerator, devices, strategy, precision = "gpu", num_gpus, ("ddp_find_unused_parameters_true" if num_gpus > 1 else "auto"), "16-mixed"
         print(f"Training on {num_gpus} GPU(s) using {strategy} strategy.")
@@ -72,52 +64,71 @@ def main():
     else:
         accelerator, devices, strategy, precision = "cpu", "auto", "auto", "32-true"
         print("No GPU found. Training on CPU.")
+    
+    return accelerator, devices, strategy, precision
 
-    # --- Initialize Tokenizer & Data ---
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+def _prepare_data(args, tokenizer):
+    """Loads, filters, and prepares DataLoaders."""
     train_df = pd.read_csv(args.train_path)
     val_df = pd.read_csv(args.val_path)
     
-    # Select only the specified temperature columns and drop others
-    temperature_list = [int(t) for t in args.temperatures.split(",")]
-    
-    # Need to handle for different dataset formats - mdcath has multiple temperatures as separate columns, atlas has a single 'neq' column without temperature suffix
-    temp_cols = []
-    if all(f"neq_{temp}" in train_df.columns for temp in temperature_list):
-        temp_cols = [f"neq_{temp}" for temp in temperature_list]
+    # Handle mdcath (multi-column) vs atlas (single-column)
+    temp_list = [int(t) for t in args.temperatures.split(",")]
+    if all(f"neq_{t}" in train_df.columns for t in temp_list):
+        temp_cols = [f"neq_{t}" for t in temp_list]
     elif "neq" in train_df.columns:
         temp_cols = ["neq"]
     else:
-        raise ValueError("No valid temperature columns found in the dataset. Please check the column names and the --temperatures argument.")
-    
-    target_cols = temp_cols + ['sequence']
-    train_df = train_df[target_cols]
-    val_df = val_df[target_cols]
+        raise ValueError("Valid temperature columns not found.")
 
-    # Determine dynamic max length
+    target_cols = temp_cols + ['sequence']
+    train_df, val_df = train_df[target_cols], val_df[target_cols]
+
+    # Calculate max length
     data_max_len = max(train_df['sequence'].str.len().max(), val_df['sequence'].str.len().max()) + 2
     final_max_len = min(data_max_len, args.max_len)
-    print(f"Max sequence length: {data_max_len}. Using max_len={final_max_len}.")
     
-    train_dataset = MdCathSequenceDataset(train_df, tokenizer=tokenizer, max_length=final_max_len, masked_value=args.masked_value)
-    val_dataset = MdCathSequenceDataset(val_df, tokenizer=tokenizer, max_length=final_max_len, masked_value=args.masked_value)
+    train_ds = MdCathSequenceDataset(train_df, tokenizer, final_max_len, args.masked_value)
+    val_ds = MdCathSequenceDataset(val_df, tokenizer, final_max_len, args.masked_value)
 
-    pin_memory = True if num_gpus > 0 else False
-    train_loader = DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True, 
-        num_workers=args.num_workers, pin_memory=pin_memory, persistent_workers=True
-    )
-    val_loader = DataLoader(
-        val_dataset, batch_size=args.batch_size, 
-        num_workers=args.num_workers, pin_memory=pin_memory, persistent_workers=True
-    )
+    kwargs = {"num_workers": args.num_workers, "pin_memory": torch.cuda.is_available(), "persistent_workers": True}
+    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, **kwargs)
+    val_loader = DataLoader(val_ds, batch_size=args.batch_size, **kwargs)
+
+    return train_loader, val_loader, len(temp_cols)
+
+def main():
+    args = parse_args()
+    
+    # Set seed for reproducibility
+    L.seed_everything(args.seed)
+
+    # Setup
+    num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    accelerator, devices, strategy, precision = _setup_hardware(num_gpus)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    train_loader, val_loader, num_temps = _prepare_data(args, tokenizer)
 
     # --- Initialize Model and Trainer ---
     # Scaled Learning Rate
     effective_lr = args.lr * max(1, num_gpus)
     
-    model = EsmFlucModel(pretrained_model_name=args.model_name, hidden_size=args.hidden_size, num_unfreeze_layers=args.num_unfreeze_layers, dropout_rate=args.dropout_rate, use_temperature=len(temp_cols) > 1)
-    trainer_module = EsmFlucTrainer(model, lr=effective_lr, weight_threshold=args.weight_threshold, weight_factor=args.weight_factor, weight_decay=args.weight_decay, masked_value=args.masked_value, loss_type=args.loss_type)
+    model = EsmFlucModel(
+        pretrained_model_name=args.model_name, 
+        hidden_size=args.hidden_size,
+        num_unfreeze_layers=args.num_unfreeze_layers,
+        dropout_rate=args.dropout_rate,
+        use_temperature=num_temps > 1
+    )
+    trainer_module = EsmFlucTrainer(
+        model, 
+        lr=effective_lr, 
+        weight_threshold=args.weight_threshold, 
+        weight_factor=args.weight_factor, 
+        weight_decay=args.weight_decay, 
+        masked_value=args.masked_value, 
+        loss_type=args.loss_type
+    )
 
     checkpoint_callback = ModelCheckpoint(
         monitor="val_loss", dirpath=args.checkpoint_dir,
