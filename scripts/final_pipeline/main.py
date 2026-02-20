@@ -16,6 +16,13 @@ def main():
     args.device = torch.device(args.device)
 
     logging.basicConfig(level=logging.INFO)
+
+    # Route ordinal task directly to train.py implementation
+    if args.task_type == "ordinal":
+        from train import train_ordinal
+        print("Using train.py (ordinal)")
+        train_ordinal(args)
+        return
     
     # Import from train_unified if available, otherwise fall back to train
     try:
