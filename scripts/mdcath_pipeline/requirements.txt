@@ -1,0 +1,6 @@
+lightning
+pandas
+tensorboard
+torch
+torchmetrics
+transformers
