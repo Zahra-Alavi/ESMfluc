@@ -80,9 +80,19 @@ def main():
     
     # Select only the specified temperature columns and drop others
     temperature_list = [int(t) for t in args.temperatures.split(",")]
-    chosen_temperature_cols = [f"neq_{int(t)}" for t in temperature_list]
-    train_df = train_df.drop(columns=[col for col in train_df.columns if col.startswith("neq_") and col not in chosen_temperature_cols])
-    val_df = val_df.drop(columns=[col for col in val_df.columns if col.startswith("neq_") and col not in chosen_temperature_cols])
+    
+    # Need to handle for different dataset formats - mdcath has multiple temperatures as separate columns, atlas has a single 'neq' column without temperature suffix
+    temp_cols = []
+    if all(f"neq_{temp}" in train_df.columns for temp in temperature_list):
+        temp_cols = [f"neq_{temp}" for temp in temperature_list]
+    elif "neq" in train_df.columns:
+        temp_cols = ["neq"]
+    else:
+        raise ValueError("No valid temperature columns found in the dataset. Please check the column names and the --temperatures argument.")
+    
+    target_cols = temp_cols + ['sequence']
+    train_df = train_df[target_cols]
+    val_df = val_df[target_cols]
 
     # Determine dynamic max length
     data_max_len = max(train_df['sequence'].str.len().max(), val_df['sequence'].str.len().max()) + 2
@@ -92,20 +102,21 @@ def main():
     train_dataset = MdCathSequenceDataset(train_df, tokenizer=tokenizer, max_length=final_max_len, masked_value=args.masked_value)
     val_dataset = MdCathSequenceDataset(val_df, tokenizer=tokenizer, max_length=final_max_len, masked_value=args.masked_value)
 
+    pin_memory = True if num_gpus > 0 else False
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, 
-        num_workers=args.num_workers, pin_memory=True if num_gpus > 0 else False
+        num_workers=args.num_workers, pin_memory=pin_memory, persistent_workers=True
     )
     val_loader = DataLoader(
         val_dataset, batch_size=args.batch_size, 
-        num_workers=args.num_workers, pin_memory=True if num_gpus > 0 else False
+        num_workers=args.num_workers, pin_memory=pin_memory, persistent_workers=True
     )
 
     # --- Initialize Model and Trainer ---
     # Scaled Learning Rate
     effective_lr = args.lr * max(1, num_gpus)
     
-    model = EsmFlucModel(pretrained_model_name=args.model_name, hidden_size=args.hidden_size, num_unfreeze_layers=args.num_unfreeze_layers, dropout_rate=args.dropout_rate, use_temperature=len(temperature_list) > 1)
+    model = EsmFlucModel(pretrained_model_name=args.model_name, hidden_size=args.hidden_size, num_unfreeze_layers=args.num_unfreeze_layers, dropout_rate=args.dropout_rate, use_temperature=len(temp_cols) > 1)
     trainer_module = EsmFlucTrainer(model, lr=effective_lr, weight_threshold=args.weight_threshold, weight_factor=args.weight_factor, weight_decay=args.weight_decay, masked_value=args.masked_value, loss_type=args.loss_type)
 
     checkpoint_callback = ModelCheckpoint(

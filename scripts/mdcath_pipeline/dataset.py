@@ -8,8 +8,13 @@ class MdCathSequenceDataset(Dataset):
         self.tokenizer = tokenizer
         self.max_len = max_length
         self.masked_value = masked_value
-        self.temp_cols = [c for c in dataframe.columns if c.startswith('neq_')]
-        self.temperatures = [float(col.split('_')[1]) for col in self.temp_cols]
+        # For mdcath, we have different temperatures, but for atlas, we don't, so we have to handle it dynamically.
+        self.temp_cols = [c for c in dataframe.columns if c.startswith('neq')]
+        if self.temp_cols:
+            if self.temp_cols[0].startswith('neq_'):
+                self.temperatures = [float(col.split('_')[1]) for col in self.temp_cols]
+            else:
+                self.temperatures = [300.0] #atlas collects neq at 300K
         self.max_temp = max(self.temperatures)
         self.min_temp = min(self.temperatures)
         
