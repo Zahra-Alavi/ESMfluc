@@ -145,6 +145,8 @@ def get_loss_fn(args, train_dataset):
             alpha_tensor = None
             print("Using FocalLoss without class weights")
         loss_fn = FocalLoss(alpha=alpha_tensor, gamma=2, ignore_index=-1)
+        # loss_fn = FocalLoss(alpha=alpha_tensor, gamma=3, ignore_index=-1) # TRIAL 11
+
     else:
         print("Using CrossEntropyLoss")
         loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
@@ -384,8 +386,10 @@ def train(args):
        
        sampler = WeightedRandomSampler(
            weights=sampling_weights,
-           num_samples=len(train_dataset),
-           replacement=True,  # Allows oversampling
+            # num_samples=int(len(train_dataset) * 2),           
+            num_samples=int(len(train_dataset)),           
+
+            replacement=True,  # Allows oversampling
        )
        
        train_loader = DataLoader(train_dataset, 
@@ -437,12 +441,21 @@ def train(args):
     # -------------------------
     
     
-    use_cuda   = (isinstance(args.device, torch.device) and args.device.type == "cuda") \
-             or (isinstance(args.device, str) and args.device == "cuda")
-    amp_enabled = bool(args.mixed_precision and use_cuda)
-    amp_dtype   = torch.bfloat16 if getattr(args, "amp_dtype", "fp16") == "bf16" else torch.float16
+    # use_cuda   = (isinstance(args.device, torch.device) and args.device.type == "cuda") \
+    #          or (isinstance(args.device, str) and args.device == "cuda")
+    # amp_enabled = bool(args.mixed_precision and use_cuda)
+    # amp_dtype   = torch.bfloat16 if getattr(args, "amp_dtype", "fp16") == "bf16" else torch.float16
 
-    scaler = GradScaler(enabled=amp_enabled)   # no device kwarg
+    # scaler = GradScaler(enabled=amp_enabled)   # no device kwarg
+
+    # Normalize device handling (args.device may be str or torch.device)
+    device_str = str(args.device)
+    on_cuda = device_str.startswith("cuda")
+
+    amp_enabled = bool(args.mixed_precision and on_cuda)
+    amp_dtype = torch.bfloat16 if getattr(args, "amp_dtype", "fp16") == "bf16" else torch.float16
+
+    scaler = GradScaler(enabled=amp_enabled)
     
     best_val_loss = float('inf')
     epochs_no_improve = 0
@@ -457,10 +470,13 @@ def train(args):
     gpu_epoch_peaks = []
     cpu_rss_start = psutil.Process().memory_info().rss if psutil else None
 
-    on_cuda = (isinstance(args.device, torch.device) and args.device.type == "cuda") or \
-              (isinstance(args.device, str) and args.device.startswith("cuda"))
+    # on_cuda = (isinstance(args.device, torch.device) and args.device.type == "cuda") or \
+    #       (isinstance(args.device, str) and args.device.startswith("cuda"))
+    # if on_cuda:
+    #         torch.cuda.reset_peak_memory_stats()
+
     if on_cuda:
-              torch.cuda.reset_peak_memory_stats()
+        torch.cuda.reset_peak_memory_stats()
 
     for epoch in range(args.epochs):
         epoch_t0 = time.perf_counter()
@@ -478,7 +494,7 @@ def train(args):
             
             optimizer.zero_grad()
             
-            if amp_enabled and args.device.startswith("cuda"):
+            if amp_enabled:
                 with autocast(dtype=amp_dtype):
                     logits, feats = model(input_ids, attention_mask,
                               return_features=("pre" if args.head=="softmax"
