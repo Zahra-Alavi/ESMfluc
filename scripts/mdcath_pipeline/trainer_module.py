@@ -33,20 +33,26 @@ class EsmFlucTrainer(L.LightningModule):
         
         self.all_test_preds = []
         self.all_test_targets = []
-        
+
     def training_step(self, batch, batch_idx):
-        # Forward pass
-        preds = self.model(
-            input_ids=batch['input_ids'],
-            attention_mask=batch['attention_mask'],
-            temperature=batch['temperature']
-        )
+        if 'token_ids' in batch:
+            # Path for ESM3
+            preds = self.model(
+                token_ids=batch['token_ids'],
+                temperature=batch['temperature']
+            )
+        else:
+            # Path for ESM2
+            preds = self.model(
+                input_ids=batch['input_ids'],
+                attention_mask=batch['attention_mask'],
+                temperature=batch['temperature']
+            )
         
-        # Calculate loss
         m_preds, m_targets = self._masked(preds, batch['labels'])
         loss = self._calculate_loss(m_preds, m_targets)
         
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True,  sync_dist=True)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
         return loss
     
     def _masked(self, preds, targets):

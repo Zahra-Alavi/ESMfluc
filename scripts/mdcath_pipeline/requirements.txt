@@ -4,3 +4,4 @@ tensorboard
 torch
 torchmetrics
 transformers
+esm
