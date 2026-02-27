@@ -1,3 +1,5 @@
+from pyexpat import model
+
 import torch
 import ast
 from torch.utils.data import Dataset
@@ -6,6 +8,20 @@ from esm.sdk.api import ESMProtein, ESMProteinTensor
 from esm.tokenization import get_esm3_model_tokenizers
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
+
+from esm.models.esm3 import ESM3
+from esm.pretrained import ESM3_sm_open_v0, ESM3_structure_encoder_v0
+from esm.sdk.api import ESM3InferenceClient, ESMProtein, GenerationConfig
+from esm.tokenization.function_tokenizer import (
+    InterProQuantizedTokenizer as EsmFunctionTokenizer,
+)
+from esm.tokenization.sequence_tokenizer import (
+    EsmSequenceTokenizer,
+)
+from esm.utils.constants.esm3 import (
+    SEQUENCE_MASK_TOKEN,
+)
+from esm.pretrained import ESM3_sm_open_v0
 
 from huggingface_hub import login
 import os
@@ -85,13 +101,21 @@ class Esm3SequenceDataset(BaseSequenceDataset):
 
     def __getitem__(self, idx):
         sequence, temp, target_neq = self._get_shared_data(idx)
-        
-        # ESM3 uses multi-track tokenization
+
         protein = ESMProtein(sequence=sequence)
-        protein_tensor = self.tokenizer.encode(protein)
+        tokenized = self.tokenizer.encode(protein)
+        token_ids = tokenized.sequence
+        if len(token_ids) > self.max_len:
+            token_ids = token_ids[:self.max_len]
+        else:
+            pad_len = self.max_len - len(token_ids)
+            token_ids = torch.cat([
+                token_ids,
+                torch.zeros(pad_len, dtype=torch.long)
+            ])
         
         return {
-            "token_ids": protein_tensor.sequence,
+            "token_ids": token_ids, 
             "labels": target_neq,
             "temperature": temp
         }
@@ -107,7 +131,8 @@ class DatasetFactory:
             token = os.getenv("HUGGING_FACE_HUB_TOKEN")
             if token:
                 login(token)
-            tokenizer = get_esm3_model_tokenizers(model_name)
+            model = ESM3_sm_open_v0()
+            tokenizer = model.tokenizer
             dataset = Esm3SequenceDataset(
                 df, 
                 tokenizer,

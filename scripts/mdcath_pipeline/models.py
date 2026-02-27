@@ -1,10 +1,7 @@
 import torch
 import torch.nn as nn
 from transformers import EsmModel
-try:
-    from esm.models.esm3 import ESM3
-except ImportError:
-    ESM3 = None
+from esm.pretrained import ESM3_sm_open_v0
 
 class EsmFlucModel(nn.Module):
     def __init__(self, pretrained_model_name='facebook/esm2_t6_8M_UR50D', 
@@ -16,8 +13,8 @@ class EsmFlucModel(nn.Module):
         self.use_temperature = use_temperature
 
         if self.is_esm3:
-            # Dimensions for esm3-sm-open-v1 is 1536
-            self.esm = ESM3.from_pretrained(pretrained_model_name)
+            # Dimensions for esm3-sm-open-v0 is 1536
+            self.esm = ESM3_sm_open_v0()
             esm_hidden_size = 1536 
             
             for param in self.esm.parameters():
@@ -54,8 +51,7 @@ class EsmFlucModel(nn.Module):
             # ESM3 forward pass specifically extracts residue embeddings
             # token_ids is the sequence track from your Esm3SequenceDataset
             output = self.esm.forward_track(sequence_tokens=token_ids)
-            # ESM3 returns the latent embeddings directly
-            last_hidden_state = output 
+            last_hidden_state = output.sequence
         else:
             # ESM2 forward pass
             embeddings = self.esm(input_ids=input_ids, attention_mask=attention_mask)

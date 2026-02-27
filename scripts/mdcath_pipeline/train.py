@@ -88,8 +88,8 @@ def _prepare_data(args):
     data_max_len = max(train_df['sequence'].str.len().max(), val_df['sequence'].str.len().max()) + 2
     final_max_len = min(data_max_len, args.max_len)
     
-    train_ds= DatasetFactory.get_dataset_and_tokenizer(train_df, args.model_name, final_max_len, args.masked_value, use_log_scaling=args.use_log_scaling)
-    val_ds = DatasetFactory.get_dataset_and_tokenizer(val_df, args.model_name, final_max_len, args.masked_value, use_log_scaling=args.use_log_scaling)
+    train_ds= DatasetFactory.get_dataset(train_df, args.model_name, final_max_len, args.masked_value, use_log_scaling=args.use_log_scaling)
+    val_ds = DatasetFactory.get_dataset(val_df, args.model_name, final_max_len, args.masked_value, use_log_scaling=args.use_log_scaling)
 
     kwargs = {"num_workers": args.num_workers, "pin_memory": torch.cuda.is_available(), "persistent_workers": True}
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, **kwargs)
