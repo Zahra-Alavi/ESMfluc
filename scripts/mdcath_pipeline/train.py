@@ -88,8 +88,8 @@ def _prepare_data(args):
     data_max_len = max(train_df['sequence'].str.len().max(), val_df['sequence'].str.len().max()) + 2
     final_max_len = min(data_max_len, args.max_len)
     
-    train_ds, tokenizer = DatasetFactory.get_dataset_and_tokenizer(train_df, args.model_name, final_max_len, args.masked_value, use_log_scaling=args.use_log_scaling)
-    val_ds, _ = DatasetFactory.get_dataset_and_tokenizer(val_df, args.model_name, final_max_len, args.masked_value, use_log_scaling=args.use_log_scaling)
+    train_ds= DatasetFactory.get_dataset_and_tokenizer(train_df, args.model_name, final_max_len, args.masked_value, use_log_scaling=args.use_log_scaling)
+    val_ds = DatasetFactory.get_dataset_and_tokenizer(val_df, args.model_name, final_max_len, args.masked_value, use_log_scaling=args.use_log_scaling)
 
     kwargs = {"num_workers": args.num_workers, "pin_memory": torch.cuda.is_available(), "persistent_workers": True}
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, **kwargs)
@@ -106,7 +106,7 @@ def main():
     # Setup
     num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
     accelerator, devices, strategy, precision = _setup_hardware(num_gpus)
-    train_loader, val_loader, num_temps = _prepare_data(args, args.model_name)
+    train_loader, val_loader, num_temps = _prepare_data(args)
 
     # --- Initialize Model and Trainer ---
     # Scaled Learning Rate
