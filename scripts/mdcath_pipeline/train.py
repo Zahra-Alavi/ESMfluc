@@ -159,6 +159,9 @@ def main():
         trainer.test(trainer_module, dataloaders=val_loader, ckpt_path=args.checkpoint_path)
     else:
         trainer.fit(trainer_module, train_loader, val_loader)
+        
+        print(f"--- Best Checkpoint: {checkpoint_callback.best_model_path} ---")
+        print(f"Best model score ({checkpoint_callback.monitor}): {checkpoint_callback.best_model_score}")
 
 if __name__ == "__main__":
     main()
