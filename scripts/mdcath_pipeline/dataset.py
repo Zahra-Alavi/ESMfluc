@@ -35,9 +35,10 @@ class MdCathSequenceDataset(Dataset):
         
         sequence = row['sequence']
         labels = ast.literal_eval(row[self.temp_cols[temp_idx]])  # Convert string representation of list to actual list
+        labels = torch.tensor(labels, dtype=torch.float)
         
         if self.use_log_scaling:
-            labels = [torch.log1p(torch.tensor(float(val))) for val in labels]
+            labels = torch.log1p(labels)  # log1p is log(1+x) which is more stable for small values
         
         encoding = self.tokenizer(
             sequence,
@@ -50,7 +51,7 @@ class MdCathSequenceDataset(Dataset):
         # Padding labels
         target_neq = torch.full((self.max_len,), self.masked_value)
         actual_len = min(len(labels), self.max_len - 2)  # Account for [CLS] and [SEP]
-        target_neq[1:actual_len+1] = torch.tensor(labels[:actual_len])
+        target_neq[1:actual_len+1] = labels[:actual_len]
         
         
         return {
