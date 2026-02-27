@@ -20,6 +20,7 @@ class EsmFlucTrainer(L.LightningModule):
         self.loss_type = loss_type
         self.weight_decay = weight_decay
         self.masked_value = masked_value
+        self.use_log_scaling = use_log_scaling
         self.save_hyperparameters(ignore=['model'])
         
         self.val_mae = MeanAbsoluteError()
@@ -148,7 +149,7 @@ class EsmFlucTrainer(L.LightningModule):
         axes[0].set_ylabel("Residual ($N_{eq}^{Target} - N_{eq}^{Pred}$)")
         
         # Plot 2: Distribution
-        sns.histplot(residuals, kde=True, ax=plt.axes[1], color='purple')
+        sns.histplot(residuals, kde=True, ax=axes[1], color='purple')
         axes[1].set_title("Error Distribution")
         axes[1].legend()
         axes[1].set_xlabel("Residual Error")
