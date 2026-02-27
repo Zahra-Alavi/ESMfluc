@@ -3,11 +3,12 @@ from torch.utils.data import Dataset
 import ast
 
 class MdCathSequenceDataset(Dataset):
-    def __init__(self, dataframe, tokenizer, max_length=1024, masked_value = -100):
+    def __init__(self, dataframe, tokenizer, max_length=1024, masked_value = -100, use_log_scaling=False):
         self.df = dataframe
         self.tokenizer = tokenizer
         self.max_len = max_length
         self.masked_value = masked_value
+        self.use_log_scaling = use_log_scaling
         # For mdcath, we have different temperatures, but for atlas, we don't, so we have to handle it dynamically.
         self.temp_cols = [c for c in dataframe.columns if c.startswith('neq')]
         if self.temp_cols:
@@ -34,6 +35,9 @@ class MdCathSequenceDataset(Dataset):
         
         sequence = row['sequence']
         labels = ast.literal_eval(row[self.temp_cols[temp_idx]])  # Convert string representation of list to actual list
+        
+        if self.use_log_scaling:
+            labels = [torch.log1p(torch.tensor(float(val))) for val in labels]
         
         encoding = self.tokenizer(
             sequence,

@@ -23,6 +23,7 @@ def parse_args():
     data_group.add_argument("--checkpoint_dir", type=str, default="checkpoints/")
     data_group.add_argument("--checkpoint_path", type=str, default=None, help="Path to a specific .ckpt file for testing/generalization.")
     data_group.add_argument("--temperatures", type=str, default="320,348,379,413,450", help="Comma-separated list of temperatures to include as input features. Default: '320,348,379,413,450'")
+    data_group.add_argument("--use_log_scaling", action="store_true", help="Apply log-scaling to Neq values before training/testing.")
 
     # --- Model Architecture Arguments ---
     model_group = parser.add_argument_group("Model Architecture")
@@ -88,8 +89,8 @@ def _prepare_data(args, tokenizer):
     data_max_len = max(train_df['sequence'].str.len().max(), val_df['sequence'].str.len().max()) + 2
     final_max_len = min(data_max_len, args.max_len)
     
-    train_ds = MdCathSequenceDataset(train_df, tokenizer, final_max_len, args.masked_value)
-    val_ds = MdCathSequenceDataset(val_df, tokenizer, final_max_len, args.masked_value)
+    train_ds = MdCathSequenceDataset(train_df, tokenizer, final_max_len, args.masked_value, use_log_scaling=args.use_log_scaling)
+    val_ds = MdCathSequenceDataset(val_df, tokenizer, final_max_len, args.masked_value, use_log_scaling=args.use_log_scaling)
 
     kwargs = {"num_workers": args.num_workers, "pin_memory": torch.cuda.is_available(), "persistent_workers": True}
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, **kwargs)
@@ -120,6 +121,15 @@ def main():
         dropout_rate=args.dropout_rate,
         use_temperature=num_temps > 1
     )
+    
+    # Determine data scope for plotting
+    if "test" in args.val_path:
+        scope = "test_split"
+    elif "cleaned" in args.val_path or "original" in args.val_path:
+        scope = "entire_dataset"
+    else:
+        scope = "custom_eval"
+    
     trainer_module = EsmFlucTrainer(
         model, 
         lr=effective_lr, 
@@ -127,7 +137,11 @@ def main():
         weight_factor=args.weight_factor, 
         weight_decay=args.weight_decay, 
         masked_value=args.masked_value, 
-        loss_type=args.loss_type
+        loss_type=args.loss_type,
+        model_tag=args.model_name.split("/")[-1],
+        eval_temp=args.temperatures,
+        data_scope=scope,
+        use_log_scaling=args.use_log_scaling
     )
 
     checkpoint_callback = ModelCheckpoint(
