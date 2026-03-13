@@ -15,3 +15,5 @@ venv/
 # Ignore output directories
 plot/
 results/
+
+*.env

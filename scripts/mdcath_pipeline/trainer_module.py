@@ -64,11 +64,19 @@ class EsmFlucTrainer(L.LightningModule):
         return masked_preds, masked_targets
 
     def validation_step(self, batch, batch_idx):
-        preds = self.model(
-            input_ids=batch['input_ids'],
-            attention_mask=batch['attention_mask'],
-            temperature=batch['temperature']
-        )
+        if 'token_ids' in batch:
+            # ESM3 path
+            preds = self.model(
+                token_ids=batch['token_ids'],
+                temperature=batch['temperature']
+            )
+        else:
+            # ESM2 path
+            preds = self.model(
+                input_ids=batch['input_ids'],
+                attention_mask=batch['attention_mask'],
+                temperature=batch['temperature']
+            )
 
         m_preds, m_targets = self._masked(preds, batch['labels'])
         loss = self._calculate_loss(m_preds, m_targets)

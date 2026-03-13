@@ -1,30 +1,41 @@
-from pyexpat import model
-
 import torch
 import ast
 from torch.utils.data import Dataset
-    
-from esm.sdk.api import ESMProtein, ESMProteinTensor
-from esm.tokenization import get_esm3_model_tokenizers
-from torch.utils.data import Dataset
 from transformers import AutoTokenizer
+from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
 
-from esm.models.esm3 import ESM3
-from esm.pretrained import ESM3_sm_open_v0, ESM3_structure_encoder_v0
-from esm.sdk.api import ESM3InferenceClient, ESMProtein, GenerationConfig
-from esm.tokenization.function_tokenizer import (
-    InterProQuantizedTokenizer as EsmFunctionTokenizer,
-)
-from esm.tokenization.sequence_tokenizer import (
-    EsmSequenceTokenizer,
-)
-from esm.utils.constants.esm3 import (
-    SEQUENCE_MASK_TOKEN,
-)
-from esm.pretrained import ESM3_sm_open_v0
+# ── Compatibility patch ────────────────────────────────────────────────────────
+# EsmSequenceTokenizer (ESM 3.x) was written for older transformers where
+# PreTrainedTokenizerFast exposed special tokens via __getattr__.
+# Transformers ≥ 4.40 removed that __getattr__, causing two failures:
+#   1. __init__: base class calls setattr(self, 'pad_token', ...) but those
+#      are read-only properties → AttributeError.
+#   2. _get_token: calls self.__getattr__(name) which no longer exists.
+# Fix: add no-op setters + replace _get_token with a direct string lookup.
+_ESM3_SPECIAL_TOKENS = {
+    "cls_token": "<cls>",
+    "pad_token": "<pad>",
+    "mask_token": "<mask>",
+    "eos_token": "<eos>",
+    "bos_token": "<cls>",
+    "unk_token": "<unk>",
+}
 
-from huggingface_hub import login
-import os
+def _esm_get_token(self, token_name: str) -> str:
+    if token_name in _ESM3_SPECIAL_TOKENS:
+        return _ESM3_SPECIAL_TOKENS[token_name]
+    raise AttributeError(f"Unknown special token name: {token_name!r}")
+
+def _noop_setter(self, value):
+    pass
+
+for _attr in ("cls_token", "eos_token", "mask_token", "pad_token", "bos_token"):
+    _prop = getattr(EsmSequenceTokenizer, _attr, None)
+    if isinstance(_prop, property) and _prop.fset is None:
+        setattr(EsmSequenceTokenizer, _attr, _prop.setter(_noop_setter))
+
+EsmSequenceTokenizer._get_token = _esm_get_token
+# ──────────────────────────────────────────────────────────────────────────────
 
 class BaseSequenceDataset(Dataset):
     """Shared logic for all protein flexibility datasets."""
@@ -102,24 +113,22 @@ class Esm3SequenceDataset(BaseSequenceDataset):
     def __getitem__(self, idx):
         sequence, temp, target_neq = self._get_shared_data(idx)
 
-        protein = ESMProtein(sequence=sequence)
-        tokenized = self.tokenizer.encode(protein)
-        token_ids = tokenized.sequence
-        if len(token_ids) > self.max_len:
-            token_ids = token_ids[:self.max_len]
-        else:
-            pad_len = self.max_len - len(token_ids)
-            token_ids = torch.cat([
-                token_ids,
-                torch.zeros(pad_len, dtype=torch.long)
-            ])
-        
-        return {
-            "token_ids": token_ids, 
-            "labels": target_neq,
-            "temperature": temp
-        }
+        # EsmSequenceTokenizer is a standard HuggingFace fast tokenizer;
+        # call it directly (adds <cls>/<eos> via TemplateProcessing automatically).
+        encoded = self.tokenizer(
+            sequence,
+            truncation=True,
+            max_length=self.max_len,
+            padding="max_length",
+            return_tensors="pt",
+        )
+        token_ids = encoded["input_ids"].squeeze(0)  # [max_len]
 
+        return {
+            "token_ids": token_ids,
+            "labels": target_neq,
+            "temperature": temp,
+        }
 
 class DatasetFactory:
     @staticmethod
@@ -127,12 +136,9 @@ class DatasetFactory:
         is_esm3 = "esm3" in model_name.lower()
         
         if is_esm3:
-            # Handle gated access for ESM3
-            token = os.getenv("HUGGING_FACE_HUB_TOKEN")
-            if token:
-                login(token)
-            model = ESM3_sm_open_v0()
-            tokenizer = model.tokenizer
+            # CORRECT: Use the official model identifier
+            # Loading the model here is fine for metadata, but be careful with VRAM
+            tokenizer = EsmSequenceTokenizer()
             dataset = Esm3SequenceDataset(
                 df, 
                 tokenizer,
@@ -142,12 +148,6 @@ class DatasetFactory:
             )
         else:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
-            dataset = MdCathSequenceDataset(
-                df, 
-                tokenizer, 
-                max_length=max_length,
-                masked_value=masked_value,
-                use_log_scaling=use_log_scaling
-            )
-            
+            dataset = MdCathSequenceDataset(df, tokenizer, max_length=max_length, masked_value=masked_value, use_log_scaling=use_log_scaling)
+
         return dataset
