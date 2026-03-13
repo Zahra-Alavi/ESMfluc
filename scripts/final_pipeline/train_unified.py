@@ -40,6 +40,13 @@ from data_utils import (
 
 from transformers import EsmModel, EsmTokenizer
 
+try:
+    from esm.pretrained import ESM3_sm_open_v0
+    from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
+    ESM3_AVAILABLE = True
+except ImportError:
+    ESM3_AVAILABLE = False
+
 from models import (
     FocalLoss,
     WeightedMSELoss,
@@ -55,6 +62,28 @@ from models import (
 
 from arguments import parse_arguments
 
+
+def load_esm_model(model_name, device="cuda"):
+    """Load ESM model - supports both ESM2 (transformers) and ESM3 (esm library)"""
+    if "esm3" in model_name.lower():
+        if not ESM3_AVAILABLE:
+            raise ImportError("ESM3 models require the 'esm' library. Install with: pip install esm")
+        # ESM3 requires device to be passed during initialization
+        model = ESM3_sm_open_v0(device)
+        return model, "esm3"
+    else:
+        # ESM1/ESM2 from transformers
+        model = EsmModel.from_pretrained(f"facebook/{model_name}")
+        return model, "esm2"
+
+def load_esm_tokenizer(model_name):
+    """Load tokenizer - supports both ESM2 and ESM3"""
+    if "esm3" in model_name.lower():
+        if not ESM3_AVAILABLE:
+            raise ImportError("ESM3 models require the 'esm' library. Install with: pip install esm")
+        return EsmSequenceTokenizer()
+    else:
+        return EsmTokenizer.from_pretrained(f"facebook/{model_name}")
 
 def tokenize(sequences, tokenizer):
     """Tokenize sequences without padding"""
@@ -183,7 +212,7 @@ def train_model(args):
     print(f"Device: {args.device}")
     
     # Load tokenizer
-    tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
+    tokenizer = load_esm_tokenizer(args.esm_model)
     
     # Load data based on task type
     if args.task_type == "regression":
@@ -284,8 +313,8 @@ def train_model(args):
                               collate_fn=lambda x: collate_fn_sequence(x, tokenizer))
     
     # Load embedding model and move to device
-    embedding_model = EsmModel.from_pretrained(f"facebook/{args.esm_model}")
-    embedding_model.to(args.device)
+    embedding_model, model_type = load_esm_model(args.esm_model, device=args.device)
+    print(f"Loaded {model_type} model: {args.esm_model}")
     
     if args.freeze_all_backbone:
         for param in embedding_model.parameters():

@@ -30,6 +30,13 @@ import pandas as pd
 import torch
 from transformers import EsmModel, EsmTokenizer
 
+try:
+    from esm.pretrained import ESM3_sm_open_v0
+    from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
+    ESM3_AVAILABLE = True
+except ImportError:
+    ESM3_AVAILABLE = False
+
 from models import BiLSTMWithSelfAttentionModel
 
 

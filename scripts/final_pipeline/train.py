@@ -32,6 +32,13 @@ from data_utils import create_classification_func, load_and_preprocess_data, Seq
 
 from transformers import EsmModel, EsmTokenizer
 
+try:
+    from esm.pretrained import ESM3_sm_open_v0
+    from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
+    ESM3_AVAILABLE = True
+except ImportError:
+    ESM3_AVAILABLE = False
+
 from models import (
     FocalLoss, 
     BiLSTMClassificationModel,
@@ -41,7 +48,27 @@ from models import (
 )
 
 
+def load_esm_tokenizer(model_name):
+    """Load tokenizer - supports both ESM2 and ESM3"""
+    if "esm3" in model_name.lower():
+        if not ESM3_AVAILABLE:
+            raise ImportError("ESM3 models require the 'esm' library. Install with: pip install esm")
+        return EsmSequenceTokenizer()
+    else:
+        return EsmTokenizer.from_pretrained(f"facebook/{model_name}")
 
+def load_esm_model(model_name, device="cuda"):
+    """Load ESM model - supports both ESM2 (transformers) and ESM3 (esm library)"""
+    if "esm3" in model_name.lower():
+        if not ESM3_AVAILABLE:
+            raise ImportError("ESM3 models require the 'esm' library. Install with: pip install esm")
+        # ESM3 requires device to be passed during initialization
+        model = ESM3_sm_open_v0(device)
+        return model, "esm3"
+    else:
+        # ESM1/ESM2 from transformers
+        model = EsmModel.from_pretrained(f"facebook/{model_name}")
+        return model, "esm2"
 
 
 def tokenize(sequences, tokenizer):
@@ -130,8 +157,8 @@ def get_loss_fn(args, train_dataset):
     return loss_fn
 
 def set_up_embedding_model(args):
-    embedding_model = EsmModel.from_pretrained(f"facebook/{args.esm_model}")
-    embedding_model.to(args.device)
+    embedding_model, model_type = load_esm_model(args.esm_model, device=args.device)
+    print(f"Loaded {model_type} model: {args.esm_model}")
     
     if getattr(args, "freeze_all_backbone", False):
         for p in embedding_model.parameters():
@@ -240,7 +267,7 @@ def train(args):
     test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
 
     # Preprocessing data
-    tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
+    tokenizer = load_esm_tokenizer(args.esm_model)
     X_train = tokenize(train_data['sequence'], tokenizer) # [input_ids, attention_mask]
     X_test = tokenize(test_data['sequence'], tokenizer)
     y_train = train_data['neq_class'].tolist()

@@ -9,6 +9,13 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from transformers import EsmModel, EsmTokenizer
+
+try:
+    from esm.pretrained import ESM3_sm_open_v0
+    from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
+    ESM3_AVAILABLE = True
+except ImportError:
+    ESM3_AVAILABLE = False
 import ast
 
 from models import BiLSTMWithSelfAttentionRegressionModel, WeightedMSELoss
