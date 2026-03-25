@@ -71,7 +71,8 @@ def parse_interpro_json(interpro_path):
     Parse InterPro JSON and extract functional sites for each sequence.
     
     Returns:
-        dict: {seq_id: {'sequence': str, 'sites': {site_type: [residue_indices]}}}
+        dict: {seq_id: {'sequence': str, 'sites': {site_type: [residue_indices]},
+                        'site_checks': [detailed site records with numbering/residue]}}
     """
     print(f"Parsing InterPro JSON from {interpro_path}")
     
@@ -93,6 +94,7 @@ def parse_interpro_json(interpro_path):
         
         # Extract all sites from matches -> locations -> sites
         all_sites = defaultdict(list)
+        site_checks = []
         
         matches = entry.get('matches', [])
         for match in matches:
@@ -109,12 +111,28 @@ def parse_interpro_json(interpro_path):
                     for loc in site_locations:
                         start = loc.get('start')
                         end = loc.get('end')
+                        expected_residue = loc.get('residue', None)
                         if start is not None:
                             # InterPro uses 1-based indexing, convert to 0-based
                             if start == end:
                                 all_sites[site_desc].append(start - 1)
+                                site_checks.append({
+                                    'site_desc': site_desc,
+                                    'start_1based': start,
+                                    'end_1based': end,
+                                    'index_0based': start - 1,
+                                    'expected_residue': expected_residue
+                                })
                             else:
                                 all_sites[site_desc].extend(range(start - 1, end))
+                                for idx in range(start - 1, end):
+                                    site_checks.append({
+                                        'site_desc': site_desc,
+                                        'start_1based': start,
+                                        'end_1based': end,
+                                        'index_0based': idx,
+                                        'expected_residue': None
+                                    })
         
         # Flatten all sites into a single set of functional residues
         all_functional_residues = set()
@@ -125,6 +143,7 @@ def parse_interpro_json(interpro_path):
             sequences_data[seq_id] = {
                 'sequence': sequence,
                 'sites': dict(all_sites),
+                'site_checks': site_checks,
                 'all_functional': sorted(all_functional_residues),
                 'n_sites': len(all_sites),
                 'n_functional_residues': len(all_functional_residues)
@@ -133,6 +152,68 @@ def parse_interpro_json(interpro_path):
     
     print(f"Parsed {len(sequences_data)} sequences with functional annotations\n")
     return sequences_data
+
+
+def run_sequence_numbering_checks(seq_id, interpro_seq, attention_seq, attention_matrix,
+                                  site_checks, top_hub_indices):
+    """
+    Validate sequence/index consistency across:
+      1) InterPro sequence and attention sequence
+      2) InterPro site numbering (1-based) -> sequence residue mapping
+      3) High-attention indices -> residue identity consistency
+    """
+    checks = {
+        'seq_len_interpro': len(interpro_seq),
+        'seq_len_attention': len(attention_seq),
+        'attn_rows': int(attention_matrix.shape[0]),
+        'attn_cols': int(attention_matrix.shape[1]),
+        'sequence_exact_match': interpro_seq == attention_seq,
+        'sequence_mismatch_count': 0,
+        'sequence_identity': np.nan,
+        'site_total_checks': 0,
+        'site_out_of_range_count': 0,
+        'site_expected_residue_checks': 0,
+        'site_residue_mismatch_interpro_seq': 0,
+        'site_residue_mismatch_attention_seq': 0,
+        'top_hub_count': int(len(top_hub_indices)),
+        'top_hub_out_of_range_count': 0,
+        'top_hub_seq_mismatch_count': 0,
+    }
+
+    # Global sequence identity
+    if len(interpro_seq) == len(attention_seq) and len(interpro_seq) > 0:
+        checks['sequence_mismatch_count'] = sum(1 for a, b in zip(interpro_seq, attention_seq) if a != b)
+        checks['sequence_identity'] = 1.0 - (checks['sequence_mismatch_count'] / len(interpro_seq))
+
+    # Check InterPro numbering and (when available) residue letter correctness
+    for site in site_checks:
+        idx = site['index_0based']
+        expected = site.get('expected_residue', None)
+        checks['site_total_checks'] += 1
+
+        # Out-of-range relative to InterPro sequence
+        if idx < 0 or idx >= len(interpro_seq):
+            checks['site_out_of_range_count'] += 1
+            continue
+
+        # Residue letter checks if expected residue is available
+        if expected is not None:
+            checks['site_expected_residue_checks'] += 1
+            if interpro_seq[idx] != expected:
+                checks['site_residue_mismatch_interpro_seq'] += 1
+
+            if 0 <= idx < len(attention_seq) and attention_seq[idx] != expected:
+                checks['site_residue_mismatch_attention_seq'] += 1
+
+    # Check top-hub indices against both sequences
+    for idx in top_hub_indices:
+        if idx < 0 or idx >= len(interpro_seq) or idx >= len(attention_seq):
+            checks['top_hub_out_of_range_count'] += 1
+            continue
+        if interpro_seq[idx] != attention_seq[idx]:
+            checks['top_hub_seq_mismatch_count'] += 1
+
+    return checks
 
 
 def compute_attention_hubs(attention_matrix, metric="max_received"):
@@ -469,6 +550,30 @@ def main():
         
         # Compute hub scores
         hub_scores = compute_attention_hubs(attention_matrix, metric=args.hub_metric)
+
+        # High-attention indices (same rule as enrichment)
+        hub_threshold = np.percentile(hub_scores, 100 - args.top_percent)
+        top_hub_indices = np.where(hub_scores >= hub_threshold)[0]
+
+        # Sequence/index reliability checks
+        seq_checks = run_sequence_numbering_checks(
+            seq_id=seq_id,
+            interpro_seq=interpro_seq,
+            attention_seq=attention_seq,
+            attention_matrix=attention_matrix,
+            site_checks=func_data.get('site_checks', []),
+            top_hub_indices=top_hub_indices,
+        )
+
+        print("  Sequence/numbering checks:")
+        print(f"    seq identity: {seq_checks['sequence_identity']:.4f}" if not np.isnan(seq_checks['sequence_identity'])
+              else "    seq identity: N/A (length mismatch)")
+        print(f"    site checks: {seq_checks['site_total_checks']} | out-of-range: {seq_checks['site_out_of_range_count']}")
+        print(f"    expected-residue checks: {seq_checks['site_expected_residue_checks']} | "
+              f"mismatch (InterPro seq): {seq_checks['site_residue_mismatch_interpro_seq']} | "
+              f"mismatch (Attention seq): {seq_checks['site_residue_mismatch_attention_seq']}")
+        print(f"    top hubs: {seq_checks['top_hub_count']} | out-of-range: {seq_checks['top_hub_out_of_range_count']} | "
+              f"InterPro-vs-Attention AA mismatch at top hubs: {seq_checks['top_hub_seq_mismatch_count']}")
         
         # Statistical analyses
         enrichment = compute_enrichment(hub_scores, functional_residues, top_percent=args.top_percent)
@@ -497,7 +602,17 @@ def main():
             'spearman_r': correlation['spearman_r'],
             'spearman_p': correlation['spearman_p'],
             'hub_metric': args.hub_metric,
-            'top_percent': args.top_percent
+            'top_percent': args.top_percent,
+            'seq_identity': seq_checks['sequence_identity'],
+            'sequence_mismatch_count': seq_checks['sequence_mismatch_count'],
+            'site_total_checks': seq_checks['site_total_checks'],
+            'site_out_of_range_count': seq_checks['site_out_of_range_count'],
+            'site_expected_residue_checks': seq_checks['site_expected_residue_checks'],
+            'site_residue_mismatch_interpro_seq': seq_checks['site_residue_mismatch_interpro_seq'],
+            'site_residue_mismatch_attention_seq': seq_checks['site_residue_mismatch_attention_seq'],
+            'top_hub_count': seq_checks['top_hub_count'],
+            'top_hub_out_of_range_count': seq_checks['top_hub_out_of_range_count'],
+            'top_hub_seq_mismatch_count': seq_checks['top_hub_seq_mismatch_count']
         }
         all_results.append(result)
     
