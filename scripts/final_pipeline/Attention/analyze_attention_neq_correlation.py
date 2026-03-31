@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-Analyze correlation between attention patterns and NEQ fluctuation values.
+Analyze correlation between attention patterns and NEQ fluctuation value to answer: 
+Are positions with high NEQ characterized by high incoming attention / high in-degree / high betweenness / high clustering?
 
 CORRELATION LOGIC:
-- Each sequence has PER-RESIDUE NEQ values (one float per position)
-- We compute PER-POSITION metrics (4 metrics per residue in the sequence)
 - For each position i in a sequence: correlate attention_metric[i] with neq[i]
 - Then correlate: across all positions in all sequences, do positions with high metric values also have high NEQ?
 
-This answers: "Are positions with high NEQ characterized by high incoming attention / high in-degree / high betweenness / high clustering?"
 
 Outputs:
 - CSV with all metrics per position per sequence, matched with per-residue NEQ
@@ -24,7 +22,7 @@ from typing import Dict, List, Tuple, Any
 
 import numpy as np
 import pandas as pd
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, rankdata, spearmanr, kendalltau
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -84,6 +82,37 @@ def load_csv_neq(path: str) -> Dict[str, np.ndarray]:
     return neq_map
 
 
+def scale_neq_array(neq: np.ndarray, mode: str) -> np.ndarray:
+    """Scale NEQ per sequence before pooling across proteins."""
+    x = np.asarray(neq, dtype=np.float32)
+
+    if mode == "none":
+        return x
+
+    if mode == "zscore":
+        std = float(np.std(x))
+        if std <= 1e-12:
+            return np.zeros_like(x)
+        return (x - float(np.mean(x))) / std
+
+    if mode == "minmax":
+        mn = float(np.min(x))
+        mx = float(np.max(x))
+        rng = mx - mn
+        if rng <= 1e-12:
+            return np.zeros_like(x)
+        return (x - mn) / rng
+
+    if mode == "rank":
+        # Average ranks for ties, then map to [0,1]
+        r = rankdata(x, method="average")  # 1..N
+        if len(r) <= 1:
+            return np.zeros_like(x)
+        return ((r - 1.0) / (len(r) - 1.0)).astype(np.float32)
+
+    raise ValueError(f"Unknown NEQ scaling mode: {mode}")
+
+
 def compute_incoming_attention(attn_matrix: np.ndarray) -> np.ndarray:
     """
     Compute average incoming attention per position.
@@ -97,6 +126,45 @@ def compute_incoming_attention(attn_matrix: np.ndarray) -> np.ndarray:
     return incoming_avg
 
 
+def compute_max_received_attention(attn_matrix: np.ndarray) -> np.ndarray:
+    """Compute max received attention per residue: max_i A[i, j]."""
+    return attn_matrix.max(axis=0)
+
+
+def analyze_rank_alignment_per_protein(
+    seq_name: str,
+    attn_matrix: np.ndarray,
+    neq_array: np.ndarray,
+) -> Dict[str, Any]:
+    """Fast robust per-protein correlation between NEQ and received attention metrics."""
+    L = attn_matrix.shape[0]
+    if len(neq_array) != L:
+        raise ValueError(f"NEQ array length {len(neq_array)} != attention matrix length {L}")
+
+    avg_received = compute_incoming_attention(attn_matrix)
+    max_received = compute_max_received_attention(attn_matrix)
+
+    # Robust nonparametric associations per protein
+    sp_avg_r, sp_avg_p = spearmanr(neq_array, avg_received)
+    sp_max_r, sp_max_p = spearmanr(neq_array, max_received)
+
+    kd_avg_tau, kd_avg_p = kendalltau(neq_array, avg_received)
+    kd_max_tau, kd_max_p = kendalltau(neq_array, max_received)
+
+    return {
+        "seq_name": seq_name,
+        "length": L,
+        "spearman_r_neq_vs_avg_received": float(sp_avg_r) if np.isfinite(sp_avg_r) else np.nan,
+        "spearman_p_neq_vs_avg_received": float(sp_avg_p) if np.isfinite(sp_avg_p) else np.nan,
+        "spearman_r_neq_vs_max_received": float(sp_max_r) if np.isfinite(sp_max_r) else np.nan,
+        "spearman_p_neq_vs_max_received": float(sp_max_p) if np.isfinite(sp_max_p) else np.nan,
+        "kendall_tau_neq_vs_avg_received": float(kd_avg_tau) if np.isfinite(kd_avg_tau) else np.nan,
+        "kendall_p_neq_vs_avg_received": float(kd_avg_p) if np.isfinite(kd_avg_p) else np.nan,
+        "kendall_tau_neq_vs_max_received": float(kd_max_tau) if np.isfinite(kd_max_tau) else np.nan,
+        "kendall_p_neq_vs_max_received": float(kd_max_p) if np.isfinite(kd_max_p) else np.nan,
+    }
+
+
 def build_sparse_graph(
     attn_matrix: np.ndarray,
     threshold: float = 0.0,
@@ -104,7 +172,7 @@ def build_sparse_graph(
     percentile: int = 0,
     local_peaks: bool = False,
     normalize: bool = False,
-) -> nx.DiGraph:
+):
     """
     Build sparsified attention graph with multiple filtering strategies.
     
@@ -171,7 +239,7 @@ def build_sparse_graph(
     return G
 
 
-def compute_graph_metrics(G: nx.DiGraph) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def compute_graph_metrics(G) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute graph metrics for all nodes.
     
@@ -312,6 +380,21 @@ def main():
     p.add_argument("--attention-json", "-a", required=True, help="Input JSON with attention matrices")
     p.add_argument("--neq-csv", "-n", required=True, help="CSV with per-residue NEQ values")
     p.add_argument("--output-dir", "-o", required=True, help="Output directory for results")
+    p.add_argument(
+        "--neq-scale",
+        type=str,
+        default="none",
+        choices=["none", "zscore", "minmax", "rank"],
+        help="Scale NEQ per sequence before pooling (default: none)",
+    )
+    p.add_argument(
+        "--rank-analysis-only",
+        action="store_true",
+        help=(
+            "Run fast per-protein rank alignment only (no graph metrics). "
+            "Compares top NEQ residue to top avg/max received attention residues."
+        ),
+    )
     
     # Sparsification options (use one or combine them)
     p.add_argument(
@@ -364,7 +447,9 @@ def main():
     
     # Analyze each sequence
     print(f"\nMatching {len(attn_data)} attention sequences with {len(neq_map)} NEQ sequences...")
+    print(f"NEQ scaling mode: {args.neq_scale}")
     results = []
+    rank_results = []
     matched_count = 0
     
     for rec in attn_data:
@@ -373,27 +458,77 @@ def main():
         sequence = rec.get('sequence', '')
         
         # Find matching per-residue NEQ array by sequence string
-        neq_array = neq_map.get(sequence)
-        if neq_array is None:
+        neq_array_raw = neq_map.get(sequence)
+        if neq_array_raw is None:
             print(f"  ⚠ No NEQ match: {seq_name} (length={attn_matrix.shape[0]})")
             continue
+
+        neq_array = scale_neq_array(neq_array_raw, args.neq_scale)
         
-        print(f"  ✓ Matched {seq_name} (length={attn_matrix.shape[0]}, NEQ range=[{neq_array.min():.3f}, {neq_array.max():.3f}])")
+        print(
+            f"  ✓ Matched {seq_name} (length={attn_matrix.shape[0]}, "
+            f"NEQ raw range=[{neq_array_raw.min():.3f}, {neq_array_raw.max():.3f}], "
+            f"used range=[{neq_array.min():.3f}, {neq_array.max():.3f}])"
+        )
         matched_count += 1
         
         try:
-            res = analyze_sequence(
-                seq_name, attn_matrix, sequence, neq_array,
-                threshold=args.threshold,
-                topk=args.topk,
-                percentile=args.percentile,
-                local_peaks=args.local_peaks,
-                normalize=args.normalize
-            )
-            results.append(res)
+            if args.rank_analysis_only:
+                rank_res = analyze_rank_alignment_per_protein(seq_name, attn_matrix, neq_array)
+                rank_results.append(rank_res)
+            else:
+                res = analyze_sequence(
+                    seq_name, attn_matrix, sequence, neq_array,
+                    threshold=args.threshold,
+                    topk=args.topk,
+                    percentile=args.percentile,
+                    local_peaks=args.local_peaks,
+                    normalize=args.normalize
+                )
+                results.append(res)
         except Exception as e:
             print(f"  ✗ Error processing {seq_name}: {e}")
             continue
+
+    if args.rank_analysis_only:
+        if not rank_results:
+            print("\n✗ ERROR: No sequences processed for rank analysis.")
+            return
+
+        df_rank = pd.DataFrame(rank_results)
+        rank_csv = os.path.join(args.output_dir, "rank_alignment_per_protein.csv")
+        df_rank.to_csv(rank_csv, index=False)
+
+        print("\n" + "=" * 60)
+        print("ROBUST PER-PROTEIN CORRELATION RESULTS")
+        print("=" * 60)
+        print(f"Proteins analyzed: {len(df_rank)}")
+        print(
+            "Median Spearman r (NEQ vs avg_received): "
+            f"{df_rank['spearman_r_neq_vs_avg_received'].median():.3f}"
+        )
+        print(
+            "Median Spearman r (NEQ vs max_received): "
+            f"{df_rank['spearman_r_neq_vs_max_received'].median():.3f}"
+        )
+        print(
+            "Median Kendall tau (NEQ vs avg_received): "
+            f"{df_rank['kendall_tau_neq_vs_avg_received'].median():.3f}"
+        )
+        print(
+            "Median Kendall tau (NEQ vs max_received): "
+            f"{df_rank['kendall_tau_neq_vs_max_received'].median():.3f}"
+        )
+        print(
+            "Proteins with Spearman p<0.05 (NEQ vs avg_received): "
+            f"{int((df_rank['spearman_p_neq_vs_avg_received'] < 0.05).sum())}/{len(df_rank)}"
+        )
+        print(
+            "Proteins with Spearman p<0.05 (NEQ vs max_received): "
+            f"{int((df_rank['spearman_p_neq_vs_max_received'] < 0.05).sum())}/{len(df_rank)}"
+        )
+        print(f"\n✓ Saved rank alignment table to {rank_csv}")
+        return
     
     if not results:
         print("\n✗ ERROR: No sequences processed. Check that:")
@@ -450,9 +585,9 @@ def main():
     corr_csv = os.path.join(args.output_dir, "correlations.csv")
     with open(corr_csv, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['metric', 'pearson_r', 'p_value'])
+        writer.writerow(['metric', 'pearson_r', 'p_value', 'neq_scale'])
         for metric_name, corr_dict in correlations.items():
-            writer.writerow([metric_name, corr_dict['r'], corr_dict['p']])
+            writer.writerow([metric_name, corr_dict['r'], corr_dict['p'], args.neq_scale])
     print(f"✓ Saved correlations to {corr_csv}")
     
     # Create visualizations
@@ -473,7 +608,7 @@ def main():
     strategy_str = ", ".join(strategy_parts)
     
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    fig.suptitle(f"Attention Metrics vs NEQ ({strategy_str})", fontsize=16)
+    fig.suptitle(f"Attention Metrics vs NEQ ({strategy_str}, neq_scale={args.neq_scale})", fontsize=16)
     
     for ax, metric_name in zip(axes.flat, metrics):
         metric_vals = agg[metric_name]
