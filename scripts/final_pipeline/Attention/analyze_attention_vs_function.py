@@ -63,6 +63,27 @@ def parse_args():
         default=10.0,
         help="Top percentage of residues to consider as hubs (default: 10)"
     )
+    parser.add_argument(
+        "--functional_source",
+        type=str,
+        default="site_only",
+        choices=["site_only", "site_or_location_fallback", "location_only"],
+        help=(
+            "How to define functional residues from InterPro. "
+            "site_only: use siteLocations only (default). "
+            "site_or_location_fallback: use siteLocations, but fallback to location ranges if no sites exist. "
+            "location_only: use location start/end ranges as functional residues."
+        ),
+    )
+    parser.add_argument(
+        "--strict_numbering",
+        action="store_true",
+        help=(
+            "Fail/skip proteins unless numbering checks are fully clean: "
+            "sequence mismatch=0, site out-of-range=0, expected-residue mismatch on attention seq=0, "
+            "top-hub out-of-range=0"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -94,12 +115,19 @@ def parse_interpro_json(interpro_path):
         
         # Extract all sites from matches -> locations -> sites
         all_sites = defaultdict(list)
+        all_location_residues = set()
         site_checks = []
         
         matches = entry.get('matches', [])
         for match in matches:
             locations = match.get('locations', [])
             for location in locations:
+                loc_start = location.get('start')
+                loc_end = location.get('end')
+                if loc_start is not None:
+                    loc_end = loc_end if loc_end is not None else loc_start
+                    all_location_residues.update(range(int(loc_start) - 1, int(loc_end)))
+
                 sites_list = location.get('sites', [])
                 if sites_list is None:
                     continue
@@ -139,16 +167,23 @@ def parse_interpro_json(interpro_path):
         for site_residues in all_sites.values():
             all_functional_residues.update(site_residues)
         
-        if all_sites:  # Only add if we found sites
+        if all_sites or all_location_residues:  # keep entries even when only broad ranges exist
             sequences_data[seq_id] = {
                 'sequence': sequence,
                 'sites': dict(all_sites),
                 'site_checks': site_checks,
+                'all_site_functional': sorted(all_functional_residues),
+                'all_location_functional': sorted(all_location_residues),
                 'all_functional': sorted(all_functional_residues),
                 'n_sites': len(all_sites),
-                'n_functional_residues': len(all_functional_residues)
+                'n_functional_residues': len(all_functional_residues),
+                'n_location_residues': len(all_location_residues),
             }
-            print(f"  {seq_id}: {len(all_sites)} site types, {len(all_functional_residues)} functional residues")
+            print(
+                f"  {seq_id}: {len(all_sites)} site types, "
+                f"{len(all_functional_residues)} site residues, "
+                f"{len(all_location_residues)} location-range residues"
+            )
     
     print(f"Parsed {len(sequences_data)} sequences with functional annotations\n")
     return sequences_data
@@ -317,13 +352,30 @@ def compute_roc_metrics(hub_scores, functional_residues, L):
     # Use hub scores as predictions
     y_scores = hub_scores
     
-    # ROC curve
-    fpr, tpr, thresholds_roc = roc_curve(y_true, y_scores)
-    roc_auc = auc(fpr, tpr)
-    
-    # Precision-Recall curve
-    precision, recall, thresholds_pr = precision_recall_curve(y_true, y_scores)
-    avg_precision = average_precision_score(y_true, y_scores)
+    n_pos = int(y_true.sum())
+    n_neg = int(L - n_pos)
+
+    # Degenerate case: ROC is undefined if only one class exists
+    if n_pos == 0 or n_neg == 0:
+        roc_auc = np.nan
+        fpr = np.array([0.0, 1.0])
+        tpr = np.array([np.nan, np.nan])
+    else:
+        fpr, tpr, _ = roc_curve(y_true, y_scores)
+        roc_auc = auc(fpr, tpr)
+
+    # PR can still be computed, but becomes trivial in degenerate cases
+    if n_pos == 0:
+        precision = np.array([0.0])
+        recall = np.array([0.0])
+        avg_precision = np.nan
+    elif n_neg == 0:
+        precision = np.array([1.0])
+        recall = np.array([1.0])
+        avg_precision = 1.0
+    else:
+        precision, recall, _ = precision_recall_curve(y_true, y_scores)
+        avg_precision = average_precision_score(y_true, y_scores)
     
     return {
         'roc_auc': roc_auc,
@@ -343,11 +395,16 @@ def compute_correlation(hub_scores, functional_residues, L):
     functional_binary = np.zeros(L)
     functional_binary[functional_residues] = 1
     
-    # Spearman correlation (rank-based, more robust)
-    spearman_r, spearman_p = stats.spearmanr(hub_scores, functional_binary)
-    
-    # Point-biserial correlation (for binary variable)
-    pointbiserial_r, pointbiserial_p = stats.pointbiserialr(functional_binary, hub_scores)
+    # Correlations are undefined if binary target has no variance
+    if functional_binary.min() == functional_binary.max():
+        spearman_r, spearman_p = np.nan, np.nan
+        pointbiserial_r, pointbiserial_p = np.nan, np.nan
+    else:
+        # Spearman correlation (rank-based, more robust)
+        spearman_r, spearman_p = stats.spearmanr(hub_scores, functional_binary)
+
+        # Point-biserial correlation (for binary variable)
+        pointbiserial_r, pointbiserial_p = stats.pointbiserialr(functional_binary, hub_scores)
     
     return {
         'spearman_r': spearman_r,
@@ -355,6 +412,46 @@ def compute_correlation(hub_scores, functional_residues, L):
         'pointbiserial_r': pointbiserial_r,
         'pointbiserial_p': pointbiserial_p
     }
+
+
+def build_overall_performance_summary(df_summary):
+    """Build one-row aggregate performance summary across all processed proteins."""
+    n = len(df_summary)
+    if n == 0:
+        return pd.DataFrame([])
+
+    out = {
+        'n_proteins': int(n),
+        'hub_metric': df_summary['hub_metric'].iloc[0] if 'hub_metric' in df_summary.columns else None,
+        'top_percent': float(df_summary['top_percent'].iloc[0]) if 'top_percent' in df_summary.columns else np.nan,
+        'functional_source_mode': df_summary['functional_source_mode'].iloc[0] if 'functional_source_mode' in df_summary.columns else None,
+        'median_fold_enrichment': float(df_summary['fold_enrichment'].median()),
+        'mean_fold_enrichment': float(df_summary['fold_enrichment'].mean()),
+        'median_roc_auc': float(df_summary['roc_auc'].median()),
+        'mean_roc_auc': float(df_summary['roc_auc'].mean()),
+        'median_avg_precision': float(df_summary['avg_precision'].median()),
+        'mean_avg_precision': float(df_summary['avg_precision'].mean()),
+        'median_spearman_r': float(df_summary['spearman_r'].median()),
+        'mean_spearman_r': float(df_summary['spearman_r'].mean()),
+        'n_fisher_p_lt_0_05': int((df_summary['fisher_p'] < 0.05).sum()),
+        'frac_fisher_p_lt_0_05': float((df_summary['fisher_p'] < 0.05).mean()),
+        'n_spearman_p_lt_0_05': int((df_summary['spearman_p'] < 0.05).sum()),
+        'frac_spearman_p_lt_0_05': float((df_summary['spearman_p'] < 0.05).mean()),
+        'n_spearman_positive': int((df_summary['spearman_r'] > 0).sum()),
+        'frac_spearman_positive': float((df_summary['spearman_r'] > 0).mean()),
+    }
+
+    if 'numbering_ok' in df_summary.columns:
+        out['n_numbering_ok'] = int(df_summary['numbering_ok'].sum())
+        out['frac_numbering_ok'] = float(df_summary['numbering_ok'].mean())
+
+    if 'functional_source_used' in df_summary.columns:
+        counts = df_summary['functional_source_used'].value_counts(dropna=False).to_dict()
+        out['n_source_site'] = int(counts.get('site', 0))
+        out['n_source_location_fallback'] = int(counts.get('location_fallback', 0))
+        out['n_source_location_only'] = int(counts.get('location_only', 0))
+
+    return pd.DataFrame([out])
 
 
 def plot_analysis(seq_id, hub_scores, functional_residues, enrichment, roc_metrics, 
@@ -392,8 +489,10 @@ def plot_analysis(seq_id, hub_scores, functional_residues, enrichment, roc_metri
     func_scores = [hub_scores[i] for i in functional_residues]
     non_func_scores = [hub_scores[i] for i in range(L) if i not in functional_set]
     
-    ax2.hist(non_func_scores, bins=30, alpha=0.6, label='Non-functional', density=True, color='gray')
-    ax2.hist(func_scores, bins=30, alpha=0.6, label='Functional', density=True, color='red')
+    if len(non_func_scores) > 0:
+        ax2.hist(non_func_scores, bins=30, alpha=0.6, label='Non-functional', density=True, color='gray')
+    if len(func_scores) > 0:
+        ax2.hist(func_scores, bins=30, alpha=0.6, label='Functional', density=True, color='red')
     ax2.set_xlabel('Hub Score')
     ax2.set_ylabel('Density')
     ax2.set_title('Hub Score Distribution')
@@ -402,7 +501,9 @@ def plot_analysis(seq_id, hub_scores, functional_residues, enrichment, roc_metri
     
     # 3. ROC Curve
     ax3 = fig.add_subplot(gs[1, 1])
-    ax3.plot(roc_metrics['fpr'], roc_metrics['tpr'], linewidth=2, label=f'ROC (AUC = {roc_metrics["roc_auc"]:.3f})')
+    roc_auc_val = roc_metrics['roc_auc']
+    roc_auc_txt = f"{roc_auc_val:.3f}" if np.isfinite(roc_auc_val) else "NA"
+    ax3.plot(roc_metrics['fpr'], roc_metrics['tpr'], linewidth=2, label=f'ROC (AUC = {roc_auc_txt})')
     ax3.plot([0, 1], [0, 1], 'k--', label='Random')
     ax3.set_xlabel('False Positive Rate')
     ax3.set_ylabel('True Positive Rate')
@@ -442,16 +543,23 @@ Fisher's p-value: {enrichment['p_value']:.2e}
     # 6. Correlation stats
     ax6 = fig.add_subplot(gs[2, 1])
     ax6.axis('off')
+    sp_r = correlation['spearman_r']
+    sp_p = correlation['spearman_p']
+    pb_r = correlation['pointbiserial_r']
+    pb_p = correlation['pointbiserial_p']
+    roc_auc_disp = roc_metrics['roc_auc']
+    ap_disp = roc_metrics['avg_precision']
+
     corr_text = f"""Correlation Analysis:
     
-Spearman r: {correlation['spearman_r']:.3f}
-Spearman p: {correlation['spearman_p']:.2e}
+Spearman r: {sp_r:.3f} {'' if np.isfinite(sp_r) else '(undefined)'}
+Spearman p: {sp_p:.2e} {'' if np.isfinite(sp_p) else '(undefined)'}
 
-Point-biserial r: {correlation['pointbiserial_r']:.3f}
-Point-biserial p: {correlation['pointbiserial_p']:.2e}
+Point-biserial r: {pb_r:.3f} {'' if np.isfinite(pb_r) else '(undefined)'}
+Point-biserial p: {pb_p:.2e} {'' if np.isfinite(pb_p) else '(undefined)'}
 
-ROC AUC: {roc_metrics['roc_auc']:.3f}
-Avg Precision: {roc_metrics['avg_precision']:.3f}
+ROC AUC: {roc_auc_disp:.3f} {'' if np.isfinite(roc_auc_disp) else '(undefined)'}
+Avg Precision: {ap_disp:.3f} {'' if np.isfinite(ap_disp) else '(undefined)'}
     """
     ax6.text(0.1, 0.9, corr_text, transform=ax6.transAxes, fontsize=10,
              verticalalignment='top', fontfamily='monospace')
@@ -506,7 +614,23 @@ def main():
         record = attn_map[seq_id]
         attention_matrix = np.array(record['attention_weights'])
         L = attention_matrix.shape[0]
-        functional_residues = func_data['all_functional']
+        site_functional = func_data.get('all_site_functional', func_data.get('all_functional', []))
+        location_functional = func_data.get('all_location_functional', [])
+
+        if args.functional_source == 'site_only':
+            functional_residues = site_functional
+            functional_source_used = 'site_only'
+        elif args.functional_source == 'location_only':
+            functional_residues = location_functional
+            functional_source_used = 'location_only'
+        else:
+            if len(site_functional) > 0:
+                functional_residues = site_functional
+                functional_source_used = 'site'
+            else:
+                functional_residues = location_functional
+                functional_source_used = 'location_fallback'
+
         ss_list = record.get('ss_pred', record.get('q3', None))
         
         # CRITICAL: Verify sequences match between InterPro and attention data
@@ -546,7 +670,10 @@ def main():
             continue
         
         print(f"  Sequence length: {L} (InterPro: {len(interpro_seq)}, Attention: {len(attention_seq)})")
-        print(f"  Functional residues: {len(functional_residues)} ({100*len(functional_residues)/L:.1f}%)")
+        print(
+            f"  Functional residues: {len(functional_residues)} "
+            f"({100*len(functional_residues)/L:.1f}%) | source={functional_source_used}"
+        )
         
         # Compute hub scores
         hub_scores = compute_attention_hubs(attention_matrix, metric=args.hub_metric)
@@ -574,6 +701,18 @@ def main():
               f"mismatch (Attention seq): {seq_checks['site_residue_mismatch_attention_seq']}")
         print(f"    top hubs: {seq_checks['top_hub_count']} | out-of-range: {seq_checks['top_hub_out_of_range_count']} | "
               f"InterPro-vs-Attention AA mismatch at top hubs: {seq_checks['top_hub_seq_mismatch_count']}")
+
+        numbering_ok = (
+            seq_checks['sequence_mismatch_count'] == 0
+            and seq_checks['site_out_of_range_count'] == 0
+            and seq_checks['site_residue_mismatch_attention_seq'] == 0
+            and seq_checks['top_hub_out_of_range_count'] == 0
+        )
+        print(f"    numbering_ok: {numbering_ok}")
+
+        if args.strict_numbering and not numbering_ok:
+            print("  ERROR: strict numbering check failed - skipping this protein")
+            continue
         
         # Statistical analyses
         enrichment = compute_enrichment(hub_scores, functional_residues, top_percent=args.top_percent)
@@ -595,6 +734,8 @@ def main():
             'length': L,
             'n_functional': len(functional_residues),
             'n_sites': func_data['n_sites'],
+            'functional_source_mode': args.functional_source,
+            'functional_source_used': functional_source_used,
             'fold_enrichment': enrichment['fold_enrichment'],
             'fisher_p': enrichment['p_value'],
             'roc_auc': roc_metrics['roc_auc'],
@@ -612,7 +753,8 @@ def main():
             'site_residue_mismatch_attention_seq': seq_checks['site_residue_mismatch_attention_seq'],
             'top_hub_count': seq_checks['top_hub_count'],
             'top_hub_out_of_range_count': seq_checks['top_hub_out_of_range_count'],
-            'top_hub_seq_mismatch_count': seq_checks['top_hub_seq_mismatch_count']
+            'top_hub_seq_mismatch_count': seq_checks['top_hub_seq_mismatch_count'],
+            'numbering_ok': numbering_ok,
         }
         all_results.append(result)
     
@@ -621,13 +763,20 @@ def main():
         df_summary = pd.DataFrame(all_results)
         out_csv = os.path.join(args.output_dir, 'hub_function_analysis_summary.csv')
         df_summary.to_csv(out_csv, index=False)
+
+        overall_csv = os.path.join(args.output_dir, 'hub_function_overall_performance.csv')
+        df_overall = build_overall_performance_summary(df_summary)
+        df_overall.to_csv(overall_csv, index=False)
         
         print(f"\n✓ Analysis complete! Results saved to {args.output_dir}")
         print(f"\nSummary Statistics:")
         print(f"  Median fold enrichment: {df_summary['fold_enrichment'].median():.2f}x")
         print(f"  Median ROC AUC: {df_summary['roc_auc'].median():.3f}")
         print(f"  Sequences with p<0.05: {(df_summary['fisher_p'] < 0.05).sum()}/{len(df_summary)}")
+        if 'numbering_ok' in df_summary.columns:
+            print(f"  Sequences with numbering_ok=True: {df_summary['numbering_ok'].sum()}/{len(df_summary)}")
         print(f"\nFull summary saved to: {out_csv}")
+        print(f"Overall performance summary saved to: {overall_csv}")
     else:
         print("\nNo sequences could be processed!")
 
