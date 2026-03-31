@@ -62,7 +62,12 @@ def run(cmd: list, cwd: Path):
     """Run a command in the given directory; raise on non-zero exit."""
     printable = " ".join(str(c) for c in cmd)
     print(f"\n$ {printable}")
-    subprocess.run([str(c) for c in cmd], cwd=str(cwd), check=True)
+    env = os.environ.copy()
+    # Ensure scripts/final_pipeline/ is on PYTHONPATH so that get_attn.py
+    # (which lives in Attention/) can still import models.py from the parent.
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(PIPELINE_DIR) + (os.pathsep + existing if existing else "")
+    subprocess.run([str(c) for c in cmd], cwd=str(cwd), check=True, env=env)
 
 
 def prepare_temp_csvs():
