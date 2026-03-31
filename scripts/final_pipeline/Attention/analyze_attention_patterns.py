@@ -8,6 +8,11 @@ Performs three main analyses:
 2. 2D Patch Mining: Discovers recurring attention motifs using k-means/NMF
 3. Periodicity Maps: Visualizes dominant attention periodicities along the sequence
 
+Important interpretation note:
+- Here, lag k means sequence separation of k residues in the attention profile,
+  i.e., interactions between positions roughly k apart in sequence.
+- This is not the same as "residues per helix turn".
+
 Usage:
     python analyze_attention_patterns.py --attention_json data.json --output_dir ./results
 """
@@ -60,6 +65,21 @@ def parse_args():
         type=int,
         default=20,
         help="Maximum lag for autocorrelation (default: 20)"
+    )
+    parser.add_argument(
+        "--make_periodicity_plots",
+        action="store_true",
+        help="Generate per-protein periodicity map PDFs"
+    )
+    parser.add_argument(
+        "--make_autocorr_plots",
+        action="store_true",
+        help="Generate per-protein autocorrelation PDFs"
+    )
+    parser.add_argument(
+        "--run_motif_mining",
+        action="store_true",
+        help="Run 2D patch motif mining (disabled by default; expensive and often hard to interpret)"
     )
     return parser.parse_args()
 
@@ -379,20 +399,17 @@ def plot_periodicity_map(periodicity, strength, seq_id, output_dir, ss_list=None
     """
     Visualize periodicity map.
     """
-    fig, axes = plt.subplots(3, 1, figsize=(14, 10))
-    fig.suptitle(f"{seq_id}: Periodicity Map", fontsize=16)
+    fig, axes = plt.subplots(2, 1, figsize=(14, 7))
+    fig.suptitle(f"{seq_id}: Dominant Attention-Lag Map", fontsize=16)
     
     L = len(periodicity)
     x = np.arange(L)
     
-    # 1. Periodicity along sequence
+    # 1. Dominant lag along sequence (lag = sequence separation)
     ax = axes[0]
     scatter = ax.scatter(x, periodicity, c=strength, cmap='viridis', s=20, alpha=0.7)
-    ax.axhline(y=3.5, color='red', linestyle='--', label='Helix (3-4)', alpha=0.5)
-    ax.axhline(y=2, color='blue', linestyle='--', label='Sheet (2)', alpha=0.5)
-    ax.set_ylabel('Dominant Lag')
-    ax.set_title('Dominant Periodicity Along Sequence')
-    ax.legend()
+    ax.set_ylabel('Dominant lag (residue separation)')
+    ax.set_title('Dominant lag by residue (higher = longer-range sequence spacing)')
     ax.grid(alpha=0.3)
     plt.colorbar(scatter, ax=ax, label='Correlation Strength')
     
@@ -401,33 +418,8 @@ def plot_periodicity_map(periodicity, strength, seq_id, output_dir, ss_list=None
     ax.plot(x, strength, alpha=0.7, linewidth=1)
     ax.fill_between(x, 0, strength, alpha=0.3)
     ax.set_ylabel('Correlation Strength')
-    ax.set_title('Periodicity Strength Along Sequence')
+    ax.set_title('Dominant-lag strength along sequence')
     ax.grid(alpha=0.3)
-    
-    # 3. Comparison with SS (if available)
-    ax = axes[2]
-    if ss_list:
-        # Map SS to numeric
-        ss_map = {'C': 0, 'H': 1, 'E': 2}
-        ss_numeric = [ss_map.get(s, 0) for s in ss_list]
-        
-        # Create colored background
-        for i in range(L):
-            color = {'C': 'gray', 'H': 'red', 'E': 'blue'}.get(ss_list[i], 'gray')
-            ax.axvspan(i-0.5, i+0.5, alpha=0.3, color=color)
-        
-        # Overlay periodicity
-        ax2 = ax.twinx()
-        ax2.plot(x, periodicity, 'k-', alpha=0.7, linewidth=1.5, label='Dominant Lag')
-        ax2.set_ylabel('Dominant Lag', color='k')
-        ax2.tick_params(axis='y', labelcolor='k')
-        
-        ax.set_yticks([0, 1, 2])
-        ax.set_yticklabels(['C', 'H', 'E'])
-        ax.set_ylabel('Secondary Structure')
-        ax.set_title('Periodicity vs Secondary Structure')
-    else:
-        ax.text(0.5, 0.5, 'No SS data available', ha='center', va='center', transform=ax.transAxes)
     
     ax.set_xlabel('Residue Index')
     
@@ -448,6 +440,11 @@ def main():
     with open(args.attention_json, 'r') as f:
         attention_data = json.load(f)
     
+    print("\nRun configuration:")
+    print(f"  make_periodicity_plots={args.make_periodicity_plots}")
+    print(f"  make_autocorr_plots={args.make_autocorr_plots}")
+    print(f"  run_motif_mining={args.run_motif_mining}")
+
     # Process each sequence
     all_results = []
     
@@ -461,29 +458,32 @@ def main():
         L = attention_matrix.shape[0]
         print(f"  Sequence length: {L}")
         
-        # Analysis 1: Autocorrelation
-        print("  Running autocorrelation analysis...")
+        # Analysis 1: Autocorrelation summary
+        print("  Running autocorrelation summary...")
         df_autocorr = analyze_1d_autocorr(attention_matrix, max_lag=args.max_lag, ss_list=ss_list)
-        plot_autocorr_analysis(df_autocorr, seq_id, args.output_dir)
+        if args.make_autocorr_plots:
+            plot_autocorr_analysis(df_autocorr, seq_id, args.output_dir)
         
         # Save autocorr data
         df_autocorr.to_csv(os.path.join(args.output_dir, f'{seq_id}_autocorr_data.csv'), index=False)
         
-        # Analysis 2: Patch mining
-        print("  Running patch mining analysis...")
-        motifs_2d, patch_labels, positions, enrichment = analyze_2d_patches(
-            attention_matrix, 
-            patch_size=args.patch_size,
-            n_motifs=args.n_motifs,
-            ss_list=ss_list,
-            seq_id=seq_id
-        )
-        plot_motifs(motifs_2d, enrichment, seq_id, args.output_dir)
+        # Analysis 2: Patch mining (optional)
+        if args.run_motif_mining:
+            print("  Running patch mining analysis...")
+            motifs_2d, patch_labels, positions, enrichment = analyze_2d_patches(
+                attention_matrix,
+                patch_size=args.patch_size,
+                n_motifs=args.n_motifs,
+                ss_list=ss_list,
+                seq_id=seq_id
+            )
+            plot_motifs(motifs_2d, enrichment, seq_id, args.output_dir)
         
-        # Analysis 3: Periodicity map
-        print("  Creating periodicity map...")
+        # Analysis 3: Periodicity map (optional plot)
+        print("  Computing periodicity summary...")
         periodicity, strength = create_periodicity_map(attention_matrix, max_lag=args.max_lag)
-        plot_periodicity_map(periodicity, strength, seq_id, args.output_dir, ss_list=ss_list)
+        if args.make_periodicity_plots:
+            plot_periodicity_map(periodicity, strength, seq_id, args.output_dir, ss_list=ss_list)
         
         # Aggregate results
         result_summary = {
@@ -492,7 +492,10 @@ def main():
             'mean_periodicity': np.nanmean(periodicity[periodicity > 0]),
             'mean_strength': np.nanmean(strength[strength > 0]),
             'helix_like_fraction': np.sum((periodicity >= 3) & (periodicity <= 4)) / L,
-            'sheet_like_fraction': np.sum(periodicity == 2) / L
+            'sheet_like_fraction': np.sum(periodicity == 2) / L,
+            'local_lag_fraction_1_6': np.sum((periodicity >= 1) & (periodicity <= 6)) / L,
+            'mid_lag_fraction_7_15': np.sum((periodicity >= 7) & (periodicity <= 15)) / L,
+            'long_lag_fraction_gt15': np.sum(periodicity > 15) / L
         }
         all_results.append(result_summary)
     
