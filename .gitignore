@@ -15,3 +15,11 @@ venv/
 # Ignore output directories
 plot/
 results/data/
+.vscode/settings.json
+data/attn_test_data_bilstm_frozen1-4.json
+scripts/final_pipeline/Attention/literature/
+scripts/final_pipeline/Attention/summary/
+scripts/final_pipeline/Attention/results
+scripts/final_pipeline/Attention/data
+data/attn_bilstm_f1-4_nsp3_neq.json
+data/attn_bilstm_f1-4_nsp3.json
