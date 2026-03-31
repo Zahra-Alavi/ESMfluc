@@ -39,6 +39,27 @@ def parse_args():
         choices=["ss_pred", "q3", "q8", "rsa", "asa", "disorder"],
         help="Structural features to plot as annotations (choose from: ss_pred, q3, q8, rsa, asa, disorder). Can specify multiple."
     )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        required=True,
+        help="Directory where HTML/PDF visualizations will be saved."
+    )
+    parser.add_argument(
+        "--protein_id",
+        type=str,
+        default=None,
+        help="If set, only visualize this single protein ID (must match FASTA/JSON ID)."
+    )
+    parser.add_argument(
+        "--matrix_key",
+        type=str,
+        default="attention_weights",
+        help=(
+            "Record key containing the NxN matrix to visualize. "
+            "Examples: attention_weights (default), contact_map"
+        )
+    )
     return parser.parse_args()
 
 
@@ -147,7 +168,7 @@ def prepare_annotation_array(data, data_type, feat_name, orientation='horizontal
     return z_array, colorscale, colorbar_config
 
 
-def visualize_attention(attention_weights, tokens: list, seq_id: str, record: dict, annotation_features: list):
+def visualize_attention(attention_weights, tokens: list, seq_id: str, record: dict, annotation_features: list, output_dir: str):
     """
     Generate and save an attention heatmap for a given sequence.
     seq_id will be used to name the output HTML file.
@@ -320,7 +341,7 @@ def visualize_attention(attention_weights, tokens: list, seq_id: str, record: di
     fig.update_yaxes(title="Query Residue", row=attn_row, col=attn_col, scaleanchor=f"x{attn_col if num_cols > 1 else ''}")
     
     # save as an interactive HTML file
-    out_html = f"{seq_id}_attention.html"
+    out_html = os.path.join(output_dir, f"{seq_id}_attention.html")
     fig.write_html(out_html)
     print(f"Saved interactive Plotly heatmap to {out_html}")
     
@@ -343,7 +364,7 @@ def find_local_peaks(array, global_threshold):
     return peaks
     
     
-def pheatmap_visualizer(attention_weights, tokens: list, seq_id: str, record: dict, annotation_features: list):
+def pheatmap_visualizer(attention_weights, tokens: list, seq_id: str, record: dict, annotation_features: list, output_dir: str):
     """
     Generate pheatmap PDF visualization of attention with optional annotations.
     """
@@ -444,7 +465,7 @@ def pheatmap_visualizer(attention_weights, tokens: list, seq_id: str, record: di
         height=fig_height
     )
 
-    out_file = f"{seq_id}_pheatmap.pdf"
+    out_file = os.path.join(output_dir, f"{seq_id}_pheatmap.pdf")
     # Save as high-resolution PDF
     fig.savefig(out_file, dpi=600, bbox_inches='tight', format='pdf')
     print(f"[pheatmap_visualizer] Saved {out_file}")
@@ -455,35 +476,59 @@ def main():
     Load attention data from JSON and generate visualizations for each sequence.
     """
     args = parse_args()
+    os.makedirs(args.output_dir, exist_ok=True)
     
     # Load attention data from JSON
-    print(f"Loading attention data from {args.attention_json}")
+    print(f"Loading matrix data from {args.attention_json}")
     with open(args.attention_json, 'r') as f:
         attention_data = json.load(f)
     
     # Create a mapping of seq_id to attention record
     attn_map = {record['name']: record for record in attention_data}
     
-    # Parse FASTA file and visualize
-    for seq_id, seq_str in parse_fasta_file(args.fasta_file):
+    fasta_map = {seq_id: seq for seq_id, seq in parse_fasta_file(args.fasta_file)}
+
+    if args.protein_id is not None:
+        target_ids = [args.protein_id]
+    else:
+        target_ids = list(fasta_map.keys())
+
+    for seq_id in target_ids:
+        if seq_id not in fasta_map:
+            print(f"Warning: {seq_id} not found in FASTA, skipping")
+            continue
         if seq_id not in attn_map:
             print(f"Warning: no attention data for {seq_id}")
             continue
-        
+
+        seq_str = fasta_map[seq_id]
         record = attn_map[seq_id]
-        attention_weights = np.array(record['attention_weights'])
-        
+        if args.matrix_key not in record:
+            print(f"Warning: key '{args.matrix_key}' not found for {seq_id}, skipping")
+            continue
+        attention_weights = np.array(record[args.matrix_key])
+
+        if attention_weights.ndim != 2 or attention_weights.shape[0] != attention_weights.shape[1]:
+            print(
+                f"Warning: matrix '{args.matrix_key}' for {seq_id} is not square: "
+                f"shape={attention_weights.shape}, skipping."
+            )
+            continue
+
         # Check sequence length match with attention matrix
         if attention_weights.shape[0] != len(seq_str):
-            print(f"Warning: length mismatch for {seq_id} (seq={len(seq_str)}, attn={attention_weights.shape[0]}), skipping.")
+            print(
+                f"Warning: length mismatch for {seq_id} "
+                f"(seq={len(seq_str)}, {args.matrix_key}={attention_weights.shape[0]}), skipping."
+            )
             continue
-        
+
         # Get tokens from sequence
         tokens = get_tokens_from_sequence(seq_str)
-        
+
         # Generate visualizations
-        visualize_attention(attention_weights, tokens, seq_id, record, args.annotations)
-        pheatmap_visualizer(attention_weights, tokens, seq_id, record, args.annotations)
+        visualize_attention(attention_weights, tokens, seq_id, record, args.annotations, args.output_dir)
+        pheatmap_visualizer(attention_weights, tokens, seq_id, record, args.annotations, args.output_dir)
       
 
 
