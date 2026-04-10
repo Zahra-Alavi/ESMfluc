@@ -1,7 +1,11 @@
 lightning
 pandas
+numpy
+matplotlib
+seaborn
 tensorboard
 torch
 torchmetrics
-transformers
-esm
+transformers==4.46.3
+huggingface_hub>=0.23
+esm==3.1.6

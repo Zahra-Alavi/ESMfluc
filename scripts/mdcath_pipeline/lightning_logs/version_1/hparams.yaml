@@ -1,6 +1,0 @@
-loss_type: weighted
-lr: 1.0e-05
-masked_value: -100
-weight_decay: 0.01
-weight_factor: 5.0
-weight_threshold: 3.0
