@@ -355,6 +355,52 @@ def main():
     ct_enrich_neqr = {(r, c): enrich_neqr[r][c] for r in CLUSTER_LABELS for c in NEQR_LABELS}
     print_table("Enrichment (obs/expected):", ct_enrich_neqr, CLUSTER_LABELS, NEQR_LABELS, fmt=".2f")
 
+    # ── SS classification performance (treat clusters as SS predictions) ──────
+    # Fixed assignment: PatA → C (coil), PatB → H (helix), Bg → E (strand)
+    # This asks: if I use the attention cluster as a 3-class SS classifier,
+    # how good is it?  Uses the ct_ss3 contingency table already built.
+    print("\n" + "="*70)
+    print("CLUSTER AS SS CLASSIFIER (PatA→C, PatB→H, Bg→E)")
+    print("Fixed assignment: attention clustering used as SS prediction")
+    print("="*70)
+
+    # mapping: cluster → predicted SS class
+    CLUSTER_TO_SS = {'PatA': 'C', 'PatB': 'H', 'Bg': 'E'}
+
+    # Build classic confusion matrix: rows=true SS, cols=predicted SS
+    # TP[ss] = ct_ss3[(cluster_that_maps_to_ss, ss)]
+    ss_to_cluster = {v: k for k, v in CLUSTER_TO_SS.items()}  # C→PatA, H→PatB, E→Bg
+
+    grand_total = sum(ct_ss3.values())
+    correct = sum(ct_ss3.get((ss_to_cluster[ss], ss), 0) for ss in SS3_LABELS)
+    accuracy = correct / grand_total if grand_total > 0 else float('nan')
+
+    print(f"\nOverall accuracy: {correct}/{grand_total} = {accuracy*100:.1f}%\n")
+    print(f"  {'Class':<6}  {'TP':>7}  {'FP':>7}  {'FN':>7}  {'Precision':>10}  {'Recall':>8}  {'F1':>8}")
+    print(f"  {'-'*6}  {'-'*7}  {'-'*7}  {'-'*7}  {'-'*10}  {'-'*8}  {'-'*8}")
+
+    f1_scores = []
+    for ss in SS3_LABELS:
+        cluster = ss_to_cluster[ss]
+        tp = ct_ss3.get((cluster, ss), 0)
+        # FP: other true-SS residues predicted as this class (other SS in same cluster row)
+        fp = sum(ct_ss3.get((cluster, other), 0) for other in SS3_LABELS if other != ss)
+        # FN: true-ss residues predicted as a different class (this SS column, other cluster rows)
+        fn = sum(ct_ss3.get((other_cl, ss), 0) for other_cl in CLUSTER_LABELS if other_cl != cluster)
+        prec   = tp / (tp + fp) if (tp + fp) > 0 else float('nan')
+        recall = tp / (tp + fn) if (tp + fn) > 0 else float('nan')
+        f1     = 2 * prec * recall / (prec + recall) if (prec + recall) > 0 else float('nan')
+        f1_scores.append(f1)
+        print(f"  {ss:<6}  {tp:>7}  {fp:>7}  {fn:>7}  {prec*100:>9.1f}%  {recall*100:>7.1f}%  {f1*100:>7.1f}%")
+
+    macro_f1 = sum(f1_scores) / len(f1_scores)
+    print(f"\n  Macro-F1: {macro_f1*100:.1f}%")
+
+    # weighted F1
+    class_totals = {ss: sum(ct_ss3.get((cl, ss), 0) for cl in CLUSTER_LABELS) for ss in SS3_LABELS}
+    weighted_f1 = sum(f1_scores[i] * class_totals[ss] for i, ss in enumerate(SS3_LABELS)) / grand_total
+    print(f"  Weighted-F1: {weighted_f1*100:.1f}%")
+
     # ── save JSON ─────────────────────────────────────────────────────────────
     if args.output:
         output = {
