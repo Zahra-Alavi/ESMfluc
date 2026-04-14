@@ -166,11 +166,15 @@ def main():
     Q8_LABELS      = ['H', 'B', 'E', 'G', 'I', 'T', 'S', 'C']
     RSA_LABELS     = ['Q1_low', 'Q2_mid_low', 'Q3_mid_high', 'Q4_high']
     DIS_LABELS     = ['Q1_low', 'Q2_mid_low', 'Q3_mid_high', 'Q4_high']
+    NEQ_LABELS     = ['neq=0(rigid)', 'neq=1(flex)']
+    NEQR_LABELS    = ['Q1_low', 'Q2_mid_low', 'Q3_mid_high', 'Q4_high']
 
     ct_ss3   = {(c, s): 0 for c in CLUSTER_LABELS for s in SS3_LABELS}
     ct_q8    = {(c, s): 0 for c in CLUSTER_LABELS for s in Q8_LABELS}
     ct_rsa   = {(c, s): 0 for c in CLUSTER_LABELS for s in RSA_LABELS}
     ct_dis   = {(c, s): 0 for c in CLUSTER_LABELS for s in DIS_LABELS}
+    ct_neq   = {(c, s): 0 for c in CLUSTER_LABELS for s in NEQ_LABELS}
+    ct_neqr  = {(c, s): 0 for c in CLUSTER_LABELS for s in NEQR_LABELS}
 
     # per-protein records for JSON output
     records = []
@@ -204,17 +208,21 @@ def main():
         for i in result['background']:
             cluster_of[i] = 'Bg'
 
-        ss3_list = rec.get('ss_pred', [])
-        q8_list  = rec.get('q8', [])
-        rsa_list = rec.get('rsa', [None] * N)
-        dis_list = rec.get('disorder', [None] * N)
+        ss3_list  = rec.get('ss_pred', [])
+        q8_list   = rec.get('q8', [])
+        rsa_list  = rec.get('rsa', [None] * N)
+        dis_list  = rec.get('disorder', [None] * N)
+        neq_list  = rec.get('neq_preds', [])
+        neqr_list = rec.get('neq_real', [None] * N)
 
-        rsa_q = quartile_label([v for v in rsa_list if v is not None]) if rsa_list else []
-        dis_q = quartile_label([v for v in dis_list if v is not None]) if dis_list else []
+        rsa_q  = quartile_label([v for v in rsa_list  if v is not None]) if rsa_list  else []
+        dis_q  = quartile_label([v for v in dis_list  if v is not None]) if dis_list  else []
+        neqr_q = quartile_label([v for v in neqr_list if v is not None]) if neqr_list else []
 
         # fill contingency tables
-        rsa_valid_idx = 0
-        dis_valid_idx = 0
+        rsa_valid_idx  = 0
+        dis_valid_idx  = 0
+        neqr_valid_idx = 0
         for i in range(N):
             cl = cluster_of[i]
             if not cl:
@@ -238,6 +246,16 @@ def main():
                 ct_dis[(cl, dis_q[dis_valid_idx])] += 1
                 dis_valid_idx += 1
 
+            # Predicted Neq class
+            if i < len(neq_list):
+                neq_lbl = 'neq=1(flex)' if neq_list[i] == 1 else 'neq=0(rigid)'
+                ct_neq[(cl, neq_lbl)] += 1
+
+            # True Neq quartile
+            if neqr_list[i] is not None and neqr_valid_idx < len(neqr_q):
+                ct_neqr[(cl, neqr_q[neqr_valid_idx])] += 1
+                neqr_valid_idx += 1
+
         patA_count = len(result['pattern_A'])
         patB_count = len(result['pattern_B'])
         bg_count   = len(result['background'])
@@ -253,6 +271,8 @@ def main():
             'q8': q8_list,
             'rsa': rsa_list,
             'disorder': dis_list,
+            'neq_preds': neq_list,
+            'neq_real': neqr_list,
         })
 
     # ── print results ─────────────────────────────────────────────────────────
@@ -311,6 +331,30 @@ def main():
     ct_enrich_dis = {(r, c): enrich_dis[r][c] for r in CLUSTER_LABELS for c in DIS_LABELS}
     print_table("Enrichment (obs/expected):", ct_enrich_dis, CLUSTER_LABELS, DIS_LABELS, fmt=".2f")
 
+    print("\n" + "="*70)
+    print("CLUSTER vs PREDICTED NEQ CLASS (0=rigid / 1=flexible)")
+    print("="*70)
+    print_table("Row-normalized (% Neq class within each cluster):",
+                {(r,c): ct_neq.get((r,c),0) / max(sum(ct_neq.get((r,s),0) for s in NEQ_LABELS),1) * 100
+                 for r in CLUSTER_LABELS for c in NEQ_LABELS},
+                CLUSTER_LABELS, NEQ_LABELS, fmt=".1f")
+    enrich_neq = enrichment_table(ct_neq, CLUSTER_LABELS, NEQ_LABELS)
+    ct_enrich_neq = {(r, c): enrich_neq[r][c] for r in CLUSTER_LABELS for c in NEQ_LABELS}
+    print_table("Enrichment (obs/expected):", ct_enrich_neq, CLUSTER_LABELS, NEQ_LABELS, fmt=".2f")
+    chi2_neq, pval_neq = chi2_pvalue(ct_neq, CLUSTER_LABELS, NEQ_LABELS)
+    print(f"\nChi-square = {chi2_neq:.2f},  p-value = {pval_neq:.2e}  (df={(len(CLUSTER_LABELS)-1)*(len(NEQ_LABELS)-1)})")
+
+    print("\n" + "="*70)
+    print("CLUSTER vs TRUE NEQ QUARTILE (continuous neq_real)")
+    print("="*70)
+    print_table("Row-normalized (% true-Neq quartile within each cluster):",
+                {(r,c): ct_neqr.get((r,c),0) / max(sum(ct_neqr.get((r,s),0) for s in NEQR_LABELS),1) * 100
+                 for r in CLUSTER_LABELS for c in NEQR_LABELS},
+                CLUSTER_LABELS, NEQR_LABELS, fmt=".1f")
+    enrich_neqr = enrichment_table(ct_neqr, CLUSTER_LABELS, NEQR_LABELS)
+    ct_enrich_neqr = {(r, c): enrich_neqr[r][c] for r in CLUSTER_LABELS for c in NEQR_LABELS}
+    print_table("Enrichment (obs/expected):", ct_enrich_neqr, CLUSTER_LABELS, NEQR_LABELS, fmt=".2f")
+
     # ── save JSON ─────────────────────────────────────────────────────────────
     if args.output:
         output = {
@@ -326,6 +370,9 @@ def main():
             'enrichment_q8':    {f"{r}_{c}": enrich_q8[r][c]        for r in CLUSTER_LABELS for c in Q8_LABELS},
             'enrichment_rsa':   {f"{r}_{c}": enrich_rsa[r][c]       for r in CLUSTER_LABELS for c in RSA_LABELS},
             'enrichment_dis':   {f"{r}_{c}": enrich_dis[r][c]       for r in CLUSTER_LABELS for c in DIS_LABELS},
+            'contingency_neq':  {f"{r}_{c}": ct_neq.get((r,c),0)    for r in CLUSTER_LABELS for c in NEQ_LABELS},
+            'enrichment_neq':   {f"{r}_{c}": enrich_neq[r][c]        for r in CLUSTER_LABELS for c in NEQ_LABELS},
+            'enrichment_neqr':  {f"{r}_{c}": enrich_neqr[r][c]       for r in CLUSTER_LABELS for c in NEQR_LABELS},
             'proteins': records,
         }
         with open(args.output, 'w') as f:
