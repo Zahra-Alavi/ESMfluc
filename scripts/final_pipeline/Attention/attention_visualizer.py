@@ -11,8 +11,14 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
-from pheatmap import pheatmap
 import os
+
+try:
+    from pheatmap import pheatmap as _pheatmap
+    _PHEATMAP_AVAILABLE = True
+except ImportError as e:
+    _PHEATMAP_AVAILABLE = False
+    print(f"[warning] pheatmap unavailable ({e}); PDF output will be skipped.")
 
 
 def parse_args():
@@ -450,7 +456,7 @@ def pheatmap_visualizer(attention_weights, tokens: list, seq_id: str, record: di
     matplotlib.rcParams['ps.fonttype'] = 42
     matplotlib.rcParams['image.interpolation'] = 'none'  # No interpolation for crisp edges
     
-    fig = pheatmap(
+    fig = _pheatmap(
         df_mat, cmap="viridis",
         annotation_row=anno_row,
         annotation_col=anno_col,
@@ -528,7 +534,10 @@ def main():
 
         # Generate visualizations
         visualize_attention(attention_weights, tokens, seq_id, record, args.annotations, args.output_dir)
-        pheatmap_visualizer(attention_weights, tokens, seq_id, record, args.annotations, args.output_dir)
+        if _PHEATMAP_AVAILABLE:
+            pheatmap_visualizer(attention_weights, tokens, seq_id, record, args.annotations, args.output_dir)
+        else:
+            print(f"[{seq_id}] Skipping pheatmap PDF (pheatmap import failed).")
       
 
 
