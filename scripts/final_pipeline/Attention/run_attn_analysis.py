@@ -2,9 +2,9 @@
 """
 run_attn_analysis.py
 
-Unified attention analysis pipeline for ATLAS experiments.
 
-For EACH experiment's bilstm_attn.json (quantitative analyses):
+
+For each attn.json (quantitative analyses):
   1.  Neq Spearman correlation  (per-protein + pooled)
   2.  K-means clustering (K=3) on residue attention profiles
   3.  SS / RSA / disorder enrichment per cluster
