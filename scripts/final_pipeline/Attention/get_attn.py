@@ -19,6 +19,62 @@ from transformers import EsmModel, EsmTokenizer
 try:
     from esm.pretrained import ESM3_sm_open_v0
     from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
+
+    # ── Compatibility patch ───────────────────────────────────────────────────
+    # Two problems:
+    # 1. EsmSequenceTokenizer defines special tokens as read-only @property.
+    #    transformers.__init__ calls setattr(self, 'mask_token', ...) → AttributeError.
+    # 2. ESM3's internal _get_token calls self.__getattr__(token_name) to retrieve
+    #    the stored token string.  This needs (a) a setter that actually stores the
+    #    value as self._mask_token etc., and (b) __getattr__ to find it.
+    #    Older transformers (< 4.40) don't define __getattr__ in the MRO at all.
+    #
+    # Fix:
+    #   a) Replace each read-only property with a writable one whose setter stores
+    #      the value via object.__setattr__(self, '_<name>', value).
+    #   b) If no class in the MRO defines __getattr__, inject a simple one that
+    #      retrieves those private attrs — compatible with both old and new transformers.
+    _SPECIAL_TOK_NAMES = (
+        'cls_token', 'eos_token', 'mask_token', 'pad_token',
+        'unk_token', 'bos_token', 'sep_token',
+    )
+
+    def _make_token_setter(private_name):
+        def setter(self, value):
+            object.__setattr__(self, private_name, value)
+        return setter
+
+    for _tok_name in _SPECIAL_TOK_NAMES:
+        for _klass in EsmSequenceTokenizer.__mro__:
+            _cls_attr = _klass.__dict__.get(_tok_name)
+            if isinstance(_cls_attr, property) and _cls_attr.fset is None:
+                setattr(_klass, _tok_name, property(
+                    _cls_attr.fget,
+                    _make_token_setter('_' + _tok_name),
+                    _cls_attr.fdel,
+                    _cls_attr.__doc__,
+                ))
+                break  # patched on the defining class; stop walking MRO
+
+    # Only inject __getattr__ if the MRO doesn't already provide one.
+    # (transformers >= 4.40 defines it in PreTrainedTokenizerBase; older versions don't.)
+    _mro_has_getattr = any(
+        '__getattr__' in klass.__dict__
+        for klass in EsmSequenceTokenizer.__mro__
+        if klass is not EsmSequenceTokenizer
+    )
+    if not _mro_has_getattr:
+        def _esm3_compat_getattr(self, name):
+            try:
+                return object.__getattribute__(self, '_' + name)
+            except AttributeError:
+                pass
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
+        EsmSequenceTokenizer.__getattr__ = _esm3_compat_getattr
+    # ─────────────────────────────────────────────────────────────────────────
+
     ESM3_AVAILABLE = True
 except ImportError:
     ESM3_AVAILABLE = False
@@ -30,6 +86,63 @@ from models import (
 )
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+# ── ESM3 compatibility wrapper ────────────────────────────────────────────────
+# ESM3 (from esm.pretrained.ESM3_sm_open_v0) uses a different forward API than
+# HuggingFace ESM2.  This wrapper makes it look like an ESM2 HF model so that
+# BiLSTMWithSelfAttentionModel.forward() can call it identically.
+
+class _ESM3Output:
+    """Minimal stand-in for HuggingFace model output with .last_hidden_state."""
+    def __init__(self, last_hidden_state):
+        self.last_hidden_state = last_hidden_state
+
+
+class _DummyConfig:
+    """Provides .hidden_size so BiLSTM __init__ can read embedding dim."""
+    def __init__(self, hidden_size):
+        self.hidden_size = hidden_size
+
+
+class ESM3Wrapper(torch.nn.Module):
+    """
+    Wraps ESM3_sm_open_v0 to expose the same interface as HuggingFace EsmModel:
+      - .config.hidden_size
+      - forward(input_ids, attention_mask) -> object with .last_hidden_state
+
+    ESM3-sm hidden size is 1536.  The raw ESM3 forward uses 'sequence_tokens'
+    and returns an ESMOutput whose per-residue embeddings are in
+    .sequence_last_hidden_states rather than .last_hidden_state.
+    """
+    ESM3_HIDDEN = 1536  # ESM3-sm-open hidden dimension
+
+    def __init__(self, esm3_model):
+        super().__init__()
+        self.esm3 = esm3_model
+        self.config = _DummyConfig(self.ESM3_HIDDEN)
+
+    def forward(self, input_ids, attention_mask=None, **kwargs):
+        # kwargs absorbs HF-style arguments like output_attentions, output_hidden_states
+        # that the BiLSTM model code may pass — ESM3 doesn't use them.
+        out = self.esm3(sequence_tokens=input_ids)
+        # ESM3 output field name changed across library versions; try both
+        if hasattr(out, 'last_hidden_state'):
+            h = out.last_hidden_state
+        elif hasattr(out, 'sequence_last_hidden_states'):
+            h = out.sequence_last_hidden_states
+        elif hasattr(out, 'embeddings'):
+            h = out.embeddings
+        else:
+            raise AttributeError(
+                f"Cannot find hidden states in ESM3 output. Keys: {list(vars(out).keys())}")
+        return _ESM3Output(h)
+
+    def parameters(self, recurse=True):
+        return self.esm3.parameters(recurse)
+
+    def named_parameters(self, prefix='', recurse=True):
+        return self.esm3.named_parameters(prefix, recurse)
 
 
 def parse_args():
@@ -66,6 +179,8 @@ def parse_args():
                         help="(Optional) Path to the CSV file containing ss predictions (NetSurfP output).")
     parser.add_argument("--output", type=str, required=True,
                         help="Path to the output JSON file.")
+    parser.add_argument("--is_esm3", action="store_true", default=False,
+                        help="Use ESM3 backbone (esm3_sm_open_v0) instead of ESM2 (HuggingFace).")
     return parser.parse_args()
 
 
@@ -94,8 +209,13 @@ def parse_fasta_file(fasta_path):
 def run_model_bilstm_attn(model, tokenizer, sequence, device, task_type="classification"):
     """Extract attention from BiLSTMWithSelfAttentionModel (custom attention layer)."""
     enc = tokenizer(sequence, return_tensors="pt", padding=False, add_special_tokens=False)
-    input_ids = enc["input_ids"].to(device)
-    attn_mask = enc["attention_mask"].to(device)
+    # ESM3's EsmSequenceTokenizer returns 'sequence_tokens'; ESM2 HF returns 'input_ids'
+    if "input_ids" in enc:
+        input_ids = enc["input_ids"].to(device)
+        attn_mask  = enc["attention_mask"].to(device)
+    else:
+        input_ids = enc["sequence_tokens"].to(device)
+        attn_mask  = torch.ones(input_ids.shape, dtype=torch.long, device=device)
     
     model.eval()
     with torch.no_grad():
@@ -104,7 +224,11 @@ def run_model_bilstm_attn(model, tokenizer, sequence, device, task_type="classif
     attn_weights = attn_weights_torch[0].cpu().numpy()  # shape=(L,L)
     
     token_ids = input_ids[0].tolist()
-    tokens = tokenizer.convert_ids_to_tokens(token_ids)  # length=L
+    # EsmSequenceTokenizer (ESM3) has convert_ids_to_tokens; fall back to list of residues
+    if hasattr(tokenizer, 'convert_ids_to_tokens'):
+        tokens = tokenizer.convert_ids_to_tokens(token_ids)
+    else:
+        tokens = list(sequence)  # plain AA characters as fallback
     
     if task_type == "classification":
         y_probs = torch.softmax(logits, dim=-1)
@@ -151,6 +275,21 @@ def run_model_esm_linear(model, tokenizer, sequence, device, layer_idx=-1, task_
     
     return attn_weights, tokens, y_preds
 
+def infer_bilstm_params(checkpoint):
+    """Infer hidden_size and num_layers for a BiLSTM model from its checkpoint keys."""
+    hidden_size = None
+    num_layers = 0
+    for key, val in checkpoint.items():
+        # e.g. 'lstm.weight_ih_l0', 'lstm.weight_ih_l3' (not '_reverse')
+        if key.startswith('lstm.weight_ih_l') and '_reverse' not in key:
+            layer_idx = int(key.split('lstm.weight_ih_l')[1])
+            num_layers = max(num_layers, layer_idx + 1)
+            if layer_idx == 0:
+                # shape: [4 * hidden_size_per_direction, input_size]
+                hidden_size = val.shape[0] // 4
+    return hidden_size, num_layers if num_layers > 0 else None
+
+
 def parse_nsp3_csv(df):
     """
     Returns a dict mapping { seq_id -> list_of_SS }, 
@@ -175,15 +314,49 @@ def main():
     
     args = parse_args()
 
-    # Load ESM model
-    esm_model_name = f"facebook/{args.esm_model}"
-    embedding_model = EsmModel.from_pretrained(esm_model_name)
+    # Load ESM model and tokenizer — ESM3 uses a different API from ESM2
+    if args.is_esm3:
+        if not ESM3_AVAILABLE:
+            raise ImportError(
+                "ESM3 requires the 'esm' library from EvolutionaryScale.\n"
+                "Install: pip install esm\n"
+                "Then log in: huggingface-cli login  (and accept the model licence at "
+                "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1)"
+            )
+        raw_esm3 = ESM3_sm_open_v0(device)
+        embedding_model = ESM3Wrapper(raw_esm3)
+        tokenizer = EsmSequenceTokenizer()
+        print("Loaded ESM3 model: esm3_sm_open_v0 (wrapped for HF-compatible API)")
+    else:
+        esm_model_name = f"facebook/{args.esm_model}"
+        embedding_model = EsmModel.from_pretrained(esm_model_name)
+        tokenizer = EsmTokenizer.from_pretrained(esm_model_name)
+        print(f"Loaded ESM2 model: {esm_model_name}")
+
     embedding_model.to(device)
-    
-    print(f"Loaded ESM model: {esm_model_name}")
     print(f"Task type: {args.task_type}")
     print(f"Architecture: {args.architecture}")
-        
+
+    # Load checkpoint early so we can infer architecture params from it
+    checkpoint = torch.load(args.checkpoint, map_location=device)
+
+    # Auto-infer hidden_size / num_layers from the checkpoint so the user
+    # doesn't have to remember the exact training flags.
+    if args.architecture == 'bilstm_attention':
+        ckpt_to_inspect = checkpoint if not args.is_esm3 else {
+            k: v for k, v in checkpoint.items()
+            if not k.startswith('embedding_model.')
+        }
+        inferred_hidden, inferred_layers = infer_bilstm_params(ckpt_to_inspect)
+        if inferred_hidden is not None and inferred_hidden != args.hidden_size:
+            print(f"[info] Auto-detected hidden_size={inferred_hidden} from checkpoint "
+                  f"(overriding CLI value {args.hidden_size})")
+            args.hidden_size = inferred_hidden
+        if inferred_layers is not None and inferred_layers != args.num_layers:
+            print(f"[info] Auto-detected num_layers={inferred_layers} from checkpoint "
+                  f"(overriding CLI value {args.num_layers})")
+            args.num_layers = inferred_layers
+
     # Build model based on architecture and task type
     if args.task_type == "classification":
         if args.architecture == "bilstm_attention":
@@ -229,11 +402,23 @@ def main():
     
     model.to(device)
 
-    checkpoint = torch.load(args.checkpoint, map_location=device)
-    model.load_state_dict(checkpoint)
+    # checkpoint was already loaded above for param inference
+    # When using ESM3, the backbone (embedding_model.*) is already loaded fresh via
+    # ESM3_sm_open_v0 + ESM3Wrapper.  The checkpoint may have been saved with the raw
+    # ESM3 directly under 'embedding_model.*' (no '.esm3.' intermediary), so those keys
+    # won't match the wrapped model.  Since the backbone was frozen during training its
+    # weights haven't changed — we only need to restore the BiLSTM + attention head.
+    if args.is_esm3:
+        head_ckpt = {k: v for k, v in checkpoint.items()
+                     if not k.startswith('embedding_model.')}
+        missing, unexpected = model.load_state_dict(head_ckpt, strict=False)
+        # 'missing' will be the frozen ESM3 backbone keys (already loaded) — expected.
+        # 'unexpected' should be empty if filtering worked correctly.
+        if unexpected:
+            print(f"[warn] unexpected keys in checkpoint after filtering: {unexpected[:5]}")
+    else:
+        model.load_state_dict(checkpoint)
     print(f"Loaded checkpoint from {args.checkpoint}")
-
-    tokenizer = EsmTokenizer.from_pretrained(esm_model_name)
 
     ss_map = {}
     ss_available = args.ss_csv is not None
@@ -247,7 +432,7 @@ def main():
         ss_list = ss_map.get(seq_id, None) if ss_available else None
         if ss_available and ss_list is None:
             print(f"Warning: no SS predictions for {seq_id}")
-        if ss_available and len(ss_list) != len(seq_str):
+        if ss_available and ss_list is not None and len(ss_list) != len(seq_str):
             print(f"Warning: length mismatch for {seq_id}, skipping.")
             continue
 
