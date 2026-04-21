@@ -29,8 +29,8 @@ def main():
         from train_unified import train_model
         print("Using train_unified.py for training")
         train_model(args)
-    except ImportError:
-        print("train_unified.py not found, using train.py")
+    except (ImportError, AttributeError) as _train_err:
+        print(f"train_unified.py unavailable ({_train_err}), using train.py")
         from train import train, train_regression
         
         # Route to appropriate training function based on task type

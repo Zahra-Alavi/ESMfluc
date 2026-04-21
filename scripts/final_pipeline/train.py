@@ -47,16 +47,19 @@ try:
             object.__setattr__(self, private_name, value)
         return setter
     for _tok_name in _SPECIAL_TOK_NAMES:
+        _getter = None
         for _klass in EsmSequenceTokenizer.__mro__:
             _cls_attr = _klass.__dict__.get(_tok_name)
-            if isinstance(_cls_attr, property) and _cls_attr.fset is None:
-                setattr(_klass, _tok_name, property(
-                    _cls_attr.fget,
-                    _make_token_setter('_' + _tok_name),
-                    _cls_attr.fdel,
-                    _cls_attr.__doc__,
-                ))
+            if isinstance(_cls_attr, property):
+                _getter = _cls_attr.fget
                 break
+        if _getter is not None:
+            # Always patch on EsmSequenceTokenizer itself (pure-Python class);
+            # avoids TypeError if a base class in the MRO is a C-extension type.
+            setattr(EsmSequenceTokenizer, _tok_name, property(
+                _getter,
+                _make_token_setter('_' + _tok_name),
+            ))
     _mro_has_getattr = any(
         '__getattr__' in klass.__dict__
         for klass in EsmSequenceTokenizer.__mro__
@@ -82,7 +85,8 @@ from models import (
     BiLSTMClassificationModel,
     BiLSTMWithSelfAttentionModel,
     TransformerClassificationModel,
-    ESMLinearTokenClassifier
+    ESMLinearTokenClassifier,
+    ESM3Wrapper,
 )
 
 
@@ -102,7 +106,7 @@ def load_esm_model(model_name, device="cuda"):
             raise ImportError("ESM3 models require the 'esm' library. Install with: pip install esm")
         # ESM3 requires device to be passed during initialization
         model = ESM3_sm_open_v0(device)
-        return model, "esm3"
+        return ESM3Wrapper(model), "esm3"
     else:
         # ESM1/ESM2 from transformers
         model = EsmModel.from_pretrained(f"facebook/{model_name}")

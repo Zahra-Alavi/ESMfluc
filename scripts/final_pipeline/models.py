@@ -10,7 +10,62 @@ Created on Tue Feb  4 10:09:40 2025
 
 import torch.nn as nn
 import torch
-import math 
+import math
+
+# =============================================================================
+# ESM3 Compatibility Wrapper
+# =============================================================================
+
+class _ESM3Output:
+    """Minimal stand-in for HuggingFace model output with .last_hidden_state."""
+    def __init__(self, last_hidden_state):
+        self.last_hidden_state = last_hidden_state
+
+
+class _DummyConfig:
+    """Provides .hidden_size so model __init__ can read embedding dim."""
+    def __init__(self, hidden_size):
+        self.hidden_size = hidden_size
+
+
+class ESM3Wrapper(nn.Module):
+    """
+    Wraps ESM3_sm_open_v0 to expose the same interface as HuggingFace EsmModel:
+      - .config.hidden_size  (1536 for esm3_sm_open_v1)
+      - forward(input_ids, attention_mask) -> object with .last_hidden_state
+
+    ESM3's raw forward uses 'sequence_tokens' and returns an object whose
+    per-residue representations may live in different fields across library
+    versions; this wrapper normalises all of them to .last_hidden_state.
+    """
+    ESM3_HIDDEN = 1536  # esm3_sm_open_v1 hidden dimension
+
+    def __init__(self, esm3_model):
+        super().__init__()
+        self.esm3 = esm3_model
+        self.config = _DummyConfig(self.ESM3_HIDDEN)
+
+    def forward(self, input_ids, attention_mask=None, **kwargs):
+        # kwargs absorbs HF-style arguments the calling code may pass
+        out = self.esm3(sequence_tokens=input_ids)
+        if hasattr(out, 'last_hidden_state'):
+            h = out.last_hidden_state
+        elif hasattr(out, 'sequence_last_hidden_states'):
+            h = out.sequence_last_hidden_states
+        elif hasattr(out, 'embeddings'):
+            h = out.embeddings
+        else:
+            raise AttributeError(
+                f"Cannot find hidden states in ESM3 output. "
+                f"Available fields: {list(vars(out).keys())}")
+        return _ESM3Output(h)
+
+    def parameters(self, recurse=True):
+        return self.esm3.parameters(recurse)
+
+    def named_parameters(self, prefix='', recurse=True):
+        return self.esm3.named_parameters(prefix, recurse)
+
 
 # =============================================================================
 # Model Architecture
