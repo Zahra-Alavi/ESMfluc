@@ -43,8 +43,46 @@ from transformers import EsmModel, EsmTokenizer
 try:
     from esm.pretrained import ESM3_sm_open_v0
     from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
+
+    # Patch read-only token properties so transformers' __init__ can set them.
+    # Required when esm library version conflicts with installed transformers.
+    _SPECIAL_TOK_NAMES = (
+        'cls_token', 'eos_token', 'mask_token', 'pad_token',
+        'unk_token', 'bos_token', 'sep_token',
+    )
+    def _make_token_setter(private_name):
+        def setter(self, value):
+            object.__setattr__(self, private_name, value)
+        return setter
+    for _tok_name in _SPECIAL_TOK_NAMES:
+        for _klass in EsmSequenceTokenizer.__mro__:
+            _cls_attr = _klass.__dict__.get(_tok_name)
+            if isinstance(_cls_attr, property) and _cls_attr.fset is None:
+                setattr(_klass, _tok_name, property(
+                    _cls_attr.fget,
+                    _make_token_setter('_' + _tok_name),
+                    _cls_attr.fdel,
+                    _cls_attr.__doc__,
+                ))
+                break
+    _mro_has_getattr = any(
+        '__getattr__' in klass.__dict__
+        for klass in EsmSequenceTokenizer.__mro__
+        if klass is not EsmSequenceTokenizer
+    )
+    if not _mro_has_getattr:
+        def _esm3_compat_getattr(self, name):
+            try:
+                return object.__getattribute__(self, '_' + name)
+            except AttributeError:
+                pass
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
+        EsmSequenceTokenizer.__getattr__ = _esm3_compat_getattr
+
     ESM3_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError, Exception) as _esm3_import_err:
     ESM3_AVAILABLE = False
 
 from models import (
