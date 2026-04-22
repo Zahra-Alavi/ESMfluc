@@ -133,20 +133,23 @@ run_training() {
     # Frozen backbone
     [[ "${frozen}" -eq 1 ]] && ARGS+=(--freeze_all_backbone)
 
-    # For unfrozen runs, use both GPUs to avoid OOM
+    # For unfrozen runs, manage memory carefully
     if [[ "${frozen}" -eq 0 ]]; then
-        ARGS+=(--data_parallel)
-        # ESM3 unfrozen needs smaller per-GPU batch + gradient accumulation to fit in memory
         if [[ "${is_esm3}" -eq 1 ]]; then
-            # Replace batch_size=4 with batch_size=1 + accum=4 (same effective batch)
+            # ESM3 unfrozen: too large for DataParallel with small batch.
+            # Use single GPU + batch_size=1 + gradient accumulation (eff. batch=4).
             for i in "${!ARGS[@]}"; do
                 if [[ "${ARGS[$i]}" == "--batch_size" ]]; then
                     ARGS[$((i+1))]="1"
                 fi
             done
             ARGS+=(--gradient_accumulation_steps 4)
+            export CUDA_VISIBLE_DEVICES="${GPU}"
+        else
+            # ESM2 unfrozen: use both GPUs with DataParallel
+            ARGS+=(--data_parallel)
+            export CUDA_VISIBLE_DEVICES="0,1"
         fi
-        export CUDA_VISIBLE_DEVICES="0,1"
     else
         export CUDA_VISIBLE_DEVICES="${GPU}"
     fi
