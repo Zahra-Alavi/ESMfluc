@@ -323,7 +323,7 @@ def extract_esm3_attn(raw_esm3, tokenizer, seq, device):
     h = h.float()
     norm = h.norm(dim=-1, keepdim=True).clamp(min=1e-12)
     h_n  = h / norm
-    sim  = torch.mm(h_n, h_n.t()).numpy()      # [L, L], range [-1, 1]
+    sim  = torch.mm(h_n, h_n.t()).cpu().numpy()      # [L, L], range [-1, 1]
 
     # Shift to [0, 1] and row-normalise to mimic softmax attention
     sim  = (sim + 1.0) / 2.0
