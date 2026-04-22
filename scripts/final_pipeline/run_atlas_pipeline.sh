@@ -67,6 +67,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 export CUDA_VISIBLE_DEVICES="$GPU"
+# Ensure models.py (in this directory) is importable by all sub-scripts
+export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}"
 
 # ── Fixed hyperparameters (identical across all experiments) ───────────────────
 HIDDEN=512

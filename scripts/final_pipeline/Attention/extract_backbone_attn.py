@@ -57,16 +57,17 @@ try:
         return setter
 
     for _tok_name in _SPECIAL_TOK_NAMES:
+        _getter = None
         for _klass in EsmSequenceTokenizer.__mro__:
             _cls_attr = _klass.__dict__.get(_tok_name)
-            if isinstance(_cls_attr, property) and _cls_attr.fset is None:
-                setattr(_klass, _tok_name, property(
-                    _cls_attr.fget,
-                    _make_token_setter('_' + _tok_name),
-                    _cls_attr.fdel,
-                    _cls_attr.__doc__,
-                ))
+            if isinstance(_cls_attr, property):
+                _getter = _cls_attr.fget
                 break
+        if _getter is not None:
+            setattr(EsmSequenceTokenizer, _tok_name, property(
+                _getter,
+                _make_token_setter('_' + _tok_name),
+            ))
 
     _mro_has_getattr = any(
         '__getattr__' in klass.__dict__
@@ -86,7 +87,9 @@ try:
     # ─────────────────────────────────────────────────────────────────────────
 
     ESM3_AVAILABLE = True
-except ImportError:
+except Exception as _esm3_import_err:
+    print(f"[warn] ESM3 unavailable in extract_backbone_attn.py: "
+          f"{type(_esm3_import_err).__name__}: {_esm3_import_err}")
     ESM3_AVAILABLE = False
 
 

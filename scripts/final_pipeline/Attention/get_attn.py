@@ -13,8 +13,13 @@ Such CSV file can be obtained from: https://services.healthtech.dtu.dk/services/
 
 import pandas as pd
 import argparse
+import sys
+import os
 import torch
 from transformers import EsmModel, EsmTokenizer
+
+# Ensure models.py (in the parent directory) is importable regardless of cwd
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 try:
     from esm.pretrained import ESM3_sm_open_v0
@@ -45,16 +50,19 @@ try:
         return setter
 
     for _tok_name in _SPECIAL_TOK_NAMES:
+        _getter = None
         for _klass in EsmSequenceTokenizer.__mro__:
             _cls_attr = _klass.__dict__.get(_tok_name)
-            if isinstance(_cls_attr, property) and _cls_attr.fset is None:
-                setattr(_klass, _tok_name, property(
-                    _cls_attr.fget,
-                    _make_token_setter('_' + _tok_name),
-                    _cls_attr.fdel,
-                    _cls_attr.__doc__,
-                ))
-                break  # patched on the defining class; stop walking MRO
+            if isinstance(_cls_attr, property):
+                _getter = _cls_attr.fget
+                break
+        if _getter is not None:
+            # Always patch on EsmSequenceTokenizer itself (pure-Python class);
+            # avoids TypeError when a base class in the MRO is a C-extension type.
+            setattr(EsmSequenceTokenizer, _tok_name, property(
+                _getter,
+                _make_token_setter('_' + _tok_name),
+            ))
 
     # Only inject __getattr__ if the MRO doesn't already provide one.
     # (transformers >= 4.40 defines it in PreTrainedTokenizerBase; older versions don't.)
@@ -76,7 +84,9 @@ try:
     # ─────────────────────────────────────────────────────────────────────────
 
     ESM3_AVAILABLE = True
-except ImportError:
+except Exception as _esm3_import_err:
+    print(f"[warn] ESM3 unavailable in get_attn.py: "
+          f"{type(_esm3_import_err).__name__}: {_esm3_import_err}")
     ESM3_AVAILABLE = False
 
 
