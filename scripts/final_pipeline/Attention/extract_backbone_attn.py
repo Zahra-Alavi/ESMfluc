@@ -301,12 +301,17 @@ def extract_esm3_attn(raw_esm3, tokenizer, seq, device):
 
     # ── Proxy: cosine-similarity attention from backbone embeddings ────────────
     print(f"    [backbone/ESM3] Hook did not return attention; using cosine-similarity proxy.")
-    if hasattr(out, 'last_hidden_state'):
+    if hasattr(out, 'last_hidden_state') and out.last_hidden_state is not None:
         h = out.last_hidden_state[0]
-    elif hasattr(out, 'sequence_last_hidden_states'):
+    elif hasattr(out, 'sequence_last_hidden_states') and out.sequence_last_hidden_states is not None:
         h = out.sequence_last_hidden_states[0]
+    elif hasattr(out, 'embeddings') and out.embeddings is not None:
+        h = out.embeddings[0]
     else:
-        raise RuntimeError("Cannot find hidden states in ESM3 output.")
+        available = [k for k, v in vars(out).items() if v is not None]
+        raise RuntimeError(
+            f"Cannot find hidden states in ESM3 output. "
+            f"Non-None fields: {available}")
 
     # Strip special tokens
     if h.shape[0] >= L + 2:

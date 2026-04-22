@@ -474,8 +474,8 @@ def main():
     final_df = pd.DataFrame(rows, columns=columns)
     print(f"Constructed final DF with {len(final_df)} rows")
 
-    final_df.to_json(f"{args.output}.json", orient="records", indent=2)
-    print(f"Saved final JSON to {args.output}.json")
+    final_df.to_json(args.output, orient="records", indent=2)
+    print(f"Saved final JSON to {args.output}")
         
 
 if __name__ == "__main__":
