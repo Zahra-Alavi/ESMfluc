@@ -133,6 +133,14 @@ run_training() {
     # Frozen backbone
     [[ "${frozen}" -eq 1 ]] && ARGS+=(--freeze_all_backbone)
 
+    # For unfrozen runs, use both GPUs to avoid OOM
+    if [[ "${frozen}" -eq 0 ]]; then
+        ARGS+=(--data_parallel)
+        export CUDA_VISIBLE_DEVICES="0,1"
+    else
+        export CUDA_VISIBLE_DEVICES="${GPU}"
+    fi
+
     # Task-specific args
     ARGS+=(--task_type "${task}")
     if [[ "${task}" == "classification" ]]; then
@@ -149,6 +157,7 @@ run_training() {
 
     cd "${SCRIPT_DIR}"
     python main.py "${ARGS[@]}" 2>&1 | tee "${RESULTS_DIR}/${name}/train.log"
+    export CUDA_VISIBLE_DEVICES="${GPU}"   # restore after training
 
     # Save the exact args used for reproducibility
     echo "${ARGS[@]}" > "${RESULTS_DIR}/${name}/args_used.txt"
