@@ -146,9 +146,8 @@ run_training() {
             ARGS+=(--gradient_accumulation_steps 4)
             export CUDA_VISIBLE_DEVICES="${GPU}"
         else
-            # ESM2 unfrozen: use both GPUs with DataParallel
-            ARGS+=(--data_parallel)
-            export CUDA_VISIBLE_DEVICES="0,1"
+            # ESM2 unfrozen: single GPU (650M fits fine with batch=4)
+            export CUDA_VISIBLE_DEVICES="${GPU}"
         fi
     else
         export CUDA_VISIBLE_DEVICES="${GPU}"
