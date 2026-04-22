@@ -521,27 +521,32 @@ def train_model(args):
     
     print(f"\nStarting training for {args.epochs} epochs...")
     print(f"Results will be saved to: {result_dir}\n")
-    
+
+    accum_steps = max(1, getattr(args, 'gradient_accumulation_steps', 1))
+    if accum_steps > 1:
+        print(f"Gradient accumulation: {accum_steps} steps "
+              f"(effective batch size = {args.batch_size * accum_steps})")
+
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0.0
-        
+        optimizer.zero_grad()
+
         for batch_idx, batch in enumerate(train_loader):
             input_ids = batch['input_ids'].to(args.device)
             attention_mask = batch['attention_mask'].to(args.device)
             y = batch['labels'].to(args.device)
-            
-            optimizer.zero_grad()
-            
+
+            is_last_batch = (batch_idx + 1 == len(train_loader))
+            do_step = ((batch_idx + 1) % accum_steps == 0) or is_last_batch
+
             if scaler:
-                # Use fp16 or bf16 based on args.amp_dtype
                 amp_dtype = torch.float16 if getattr(args, 'amp_dtype', 'fp16') == 'fp16' else torch.bfloat16
                 with autocast(dtype=amp_dtype):
                     if args.task_type == "regression":
                         output, _ = model(input_ids, attention_mask, return_features="pre")
                         if output.dim() == 3 and output.size(-1) == 1:
                             output = output.squeeze(-1)
-                        # Compute loss with masking
                         loss_unreduced = criterion(output, y)
                         mask = (y != -100.0)
                         loss = (loss_unreduced * mask).sum() / mask.sum().clamp(min=1)
@@ -550,16 +555,17 @@ def train_model(args):
                         logits_flat = logits.reshape(-1, args.num_classes)
                         y_flat = y.reshape(-1)
                         loss = criterion(logits_flat, y_flat)
-                
+                loss = loss / accum_steps
                 scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
+                if do_step:
+                    scaler.step(optimizer)
+                    scaler.update()
+                    optimizer.zero_grad()
             else:
                 if args.task_type == "regression":
                     output, _ = model(input_ids, attention_mask, return_features="pre")
                     if output.dim() == 3 and output.size(-1) == 1:
                         output = output.squeeze(-1)
-                    # Compute loss with masking
                     loss_unreduced = criterion(output, y)
                     mask = (y != -100.0)
                     loss = (loss_unreduced * mask).sum() / mask.sum().clamp(min=1)
@@ -568,11 +574,12 @@ def train_model(args):
                     logits_flat = logits.reshape(-1, args.num_classes)
                     y_flat = y.reshape(-1)
                     loss = criterion(logits_flat, y_flat)
-                
-                loss.backward()
-                optimizer.step()
-            
-            total_loss += loss.item()
+                (loss / accum_steps).backward()
+                if do_step:
+                    optimizer.step()
+                    optimizer.zero_grad()
+
+            total_loss += loss.item() * accum_steps  # unscale for logging
         
         avg_train_loss = total_loss / len(train_loader)
         

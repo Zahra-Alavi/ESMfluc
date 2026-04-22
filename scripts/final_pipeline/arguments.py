@@ -45,6 +45,9 @@ def parse_arguments():
     
     
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size. default=4")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
+                        help="Accumulate gradients over N batches before stepping. "
+                             "Effective batch = batch_size × N. default=1 (disabled)")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs. default=20")
     parser.add_argument("--patience", type=int, default=5, help="Early stopping patience. default=5")
     parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate for AdamW. default=1e-5")
