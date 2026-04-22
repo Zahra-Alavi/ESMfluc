@@ -28,7 +28,8 @@ Usage
 -----
 python run_attn_analysis.py \
     --exp_root   /path/to/scripts/final_pipeline/results \
-    --ref_json   /path/to/data/attn_bilstm_f1-4_nsp3_neq.json \
+    --neq_csv    /path/to/data/test_data_with_names.csv \
+    --nsp3_csv   /path/to/data/test_data_nsp3.csv \
     --output_dir /path/to/scripts/final_pipeline/results/analysis \
     [--sample_proteins 3d7a_B 1lsl_A 1jo0_A 1ctf_A 2hqk_A]
 """
@@ -77,8 +78,10 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--exp_root",   required=True,
                    help="Root directory containing one sub-folder per experiment")
-    p.add_argument("--ref_json",   required=True,
-                   help="Reference attention JSON with ss_pred/rsa/disorder/neq_real annotations")
+    p.add_argument("--neq_csv",    required=True,
+                   help="CSV with columns: name, sequence, neq  (test_data_with_names.csv)")
+    p.add_argument("--nsp3_csv",   required=True,
+                   help="NetSurfP-3 CSV with columns: id, seq, n, rsa, asa, q3, ..., disorder  (test_data_nsp3.csv)")
     p.add_argument("--output_dir", required=True,
                    help="Directory where analysis outputs will be saved")
     p.add_argument("--sample_proteins", nargs="+", default=FIXED_SAMPLE_DEFAULT,
@@ -93,11 +96,53 @@ def load_json(path):
         return json.load(fh)
 
 
-def build_ref_map(ref_records):
-    """Map protein name → annotation dict (ss_pred, rsa, disorder, neq_real, q8, sequence)."""
+def build_ref_map(neq_csv_path, nsp3_csv_path):
+    """
+    Build the reference map from two CSVs instead of a pre-built JSON.
+
+    neq_csv  (test_data_with_names.csv): name, sequence, neq  (neq is a Python list string)
+    nsp3_csv (test_data_nsp3.csv):       id, seq, n, rsa, asa, q3, ..., disorder
+                                         id column has format  >prot_id  (leading '>')
+
+    Returns dict: name -> {sequence, neq_real, ss_pred, rsa, disorder}
+    """
+    # ── Load Neq CSV ─────────────────────────────────────────────────────────
+    neq_df = pd.read_csv(neq_csv_path)
     ref = {}
-    for r in ref_records:
-        ref[r["name"]] = r
+    for _, row in neq_df.iterrows():
+        name = str(row["name"]).strip()
+        seq  = str(row["sequence"]).strip()
+        try:
+            neq_list = json.loads(str(row["neq"]))
+        except Exception:
+            import ast
+            neq_list = ast.literal_eval(str(row["neq"]))
+        ref[name] = {
+            "name":     name,
+            "sequence": seq,
+            "neq_real": neq_list,
+            "ss_pred":  [],
+            "rsa":      [],
+            "disorder": [],
+        }
+
+    # ── Load NetSurfP CSV ────────────────────────────────────────────────────
+    nsp3_df = pd.read_csv(nsp3_csv_path)
+    # Normalise column names (strip spaces)
+    nsp3_df.columns = [c.strip() for c in nsp3_df.columns]
+
+    # Group rows by protein id; id column has a leading '>' — strip it
+    nsp3_df["_name"] = nsp3_df["id"].astype(str).str.lstrip(">")
+
+    for name, grp in nsp3_df.groupby("_name", sort=False):
+        name = name.strip()
+        if name not in ref:
+            continue   # not in our test set
+        grp = grp.sort_values("n")  # ensure residue order
+        ref[name]["ss_pred"]  = grp["q3"].tolist()
+        ref[name]["rsa"]      = grp["rsa"].astype(float).tolist()
+        ref[name]["disorder"] = grp["disorder"].astype(float).tolist()
+
     return ref
 
 
@@ -783,9 +828,10 @@ def main():
     out_dir   = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Loading reference JSON: {args.ref_json}")
-    ref_records = load_json(args.ref_json)
-    ref_map     = build_ref_map(ref_records)
+    print(f"Building reference map from CSVs …")
+    print(f"  neq_csv  : {args.neq_csv}")
+    print(f"  nsp3_csv : {args.nsp3_csv}")
+    ref_map = build_ref_map(args.neq_csv, args.nsp3_csv)
     print(f"  Reference proteins: {len(ref_map)}")
 
     # Discover experiments (prefer EXP_ORDER, then anything else present)

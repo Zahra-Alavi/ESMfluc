@@ -220,7 +220,8 @@ run_analysis() {
     cd "${ATTN_DIR}"
     python run_attn_analysis.py \
         --exp_root   "${RESULTS_DIR}" \
-        --ref_json   "${REF_JSON}" \
+        --neq_csv    "${TEST_CSV}" \
+        --nsp3_csv   "${DATA_DIR}/test_data_nsp3.csv" \
         --output_dir "${RESULTS_DIR}/analysis" \
         2>&1 | tee "${RESULTS_DIR}/analysis/analysis.log"
     info "Analysis done → ${RESULTS_DIR}/analysis/"
