@@ -45,7 +45,7 @@ import math
 
 # ── import cluster_residues from sibling script ──────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cluster_attention_residues import cluster_residues
+from cluster_attention_residues import cluster_residues, kmeans, _normalize
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -176,6 +176,12 @@ def main():
     ct_neq   = {(c, s): 0 for c in CLUSTER_LABELS for s in NEQ_LABELS}
     ct_neqr  = {(c, s): 0 for c in CLUSTER_LABELS for s in NEQR_LABELS}
 
+    # Bg sub-clustering accumulators
+    BG_SUB_LABELS = ['BgA', 'BgB', 'BgC']  # high / mid / low energy sub-cluster
+    ct_bg_ss3     = {(c, s): 0 for c in BG_SUB_LABELS for s in SS3_LABELS}
+    ct_bg_q8      = {(c, s): 0 for c in BG_SUB_LABELS for s in Q8_LABELS}
+    ct_bg_nonE_q8 = {s: 0 for s in Q8_LABELS}  # Q8 of Bg residues with SS3 in H/C
+
     # per-protein records for JSON output
     records = []
 
@@ -260,6 +266,47 @@ def main():
         patB_count = len(result['pattern_B'])
         bg_count   = len(result['background'])
         print(f"PatA={patA_count}  PatB={patB_count}  Bg={bg_count}")
+
+        # ── Bg sub-clustering (K=3 on Bg residues within this protein) ──────
+        bg_indices = result['background']
+
+        # Non-strand Q8 within Bg (regardless of whether sub-clustering runs)
+        for i in bg_indices:
+            if i < len(ss3_list) and ss3_list[i] in ('H', 'C'):
+                if i < len(q8_list) and q8_list[i] in Q8_LABELS:
+                    ct_bg_nonE_q8[q8_list[i]] += 1
+
+        # Sub-cluster Bg residues: same 2N-dimensional L2-normalized features
+        if len(bg_indices) >= 3:
+            A_mat  = rec['attention_weights']
+            N_prot = len(A_mat)
+            bg_feats = []
+            for i in bg_indices:
+                row = A_mat[i][:]
+                col = [A_mat[j][i] for j in range(N_prot)]
+                bg_feats.append(_normalize(row + col))
+            bg_sub_labels, _ = kmeans(bg_feats, k=3, n_init=args.n_init,
+                                      max_iter=args.max_iter, seed=args.seed)
+            col_sum_p = [sum(A_mat[j][i] for j in range(N_prot)) for i in range(N_prot)]
+            energy_p  = [sum(A_mat[i]) / N_prot + col_sum_p[i] / N_prot
+                         for i in range(N_prot)]
+            sub_clust_energy = []
+            for c in range(3):
+                mems = [bg_indices[k] for k in range(len(bg_indices)) if bg_sub_labels[k] == c]
+                mean_e = sum(energy_p[m] for m in mems) / len(mems) if mems else 0.0
+                sub_clust_energy.append((mean_e, c))
+            sub_clust_energy.sort()  # ascending: [0]=low, [2]=high
+            bg_c_map = {
+                sub_clust_energy[2][1]: 'BgA',  # highest energy
+                sub_clust_energy[1][1]: 'BgB',
+                sub_clust_energy[0][1]: 'BgC',  # lowest energy
+            }
+            for k, i in enumerate(bg_indices):
+                sub_cl = bg_c_map[bg_sub_labels[k]]
+                if i < len(ss3_list) and ss3_list[i] in SS3_LABELS:
+                    ct_bg_ss3[(sub_cl, ss3_list[i])] += 1
+                if i < len(q8_list) and q8_list[i] in Q8_LABELS:
+                    ct_bg_q8[(sub_cl, q8_list[i])] += 1
 
         records.append({
             'name': name,
@@ -400,6 +447,59 @@ def main():
     class_totals = {ss: sum(ct_ss3.get((cl, ss), 0) for cl in CLUSTER_LABELS) for ss in SS3_LABELS}
     weighted_f1 = sum(f1_scores[i] * class_totals[ss] for i, ss in enumerate(SS3_LABELS)) / grand_total
     print(f"  Weighted-F1: {weighted_f1*100:.1f}%")
+
+    # ── Bg sub-cluster vs SS ──────────────────────────────────────────────────
+    print("\n" + "="*70)
+    print("BG SUB-CLUSTERING (K=3 per protein on Bg residues, same features as top-level)")
+    print("BgA = highest energy sub-cluster  |  BgB = middle  |  BgC = lowest")
+    print("="*70)
+
+    print_table("Raw counts:", ct_bg_ss3, BG_SUB_LABELS, SS3_LABELS, fmt=".0f")
+
+    row_totals_bg = {r: sum(ct_bg_ss3.get((r, c), 0) for c in SS3_LABELS) for r in BG_SUB_LABELS}
+    ct_bg_ss3_rownorm = {
+        (r, c): ct_bg_ss3.get((r, c), 0) / row_totals_bg[r] * 100
+        if row_totals_bg[r] > 0 else 0.0
+        for r in BG_SUB_LABELS for c in SS3_LABELS
+    }
+    print_table("Row-normalized (% SS within each Bg sub-cluster):",
+                ct_bg_ss3_rownorm, BG_SUB_LABELS, SS3_LABELS, fmt=".1f")
+
+    enrich_bg = enrichment_table(ct_bg_ss3, BG_SUB_LABELS, SS3_LABELS)
+    ct_enrich_bg = {(r, c): enrich_bg[r][c] for r in BG_SUB_LABELS for c in SS3_LABELS}
+    print_table("Enrichment (obs/expected):", ct_enrich_bg, BG_SUB_LABELS, SS3_LABELS, fmt=".2f")
+
+    chi2_bg, pval_bg = chi2_pvalue(ct_bg_ss3, BG_SUB_LABELS, SS3_LABELS)
+    print(f"\nChi-square = {chi2_bg:.2f},  p-value = {pval_bg:.2e}  "
+          f"(df={(len(BG_SUB_LABELS)-1)*(len(SS3_LABELS)-1)})")
+
+    print("\nQ8 breakdown within each Bg sub-cluster:")
+    print_table("Row-normalized (% Q8 within Bg sub-cluster):",
+                {(r, c): ct_bg_q8.get((r, c), 0) / max(sum(ct_bg_q8.get((r, s), 0) for s in Q8_LABELS), 1) * 100
+                 for r in BG_SUB_LABELS for c in Q8_LABELS},
+                BG_SUB_LABELS, Q8_LABELS, fmt=".1f")
+
+    # ── Within-Bg non-strand Q8 breakdown ────────────────────────────────────
+    print("\n" + "="*70)
+    print("WITHIN-BG NON-STRAND RESIDUES: Q8 breakdown (SS3 = H or C in Background)")
+    print("What kind of helix/coil ends up in Background?")
+    print("="*70)
+    Q8_NAMES = {
+        'H': 'alpha-helix',    'B': 'iso-beta-bridge', 'E': 'beta-strand',
+        'G': '3-10 helix',     'I': 'pi-helix',        'T': 'turn',
+        'S': 'bend',           'C': 'coil/loop',
+    }
+    total_nonE_bg = sum(ct_bg_nonE_q8.values())
+    if total_nonE_bg > 0:
+        print(f"\n  {'Q8':>4}  {'Count':>8}  {'%':>7}  Description")
+        print(f"  {'----':>4}  {'-------':>8}  {'------':>7}  -----------")
+        for q in Q8_LABELS:
+            cnt = ct_bg_nonE_q8.get(q, 0)
+            pct = cnt / total_nonE_bg * 100
+            print(f"  {q:>4}  {cnt:>8}  {pct:>6.1f}%  {Q8_NAMES.get(q, '')}")
+        print(f"\n  Total non-strand Bg residues: {total_nonE_bg}")
+    else:
+        print("  (no non-strand residues in Background)")
 
     # ── save JSON ─────────────────────────────────────────────────────────────
     if args.output:
