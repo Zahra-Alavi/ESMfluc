@@ -429,39 +429,48 @@ def train(args):
     if on_cuda:
               torch.cuda.reset_peak_memory_stats()
 
+    accum_steps = max(1, getattr(args, 'gradient_accumulation_steps', 1))
+    if accum_steps > 1:
+        print(f"Gradient accumulation: {accum_steps} steps "
+              f"(effective batch size = {args.batch_size * accum_steps})")
+
     for epoch in range(args.epochs):
         epoch_t0 = time.perf_counter()
         if on_cuda:
             torch.cuda.reset_peak_memory_stats()
         model.train()
         total_loss = 0
+        optimizer.zero_grad()
 
-        
         for i, batch in enumerate(train_loader):
             input_ids = batch['input_ids'].to(args.device)
             attention_mask = batch['attention_mask'].to(args.device)
             y = batch['labels'].to(args.device)
-            
-            optimizer.zero_grad()
-            
+
+            is_last_batch = (i + 1 == len(train_loader))
+            do_step = ((i + 1) % accum_steps == 0) or is_last_batch
+
             if amp_enabled and on_cuda:
                 with autocast(dtype=amp_dtype):
                     logits, feats = model(input_ids, attention_mask, return_features="pre")
                     logits_flat = logits.reshape(-1, args.num_classes)
                     y_flat      = y.reshape(-1)
                     loss = criterion(logits_flat, y_flat)
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
+                (loss / accum_steps).backward() if not hasattr(scaler, 'scale') else scaler.scale(loss / accum_steps).backward()
+                if do_step:
+                    scaler.step(optimizer)
+                    scaler.update()
+                    optimizer.zero_grad()
             else:
                 logits, feats = model(input_ids, attention_mask, return_features="pre")
                 logits_flat = logits.reshape(-1, args.num_classes)
                 y_flat      = y.reshape(-1)
                 loss = criterion(logits_flat, y_flat)
-                loss.backward()
-                optimizer.step()
+                (loss / accum_steps).backward()
+                if do_step:
+                    optimizer.step()
+                    optimizer.zero_grad()
 
-            
             total_loss += loss.item()
 
             N = len(train_loader)
@@ -909,35 +918,46 @@ def train_regression(args):
     print(f"\nStarting regression training for {args.epochs} epochs...")
     print(f"Train samples: {len(train_dataset)}, Test samples: {len(test_dataset)}")
     
+    accum_steps = max(1, getattr(args, 'gradient_accumulation_steps', 1))
+    if accum_steps > 1:
+        print(f"Gradient accumulation: {accum_steps} steps "
+              f"(effective batch size = {args.batch_size * accum_steps})")
+
     # Training loop
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0
-        
+        optimizer.zero_grad()
+
         for i, batch in enumerate(train_loader):
             input_ids = batch['input_ids'].to(args.device)
             attention_mask = batch['attention_mask'].to(args.device)
             y = batch['labels'].to(args.device)
-            
-            optimizer.zero_grad()
-            
+
+            is_last_batch = (i + 1 == len(train_loader))
+            do_step = ((i + 1) % accum_steps == 0) or is_last_batch
+
             if amp_enabled:
                 with autocast(dtype=amp_dtype):
                     output, feats = model(input_ids, attention_mask, return_features="pre")
                     if output.dim() == 3 and output.size(-1) == 1:
                         output = output.squeeze(-1)
                     loss = criterion(output, y)
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
+                scaler.scale(loss / accum_steps).backward()
+                if do_step:
+                    scaler.step(optimizer)
+                    scaler.update()
+                    optimizer.zero_grad()
             else:
                 output, feats = model(input_ids, attention_mask, return_features="pre")
                 if output.dim() == 3 and output.size(-1) == 1:
                     output = output.squeeze(-1)
                 loss = criterion(output, y)
-                loss.backward()
-                optimizer.step()
-            
+                (loss / accum_steps).backward()
+                if do_step:
+                    optimizer.step()
+                    optimizer.zero_grad()
+
             total_loss += loss.item()
         
         avg_train_loss = total_loss / len(train_loader)
