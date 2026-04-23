@@ -413,19 +413,21 @@ def main():
     model.to(device)
 
     # checkpoint was already loaded above for param inference
-    # When using ESM3, the backbone (embedding_model.*) is already loaded fresh via
-    # ESM3_sm_open_v0 + ESM3Wrapper.  The checkpoint may have been saved with the raw
-    # ESM3 directly under 'embedding_model.*' (no '.esm3.' intermediary), so those keys
-    # won't match the wrapped model.  Since the backbone was frozen during training its
-    # weights haven't changed — we only need to restore the BiLSTM + attention head.
+    # For ESM3, the training checkpoint stores keys as 'embedding_model.esm3.*'
+    # (because ESM3Wrapper wraps the raw model as self.esm3).
+    # We load the full checkpoint with strict=False so that:
+    #   - For frozen runs: backbone weights are the same as pretrained (no-op).
+    #   - For unfrozen runs: fine-tuned backbone weights are correctly restored.
+    # Any key mismatches (e.g., old checkpoints without the wrapper) are silently
+    # ignored and pretrained weights are kept for those parameters.
     if args.is_esm3:
-        head_ckpt = {k: v for k, v in checkpoint.items()
-                     if not k.startswith('embedding_model.')}
-        missing, unexpected = model.load_state_dict(head_ckpt, strict=False)
-        # 'missing' will be the frozen ESM3 backbone keys (already loaded) — expected.
-        # 'unexpected' should be empty if filtering worked correctly.
+        missing, unexpected = model.load_state_dict(checkpoint, strict=False)
         if unexpected:
-            print(f"[warn] unexpected keys in checkpoint after filtering: {unexpected[:5]}")
+            print(f"[warn] {len(unexpected)} unexpected keys in checkpoint "
+                  f"(first 5: {unexpected[:5]})")
+        if missing:
+            print(f"[info] {len(missing)} keys not in checkpoint "
+                  f"(pretrained weights kept for those).")
     else:
         model.load_state_dict(checkpoint)
     print(f"Loaded checkpoint from {args.checkpoint}")
