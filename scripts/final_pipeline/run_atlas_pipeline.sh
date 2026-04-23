@@ -72,7 +72,7 @@ export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}"
 
 # ── Fixed hyperparameters (identical across all experiments) ───────────────────
 HIDDEN=512
-LAYERS=2
+LAYERS=3
 DROPOUT=0.3
 BATCH=4
 EPOCHS=30
@@ -157,8 +157,7 @@ run_training() {
     ARGS+=(--task_type "${task}")
     if [[ "${task}" == "classification" ]]; then
         ARGS+=(--num_classes "${num_classes}")
-        ARGS+=(--loss_function focal --focal_class_weights)
-        ARGS+=(--oversampling --oversampling_intensity 5.0)
+        ARGS+=(--loss_function focal)
         if [[ ${#thresholds[@]} -gt 0 ]]; then
             ARGS+=(--neq_thresholds "${thresholds[@]}")
         fi
