@@ -52,6 +52,24 @@ from scipy import stats
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import normalize
 
+try:
+    import logomaker
+    _LOGOMAKER = True
+except ImportError:
+    _LOGOMAKER = False
+    print("[warning] logomaker not available; falling back to stacked-bar PWM logos")
+
+# Logomaker colour scheme (physicochemical groups)
+AA_COLORS_LM = {
+    'G': '#888888',
+    'A': '#222222', 'V': '#222222', 'L': '#222222', 'I': '#222222', 'M': '#222222',
+    'P': '#e67e00',
+    'F': '#7b2d8b', 'W': '#7b2d8b', 'Y': '#7b2d8b',
+    'S': '#2ca02c', 'T': '#2ca02c', 'C': '#2ca02c', 'N': '#2ca02c', 'Q': '#2ca02c',
+    'D': '#d62728', 'E': '#d62728',
+    'K': '#1f77b4', 'R': '#1f77b4', 'H': '#1f77b4',
+}
+
 warnings.filterwarnings("ignore")
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -122,7 +140,9 @@ def build_ref_map(neq_csv_path, nsp3_csv_path):
             "sequence": seq,
             "neq_real": neq_list,
             "ss_pred":  [],
+            "q8":       [],
             "rsa":      [],
+            "asa":      [],
             "disorder": [],
         }
 
@@ -140,7 +160,9 @@ def build_ref_map(neq_csv_path, nsp3_csv_path):
             continue   # not in our test set
         grp = grp.sort_values("n")  # ensure residue order
         ref[name]["ss_pred"]  = grp["q3"].tolist()
+        ref[name]["q8"]       = grp["q8"].tolist() if "q8" in grp.columns else []
         ref[name]["rsa"]      = grp["rsa"].astype(float).tolist()
+        ref[name]["asa"]      = grp["asa"].astype(float).tolist() if "asa" in grp.columns else []
         ref[name]["disorder"] = grp["disorder"].astype(float).tolist()
 
     return ref
@@ -316,71 +338,101 @@ def build_pwm(motifs, half=MOTIF_HALF):
     return pwm
 
 
+def extract_motifs_by_cluster(attn_matrix, sequence, labels, pct=TOP_PEAK_PCT, half=MOTIF_HALF):
+    """
+    Find high-attention positions (top pct% by column max) and extract
+    sequence motifs bucketed by cluster label.
+    Returns dict {cluster_idx: [(pos, segment), ...]}
+    """
+    A = np.array(attn_matrix, dtype=np.float32)
+    L = len(sequence)
+    col_max = A.max(axis=0)[:L]
+    thresh  = np.percentile(col_max, (1 - pct) * 100)
+    out = {c: [] for c in range(N_CLUSTERS)}
+    for i in range(L):
+        if col_max[i] >= thresh:
+            c = int(labels[i]) if i < len(labels) else 0
+            start = max(0, i - half)
+            end   = min(L, i + half + 1)
+            seg   = sequence[start:end]
+            if len(seg) >= 3:
+                out[c].append((i, seg))
+    return out
+
+
 # ── Visualisation helpers ──────────────────────────────────────────────────────
 
 def save_heatmap(matrix, title, path, seq=None, vmax=None):
-    """Save an [L, L] attention heatmap."""
+    """Save an [L, L] attention heatmap (Viridis, tick every ~10% of length)."""
     A = np.array(matrix, dtype=np.float32)
-    fig, ax = plt.subplots(figsize=(min(12, A.shape[0] * 0.06 + 2),
-                                    min(10, A.shape[0] * 0.05 + 2)))
+    L = A.shape[0]
+    fig, ax = plt.subplots(figsize=(min(12, L * 0.06 + 2),
+                                    min(10, L * 0.05 + 2)))
     vm = vmax or float(np.percentile(A, 98))
-    im = ax.imshow(A, cmap="hot_r", vmin=0, vmax=vm, aspect="auto")
-    plt.colorbar(im, ax=ax, fraction=0.03)
+    im = ax.imshow(A, cmap="viridis", vmin=0, vmax=vm, aspect="auto")
+    plt.colorbar(im, ax=ax, fraction=0.03, label="Attention weight")
     ax.set_title(title, fontsize=9)
-    if seq and len(seq) <= 80:
-        ax.set_xticks(range(len(seq)))
-        ax.set_xticklabels(list(seq), fontsize=4, rotation=90)
-        ax.set_yticks(range(len(seq)))
-        ax.set_yticklabels(list(seq), fontsize=4)
+    step = max(1, L // 10)
+    ticks = list(range(0, L, step))
+    if seq:
+        lbls = [f"{i+1}-{seq[i]}" for i in ticks]
+    else:
+        lbls = [str(i + 1) for i in ticks]
+    ax.set_xticks(ticks); ax.set_xticklabels(lbls, fontsize=5, rotation=90)
+    ax.set_yticks(ticks); ax.set_yticklabels(lbls, fontsize=5)
+    ax.set_xlabel("Key residue"); ax.set_ylabel("Query residue")
     plt.tight_layout()
-    fig.savefig(path, dpi=120)
+    fig.savefig(path, dpi=150)
     plt.close(fig)
 
 
 def plot_pwm_logo(pwm, title, path):
     """
-    Simple PWM logo: stacked bar chart where bar height = information content,
-    coloured by amino acid group.
+    Sequence logo using logomaker: letter height ∝ enrichment above uniform background.
+    Enriched residues (obs/exp > 1) shown above zero; depleted shown below.
+    pwm: (W, 20) numpy array of AA frequencies per position.
     """
-    W, n_aa = pwm.shape
-    # Information content per position
-    bg = np.ones(n_aa) / n_aa
-    with np.errstate(divide='ignore', invalid='ignore'):
-        ic = pwm * np.log2(np.where(pwm > 0, pwm / bg, 1))
-    ic_per_pos = ic.sum(axis=1).clip(0)
+    W = pwm.shape[0]
+    bg = 1.0 / len(AAS)
+    enr = pwm / (bg + 1e-12)              # (W, 20) obs/expected
+    heights_pos = np.maximum(0, enr - 1)  # enrichment (≥ 0)
+    heights_neg = np.maximum(0, 1 - enr)  # depletion  (≥ 0, rendered below axis)
+    positions   = list(range(-(W // 2), W - (W // 2)))
 
-    # AA colour groups
-    colors = {
-        'A': '#3CB371', 'G': '#3CB371', 'V': '#3CB371', 'L': '#3CB371',
-        'I': '#3CB371', 'P': '#3CB371', 'F': '#9370DB', 'W': '#9370DB',
-        'M': '#9370DB', 'S': '#4169E1', 'T': '#4169E1', 'C': '#FFD700',
-        'Y': '#4169E1', 'H': '#4169E1', 'D': '#DC143C', 'E': '#DC143C',
-        'N': '#20B2AA', 'Q': '#20B2AA', 'K': '#FF8C00', 'R': '#FF8C00',
-    }
+    df_pos = pd.DataFrame(heights_pos, columns=AAS, index=positions)
+    df_neg = pd.DataFrame(heights_neg, columns=AAS, index=positions)
 
-    fig, ax = plt.subplots(figsize=(max(6, W * 0.6), 3))
-    x = np.arange(W)
-    for aa_idx, aa in enumerate(AAS):
-        heights = pwm[:, aa_idx] * ic_per_pos
-        bottoms = pwm[:, :aa_idx] * ic_per_pos[:, np.newaxis]
-        bottom  = bottoms.sum(axis=1) if aa_idx > 0 else np.zeros(W)
-        ax.bar(x, heights, bottom=bottom, color=colors.get(aa, '#999999'),
-               label=aa, width=0.85)
+    fig, axes = plt.subplots(2, 1, figsize=(max(6, W * 1.0), 4),
+                             gridspec_kw={"height_ratios": [3, 1]})
+    ax_pos, ax_neg = axes
 
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"{i - W//2:+d}" for i in range(W)])
-    ax.set_ylabel("Bits")
-    ax.set_title(title, fontsize=9)
-    ax.set_ylim(0, max(ic_per_pos.max() * 1.2, 0.5))
-    # Compact legend
-    handles, labels = ax.get_legend_handles_labels()
-    seen, h2, l2 = set(), [], []
-    for h, l in zip(handles, labels):
-        if l not in seen:
-            seen.add(l); h2.append(h); l2.append(l)
-    ax.legend(h2, l2, fontsize=5, ncol=5, loc="upper right")
+    if _LOGOMAKER and df_pos.values.max() > 0:
+        try:
+            logomaker.Logo(df_pos, ax=ax_pos, color_scheme=AA_COLORS_LM, show_spines=False)
+        except Exception:
+            ax_pos.bar(range(W), df_pos.max(axis=1), color="steelblue", alpha=0.7)
+    else:
+        ax_pos.bar(range(W), df_pos.max(axis=1), color="steelblue", alpha=0.7)
+    ax_pos.axhline(0, color="#aaaaaa", linewidth=0.8)
+    ax_pos.set_ylabel("Enrichment − 1", fontsize=9)
+    ax_pos.set_title(title, fontsize=10, fontweight="bold")
+    ax_pos.set_xticks(range(W))
+    ax_pos.set_xticklabels([f"{p:+d}" for p in positions], fontsize=8)
+
+    if _LOGOMAKER and df_neg.values.max() > 0:
+        try:
+            logomaker.Logo(df_neg, ax=ax_neg, color_scheme=AA_COLORS_LM, show_spines=False)
+            ax_neg.invert_yaxis()
+        except Exception:
+            pass
+    ax_neg.axhline(0, color="#aaaaaa", linewidth=0.8)
+    ax_neg.set_ylabel("Depletion", fontsize=9)
+    ax_neg.set_xticks(range(W))
+    ax_neg.set_xticklabels([f"{p:+d}" for p in positions], fontsize=8)
+    ax_neg.set_xlabel("Position relative to peak residue", fontsize=9)
+
     plt.tight_layout()
-    fig.savefig(path, dpi=150)
+    fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -480,7 +532,7 @@ def analyse_experiment(exp_name, bilstm_records, ref_map, out_dir):
     cluster_dis_all      = defaultdict(list)
     aa_attn_pool         = defaultdict(list)
     pair_counts          = defaultdict(float)
-    all_motifs           = []
+    motifs_by_cluster    = {c: [] for c in range(N_CLUSTERS)}
     all_cluster_labels   = {}                  # name → np label array
 
     proteins_processed = 0
@@ -536,8 +588,9 @@ def analyse_experiment(exp_name, bilstm_records, ref_map, out_dir):
         for aa_i, aa_j, w in top_pairs(A, seq):
             pair_counts[(aa_i, aa_j)] += w
 
-        # 6. Motifs
-        all_motifs.extend(extract_motifs(A, seq))
+        # 6. Motifs (per cluster)
+        for c, mots in extract_motifs_by_cluster(A, seq, labels).items():
+            motifs_by_cluster[c].extend(mots)
 
     print(f"  [{exp_name}] Processed {proteins_processed} proteins "
           f"({proteins_missing} missing from reference).")
@@ -551,14 +604,6 @@ def analyse_experiment(exp_name, bilstm_records, ref_map, out_dir):
     }
     with open(out / "neq_correlation.json", "w") as fh:
         json.dump(neq_summary, fh, indent=2)
-
-    # Pooled Spearman violin plot
-    fig, ax = plt.subplots(figsize=(4, 4))
-    ax.violinplot([spearman_rs], positions=[0], showmedians=True)
-    ax.set_xticks([0]); ax.set_xticklabels([exp_name], fontsize=7)
-    ax.set_ylabel("Spearman r (col_mean vs Neq)")
-    ax.set_title(f"Neq correlation\nmedian={neq_summary['median_spearman_r']:.3f}", fontsize=9)
-    fig.tight_layout(); fig.savefig(out / "neq_correlation.png", dpi=150); plt.close(fig)
 
     # ── SS enrichment ─────────────────────────────────────────────────────────
     # cluster × SS enrichment matrix  [N_CLUSTERS × 3]
@@ -580,11 +625,9 @@ def analyse_experiment(exp_name, bilstm_records, ref_map, out_dir):
             exp = bg_ss.get(ss, 1e-9)
             enrich_mat[ci, si] = obs / exp
 
-    plot_enrichment_heatmap(
-        enrich_mat, CLUSTER_NAMES, SS3_LABELS,
-        f"SS Enrichment – {exp_name}",
-        out / "ss_enrichment.png",
-    )
+    # Save SS enrichment as CSV only (no plot)
+    pd.DataFrame(enrich_mat, index=CLUSTER_NAMES, columns=SS3_LABELS).to_csv(
+        out / "ss_enrichment.csv")
 
     # ── RSA / disorder boxplots ────────────────────────────────────────────────
     rsa_by_cluster = {CLUSTER_NAMES[c]: [v for v in cluster_rsa_all[c] if not np.isnan(v)]
@@ -594,12 +637,17 @@ def analyse_experiment(exp_name, bilstm_records, ref_map, out_dir):
     neq_by_cluster = {CLUSTER_NAMES[c]: [v for v in cluster_neq_all[c] if not np.isnan(v)]
                       for c in range(N_CLUSTERS)}
 
-    plot_boxplot(rsa_by_cluster,   "Cluster", "RSA",
-                 f"RSA per cluster – {exp_name}", out / "rsa_by_cluster.png")
-    plot_boxplot(dis_by_cluster,   "Cluster", "Disorder score",
-                 f"Disorder per cluster – {exp_name}", out / "disorder_by_cluster.png")
-    plot_boxplot(neq_by_cluster,   "Cluster", "Neq",
-                 f"Neq per cluster – {exp_name}", out / "neq_by_cluster.png")
+    # Save cluster means as JSON only (no plots)
+    cluster_means_json = {}
+    for cname in CLUSTER_NAMES:
+        cluster_means_json[cname] = {
+            "mean_rsa":      float(np.nanmean(rsa_by_cluster[cname])) if rsa_by_cluster[cname] else None,
+            "mean_disorder": float(np.nanmean(dis_by_cluster[cname])) if dis_by_cluster[cname] else None,
+            "mean_neq":      float(np.nanmean(neq_by_cluster[cname])) if neq_by_cluster[cname] else None,
+            "n":             len(neq_by_cluster[cname]),
+        }
+    with open(out / "cluster_means.json", "w") as fh:
+        json.dump(cluster_means_json, fh, indent=2)
 
     # ── Kruskal-Wallis: Neq separation within each SS class ───────────────────
     kw_results = {}
@@ -649,12 +697,17 @@ def analyse_experiment(exp_name, bilstm_records, ref_map, out_dir):
         for (aa_i, aa_j), w in sorted_pairs:
             fh.write(f"{aa_i}\t{aa_j}\t{w:.4f}\n")
 
-    # ── Motifs & PWM ──────────────────────────────────────────────────────────
-    if all_motifs:
-        pwm = build_pwm(all_motifs)
-        plot_pwm_logo(pwm, f"Attention peak motif PWM – {exp_name}",
-                      out / "motif_pwm_logo.png")
-        np.save(out / "motif_pwm.npy", pwm)
+    # ── Per-cluster motifs & PWM logos ─────────────────────────────────────────
+    pwm_dir = out / "pwm_logos"
+    pwm_dir.mkdir(exist_ok=True)
+    for c, cname in enumerate(CLUSTER_NAMES):
+        mots = motifs_by_cluster[c]
+        if len(mots) < 10:
+            continue
+        pwm = build_pwm(mots)
+        np.save(pwm_dir / f"motif_pwm_{cname}.npy", pwm)
+        plot_pwm_logo(pwm, f"{exp_name} – {cname} (n={len(mots)})",
+                      str(pwm_dir / f"motif_pwm_{cname}.png"))
 
     # ── Save cluster labels for cross-model comparison ────────────────────────
     with open(out / "cluster_labels.json", "w") as fh:
@@ -707,11 +760,18 @@ def visualise_sample(exp_name, bilstm_records, backbone_records, sample_proteins
             vm_b = float(np.percentile(A_before, 98))
             vm_a = float(np.percentile(A_after,  98))
 
-            axes[0].imshow(A_before, cmap="hot_r", vmin=0, vmax=vm_b, aspect="auto")
+            im0 = axes[0].imshow(A_before, cmap="viridis", vmin=0, vmax=vm_b, aspect="auto")
             axes[0].set_title(f"Backbone ({source})\n{prot}  len={L}", fontsize=8)
-            axes[1].imshow(A_after,  cmap="hot_r", vmin=0, vmax=vm_a, aspect="auto")
+            plt.colorbar(im0, ax=axes[0], fraction=0.03, label="Attn")
+            im1 = axes[1].imshow(A_after,  cmap="viridis", vmin=0, vmax=vm_a, aspect="auto")
             axes[1].set_title(f"BiLSTM self-attention\n{prot}  len={L}", fontsize=8)
+            plt.colorbar(im1, ax=axes[1], fraction=0.03, label="Attn")
+            step = max(1, L // 10)
+            ticks = list(range(0, L, step))
+            tick_lbls = [str(i + 1) for i in ticks]
             for ax in axes:
+                ax.set_xticks(ticks); ax.set_xticklabels(tick_lbls, fontsize=6, rotation=45)
+                ax.set_yticks(ticks); ax.set_yticklabels(tick_lbls, fontsize=6)
                 ax.set_xlabel("Key residue"); ax.set_ylabel("Query residue")
             plt.suptitle(f"{exp_name}", fontsize=10)
             plt.tight_layout()
@@ -872,6 +932,24 @@ def main():
         print("  Cross-model comparison")
         print(f"{'='*60}")
         cross_model_comparison(summaries, out_dir)
+
+    # Binary experiments deep comparison
+    binary_present = [s["exp_name"] for s in summaries if "binary" in s["exp_name"]]
+    if len(binary_present) >= 2:
+        print(f"\n{'='*60}")
+        print("  Binary experiments deep comparison")
+        print(f"{'='*60}")
+        try:
+            sys.path.insert(0, str(Path(__file__).parent))
+            from compare_binary_experiments import run_comparison
+            run_comparison(
+                exp_root=str(exp_root),
+                neq_csv=args.neq_csv,
+                nsp3_csv=args.nsp3_csv,
+                output_dir=str(out_dir / "binary_comparison"),
+            )
+        except Exception as exc:
+            print(f"  [WARN] Binary comparison failed: {exc}")
 
     print(f"\nAll done. Results in: {out_dir}")
 
