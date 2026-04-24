@@ -99,6 +99,8 @@ def parse_args():
     ap.add_argument("--b2b_cache", default=None,
                     help="Path to cached b2btools CSV (long format). "
                          "If given, skip running b2btools.")
+    ap.add_argument("--force_api", action="store_true",
+                    help="Skip local b2btools install and use DynaMine web API directly.")
     return ap.parse_args()
 
 
@@ -164,8 +166,24 @@ def load_nsp3(path, disorder_col="disorder"):
 # =============================================================================
 # b2btools / DynaMine predictions
 # =============================================================================
-def install_b2btools():
-    print("[INFO] Installing b2btools …")
+def _try_install_b2btools():
+    """
+    b2btools depends on pomegranate which needs Cython.
+    Strategy: conda install pomegranate first (has pre-built wheels), then pip.
+    Falls back to pip-only if conda is not available.
+    """
+    import shutil
+    conda = shutil.which("conda")
+    if conda:
+        print("[INFO] Installing pomegranate via conda-forge …")
+        try:
+            subprocess.check_call(
+                [conda, "install", "-c", "conda-forge", "pomegranate", "-y", "-q"],
+                timeout=300,
+            )
+        except Exception as e:
+            print(f"  [WARN] conda install pomegranate failed: {e}")
+    print("[INFO] Installing b2btools via pip …")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "b2btools", "-q"])
     global B2B_AVAILABLE, SingleSeqAnalysis
     from b2btools import SingleSeqAnalysis as _SSA  # noqa: F401
@@ -173,15 +191,8 @@ def install_b2btools():
     B2B_AVAILABLE = True
 
 
-def run_b2btools(fasta_records, cache_path=None):
-    """Return long DataFrame with columns: name, res_idx, dynamine_bb, disomine."""
-    if cache_path and Path(cache_path).exists():
-        print(f"[INFO] Loading b2btools cache from {cache_path}")
-        return pd.read_csv(cache_path)
-
-    if not B2B_AVAILABLE:
-        install_b2btools()
-
+def _run_b2btools_local(fasta_records):
+    """Run DynaMine + DisoMine via the installed b2btools package."""
     rows = []
     total = len(fasta_records)
     for i, (name, seq) in enumerate(fasta_records.items(), 1):
@@ -191,8 +202,8 @@ def run_b2btools(fasta_records, cache_path=None):
             analyzer = SingleSeqAnalysis()
             analyzer.load_predictors(["dynamine", "disomine"])
             preds = analyzer.query(seq)
-            bb     = preds.get("backbone", [None] * len(seq))
-            diso   = preds.get("disoMine", [None] * len(seq))
+            bb   = preds.get("backbone", [None] * len(seq))
+            diso = preds.get("disoMine", [None] * len(seq))
             for j in range(len(seq)):
                 rows.append({
                     "name": name,
@@ -204,12 +215,95 @@ def run_b2btools(fasta_records, cache_path=None):
             print(f"  [WARN] b2btools failed for {name}: {e}")
             for j in range(len(seq)):
                 rows.append({"name": name, "res_idx": j + 1,
-                              "dynamine_bb": np.nan, "disomine": np.nan})
+                             "dynamine_bb": np.nan, "disomine": np.nan})
+    return rows
+
+
+def _run_dynamine_api(fasta_records):
+    """
+    Fall back: call the DynaMine REST API at https://dynamine.ibsquare.be
+    POST a FASTA payload, parse the returned CSV.
+    Rate limit: submit one sequence at a time with a short sleep.
+    """
+    import time
+    import io
+    try:
+        import requests
+    except ImportError:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "-q"])
+        import requests
+
+    API_URL = "https://dynamine.ibsquare.be/api/predictions"
+    rows = []
+    total = len(fasta_records)
+    for i, (name, seq) in enumerate(fasta_records.items(), 1):
+        if i % 25 == 0 or i == 1:
+            print(f"  [DynaMine API] {i}/{total}")
+        fasta_str = f">{name}\n{seq}\n"
+        try:
+            resp = requests.post(
+                API_URL,
+                data={"fasta": fasta_str},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            # Response is a CSV: residue, aa, backbone, coil, helix, sheet, ...
+            df_api = pd.read_csv(io.StringIO(resp.text))
+            df_api.columns = [c.strip().lower() for c in df_api.columns]
+            for j, row in enumerate(df_api.itertuples(), 1):
+                bb_val = getattr(row, "backbone", np.nan)
+                rows.append({
+                    "name": name,
+                    "res_idx": j,
+                    "dynamine_bb": float(bb_val) if bb_val is not None else np.nan,
+                    "disomine": np.nan,  # not available from web API alone
+                })
+        except Exception as e:
+            print(f"  [WARN] DynaMine API failed for {name}: {e}")
+            for j in range(len(seq)):
+                rows.append({"name": name, "res_idx": j + 1,
+                             "dynamine_bb": np.nan, "disomine": np.nan})
+        time.sleep(0.3)  # be polite to the server
+    return rows
+
+
+def run_b2btools(fasta_records, cache_path=None, force_api=False):
+    """
+    Return long DataFrame with columns: name, res_idx, dynamine_bb, disomine.
+    Priority:
+      1. Load from cache if it exists.
+      2. Use installed b2btools package (try to install if missing).
+      3. Fall back to DynaMine web API if b2btools installation fails.
+    Set force_api=True to skip local install and go straight to the web API.
+    """
+    if cache_path and Path(cache_path).exists():
+        print(f"[INFO] Loading b2btools cache from {cache_path}")
+        return pd.read_csv(cache_path)
+
+    rows = []
+    used_api = False
+
+    if not force_api:
+        if not B2B_AVAILABLE:
+            try:
+                _try_install_b2btools()
+            except Exception as e:
+                print(f"  [WARN] b2btools install failed ({e}), falling back to DynaMine web API …")
+                force_api = True
+
+    if force_api or not B2B_AVAILABLE:
+        print("[INFO] Using DynaMine web API …")
+        rows = _run_dynamine_api(fasta_records)
+        used_api = True
+    else:
+        rows = _run_b2btools_local(fasta_records)
 
     df = pd.DataFrame(rows)
+    if used_api:
+        print("  [NOTE] DisoMine scores unavailable via web API (b2btools only).")
     if cache_path:
         df.to_csv(cache_path, index=False)
-        print(f"[INFO] Cached b2btools results → {cache_path}")
+        print(f"[INFO] Cached predictions → {cache_path}")
     return df
 
 
@@ -472,7 +566,8 @@ def main():
         df_b2b = None
     else:
         b2b_cache = args.b2b_cache or str(cache_dir / "b2btools_preds.csv")
-        df_b2b = run_b2btools(fasta_records, cache_path=b2b_cache)
+        df_b2b = run_b2btools(fasta_records, cache_path=b2b_cache,
+                              force_api=getattr(args, "force_api", False))
 
     # ── ESMfluc inference ────────────────────────────────────────────────────
     print("\n[3/5] Running ESMfluc inference …")
