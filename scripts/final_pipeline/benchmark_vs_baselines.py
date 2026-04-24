@@ -40,17 +40,35 @@ from pathlib import Path
 #    identifiers from config keys like "nx-loopback" (hyphen), breaking
 #    Python 3.11 dataclasses at import time.
 def _ensure_networkx():
+    """
+    networkx < 3.3 uses config keys with hyphens (e.g. 'nx-loopback') as
+    Python identifiers in generated dataclasses, causing a SyntaxError on
+    Python 3.11.  We upgrade and re-exec the process so the new version is
+    picked up from a clean import — in-process sys.modules patching is not
+    sufficient because networkx may already be partially imported by the
+    time this runs.
+    """
+    import os
+    import importlib.metadata as _im
+    needs_upgrade = False
     try:
-        import importlib.metadata as _im
-        from packaging.version import Version
-        nx_ver = Version(_im.version("networkx"))
-        if nx_ver < Version("3.3"):
-            raise ImportError(f"networkx {nx_ver} < 3.3")
+        # packaging may not be installed; fall back to simple string compare
+        ver_str = _im.version("networkx")
+        major, minor = [int(x) for x in ver_str.split(".")[:2]]
+        if (major, minor) < (3, 3):
+            needs_upgrade = True
     except Exception:
-        print("[INFO] Upgrading networkx to >=3.3 to fix ESM3 import …")
+        needs_upgrade = True  # can't tell → upgrade to be safe
+
+    if needs_upgrade and os.environ.get("_NX_UPGRADED") != "1":
+        print(f"[INFO] Upgrading networkx to >=3.3 and restarting …")
         subprocess.check_call(
             [sys.executable, "-m", "pip", "install", "networkx>=3.3", "-q"]
         )
+        # Re-exec with a flag so we don't loop
+        env = os.environ.copy()
+        env["_NX_UPGRADED"] = "1"
+        os.execve(sys.executable, [sys.executable] + sys.argv, env)
 
 _ensure_networkx()
 
