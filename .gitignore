@@ -15,3 +15,6 @@ venv/
 # Ignore output directories
 plot/
 results/
+scripts/ordinal_pipeline/results_ordinal/
+
+scripts/ordinal_pipeline/results_ordinal/
