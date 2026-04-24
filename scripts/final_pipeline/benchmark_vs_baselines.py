@@ -282,6 +282,9 @@ def _run_dynamine_api(fasta_records):
         import requests
 
     API_URL = "https://dynamine.ibsquare.be/api/predictions"
+    # Suppress SSL warnings — the DynaMine server has a hostname-mismatch cert
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     rows = []
     total = len(fasta_records)
     for i, (name, seq) in enumerate(fasta_records.items(), 1):
@@ -293,6 +296,7 @@ def _run_dynamine_api(fasta_records):
                 API_URL,
                 data={"fasta": fasta_str},
                 timeout=60,
+                verify=False,  # server cert has hostname mismatch (server-side issue)
             )
             resp.raise_for_status()
             # Response is a CSV: residue, aa, backbone, coil, helix, sheet, ...
