@@ -5,32 +5,23 @@ Created on Tue Feb  4 10:00:07 2025
 
 import os
 import datetime
-import time, json
+import time
 try:
     import psutil
 except ImportError:
     psutil = None
 
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
-from sklearn.model_selection import train_test_split
 import torch 
 import torch.nn as nn
-from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.cuda.amp import autocast, GradScaler
-
-from collections import Counter
 
 
 from sklearn.utils.class_weight import compute_class_weight
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import classification_report, confusion_matrix
 
-from data_utils import create_classification_func, load_and_preprocess_data, SequenceClassificationDataset, collate_fn_sequence, compute_sampling_weights
-
-from transformers import EsmModel, EsmTokenizer
+from utils.data_pipeline_utils import prepare_data_for_training
 
 from models import (
     FocalLoss, 
@@ -41,11 +32,18 @@ from models import (
 )
 
 from nc_losses import NCLoss
+from utils.backbone_utils import (
+    load_hf_token_from_env,
+    set_up_embedding_model,
+)
+from utils.reporting_utils import (
+    save_evaluation_outputs,
+    save_loss_curve,
+    save_metrics_json,
+    save_run_summary_csv,
+)
 
-
-
-def tokenize(sequences, tokenizer):
-    return [tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False) for seq in sequences]
+load_hf_token_from_env()
 
 def compute_validation_loss(model, data_loader, criterion, args):
     if data_loader is None:
@@ -149,39 +147,6 @@ def get_loss_fn(args, train_dataset):
         print("Using CrossEntropyLoss")
         loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
     return loss_fn
-
-def set_up_embedding_model(args):
-    embedding_model = EsmModel.from_pretrained(f"facebook/{args.esm_model}")
-    embedding_model.to(args.device)
-    
-    if getattr(args, "freeze_all_backbone", False):
-        for p in embedding_model.parameters():
-            p.requires_grad = False
-        embedding_model.eval()    #disable dropout in the frozen backbone
-        print("Frozen ALL ESM parameters.")
-        n_trainable = sum(p.requires_grad for p in embedding_model.parameters())
-        print(f"Trainable ESM params: {n_trainable}")
-        return embedding_model
-    
-    embedding_model.train()
-    
-    # Free layers
-    if args.freeze_layers:
-        # Ex: '0-5' means freeze layers 0..5, and unfreeze the rest
-        start_layer, end_layer = map(int, args.freeze_layers.split("-"))
-        freeze_list = range(start_layer, end_layer+1)
-        for name, param in embedding_model.named_parameters():
-            if "encoder.layer" in name:
-                layer_num = int(name.split(".")[2])
-                param.requires_grad = not layer_num in freeze_list
-            else:   
-                param.requires_grad = True
-        print(f"Freezing layers {args.freeze_layers}")
-        
-    n_trainable = sum(p.requires_grad for p in embedding_model.parameters())
-    print(f"Trainable ESM params: {n_trainable}") 
-        
-    return embedding_model
 
 def set_up_classification_model(args):
     embedding_model = set_up_embedding_model(args)
@@ -321,95 +286,13 @@ def train(args):
         scheduler = None
         print("Not using any scheduler")
     
-    # Load data
-    labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
-    train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
-    test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
-
-    # Preprocessing data
-    tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
-    X_train = tokenize(train_data['sequence'], tokenizer) # [input_ids, attention_mask]
-    X_test = tokenize(test_data['sequence'], tokenizer)
-    y_train = train_data['neq_class'].tolist()
-    y_test = test_data['neq_class'].tolist()
-    
-    
-    # If having scheduler as ReduceLROnPlateau, split the data into train and validation
-    val_loader = None
-    need_val = (args.lr_scheduler == "reduce_on_plateau") or (args.patience and args.patience > 0)
-
-    if need_val:
-        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, stratify=None, random_state=args.seed)
-        val_dataset = SequenceClassificationDataset(X_val, y_val)
-        val_loader = DataLoader(
-            val_dataset,
-            batch_size=args.batch_size,
-            shuffle=False,
-            drop_last=False,
-            collate_fn=lambda x: collate_fn_sequence(x, tokenizer),)
-            
-        
-        
-    train_dataset = SequenceClassificationDataset(X_train, y_train)
-    test_dataset = SequenceClassificationDataset(X_test, y_test)
-    
-    # Check original class distribution before oversampling
-    raw_labels = []
-    for i in range(len(train_dataset)):
-        raw_labels.extend(train_dataset.labels[i])
-
-    raw_class_counts = Counter(raw_labels)
-    print("Original Class Distribution:", raw_class_counts)
-    
-    flat = [lab for seq in train_dataset.labels for lab in seq]
-    occurrence_list = [flat.count(k) for k in range(args.num_classes)]
-    weight_factor = torch.tensor(
-        [1.0/np.sqrt(max(n,1)) for n in occurrence_list],  # avoid /0
-        dtype=torch.float, device=args.device)
-    
-    
-    
-    # If oversampling is enabled, compute weights
-    if args.oversampling:
-       print("Applying oversampling using WeightedRandomSampler...")
-       sampling_weights = compute_sampling_weights(
-           train_dataset, 
-           num_classes=args.num_classes,
-           neq_thresholds=args.neq_thresholds,
-           oversampling_threshold=args.oversampling_threshold, 
-           undersampling_threshold=args.undersampling_threshold,
-           undersampling_intensity = args.undersampling_intensity,
-           oversampling_intensity = args.oversampling_intensity
-       )
-       
-       sampler = WeightedRandomSampler(
-           weights=sampling_weights,
-           num_samples=len(train_dataset),
-           replacement=True,  # Allows oversampling
-       )
-       
-       train_loader = DataLoader(train_dataset, 
-                                 batch_size=args.batch_size, 
-                                 sampler=sampler, 
-                                 collate_fn=lambda x: collate_fn_sequence(x, tokenizer), 
-                                 drop_last=dp,
-                                )
-       
-       # Collect labels from the sampled data in the DataLoader
-       oversampled_labels = []
-       for batch in train_loader:
-           batch_labels = batch['labels'].cpu().numpy().flatten()
-           batch_labels = batch_labels[batch_labels != -1]  # Remove padding values
-           oversampled_labels.extend(batch_labels)
-
-       oversampled_class_counts = Counter(oversampled_labels)
-       print("Sampled Class Distribution After Oversampling:", oversampled_class_counts)
-
-
-    else:
-       train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=lambda x: collate_fn_sequence(x, tokenizer), drop_last=dp)
-       
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=lambda x: collate_fn_sequence(x, tokenizer), drop_last=False)
+    data_parts = prepare_data_for_training(args, drop_last=dp)
+    train_dataset = data_parts["train_dataset"]
+    train_loader = data_parts["train_loader"]
+    val_loader = data_parts["val_loader"]
+    test_loader = data_parts["test_loader"]
+    occurrence_list = data_parts["occurrence_list"]
+    weight_factor = data_parts["weight_factor"]
     
     # --- choose criterion by loss_mode ---
     
@@ -438,7 +321,7 @@ def train(args):
     
     
     use_cuda   = (isinstance(args.device, torch.device) and args.device.type == "cuda") \
-             or (isinstance(args.device, str) and args.device == "cuda")
+             or (isinstance(args.device, str) and args.device.startswith("cuda"))
     amp_enabled = bool(args.mixed_precision and use_cuda)
     amp_dtype   = torch.bfloat16 if getattr(args, "amp_dtype", "fp16") == "bf16" else torch.float16
 
@@ -478,7 +361,7 @@ def train(args):
             
             optimizer.zero_grad()
             
-            if amp_enabled and args.device.startswith("cuda"):
+            if amp_enabled and on_cuda:
                 with autocast(dtype=amp_dtype):
                     logits, feats = model(input_ids, attention_mask,
                               return_features=("pre" if args.head=="softmax"
@@ -557,119 +440,41 @@ def train(args):
 
        
             
-    # Plot loss curve
-    plt.figure()
-    plt.plot(range(1, len(train_losses)+1), train_losses, label='Training Loss')
-    if len(val_losses) > 0:
-        plt.plot(range(1, len(val_losses)+1), val_losses, label='Validation Loss')
-    plt.xlabel("Epoch"); plt.ylabel("Loss"); plt.title("Loss Curve"); plt.legend()
-    plt.savefig(f"{run_folder}/loss_curve.png")
+    save_loss_curve(run_folder, train_losses, val_losses)
 
-    
     # Evaluation
     cls_report, conf_matrix = evaluate(model, test_loader, criterion, args)
-    cls_report_df = pd.DataFrame(cls_report).transpose()
-    latex_table = cls_report_df.to_latex(float_format="%.2f")
-    print(cls_report)
-    print(latex_table)
-    print(conf_matrix)
-    
-    # Save classification report and confusion matrix
-    with open(f"{run_folder}/classification_report.txt", "w") as f:
-        f.write(str(cls_report))
-    with open(f"{run_folder}/classification_report.tex", "w") as f:
-        f.write(latex_table)
-    disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix)
-    disp.plot(cmap='Blues')
-    plt.title("Confusion Matrix")
-    plt.savefig(f"{run_folder}/confusion_matrix.png")
-    plt.close()
-    
-    # Save args to text
-    with open(f"{run_folder}/args.txt", "w") as f:
-        f.write(str(args))
-        
+    save_evaluation_outputs(run_folder, cls_report, conf_matrix, args)
     if on_cuda:
         torch.cuda.synchronize()
     total_seconds = time.perf_counter() - run_start
     gpu_overall_peak = int(torch.cuda.max_memory_allocated()) if on_cuda else None
     cpu_rss_end = psutil.Process().memory_info().rss if psutil else None
 
-    metrics = {
-        "device": str(args.device),
-        "seed": args.seed,
-        "amp_enabled": bool(args.mixed_precision and on_cuda),
-        "total_seconds": total_seconds,
-        "epoch_seconds": epoch_times,
-        "gpu_peak_bytes_per_epoch": gpu_epoch_peaks if on_cuda else None,
-        "gpu_overall_peak_bytes": gpu_overall_peak,
-        "cpu_rss_start_bytes": cpu_rss_start,
-        "cpu_rss_end_bytes": cpu_rss_end,
-        "epochs_ran": len(epoch_times),
-        }
-    with open(f"{run_folder}/metrics.json", "w") as f:
-        json.dump(metrics, f, indent=2)
-    print(f"Saved metrics to {run_folder}/metrics.json")
-    
-    # ---------- RUN SUMMARY CSV (one row) ----------
-    # Build a flat dict with config, metrics, report, and confusion matrix
-
-    row = {
-        "run_dir": run_folder,
-        "batch_size": args.batch_size,
-        "embedding_model": args.esm_model,
-        "model_architecture": args.architecture,
-
-        # Loss description (explicit fields + compact summary)
-        "loss_mode": args.loss_mode,                # "supervised" | "nc" | "both"
-        "loss_function": args.loss_function,        # "focal" | "crossentropy"
-        "head": args.head,                          # "softmax" | "postfc" | "centroid"
-        "loss_desc": f"{args.loss_mode}|{args.loss_function}|head={args.head}",
-
-        # Timing & memory
-        "total_time_seconds": total_seconds,
-        "epochs_ran": len(epoch_times),
-        "gpu_overall_peak_bytes": gpu_overall_peak,
-        "cpu_rss_start_bytes": cpu_rss_start,
-        "cpu_rss_end_bytes": cpu_rss_end,
-        "cpu_rss_delta_bytes": (
-            int(cpu_rss_end - cpu_rss_start)
-            if (cpu_rss_end is not None and cpu_rss_start is not None) else None
-            ),
-
-        # Repro / runtime
-        "seed": getattr(args, "seed", None),
-        "device": str(args.device),
-        "amp_enabled": bool(args.mixed_precision and on_cuda),
-        }
-
-    # Flatten classification_report into columns
-    # e.g., adds: accuracy, 0_precision, 0_recall, ..., macro_avg_f1_score, weighted_avg_support, etc.
-    for key, val in cls_report.items():
-        if key == "accuracy":
-            row["accuracy"] = val
-            continue
-        if isinstance(val, dict):
-           key_safe = str(key).replace(" ", "_")              # "macro avg" -> "macro_avg"
-           for subk, subval in val.items():
-               subk_safe = subk.replace("-", "_")             # "f1-score" -> "f1_score"
-               row[f"{key_safe}_{subk_safe}"] = subval
-
-    # Flatten confusion matrix into columns
-    # cm_true_i_pred_j for every cell
-    cm = conf_matrix
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            row[f"cm_true_{i}_pred_{j}"] = int(cm[i, j])
-
-    # Make DataFrame and save
-    summary_df = pd.DataFrame([row])
-    summary_csv_path = f"{run_folder}/run_summary.csv"
-    summary_df.to_csv(summary_csv_path, index=False)
-    print(f"Saved run summary to {summary_csv_path}")
-# ----------------------------------------------
-
-        
+    save_metrics_json(
+        run_folder,
+        args,
+        on_cuda,
+        total_seconds,
+        epoch_times,
+        gpu_epoch_peaks,
+        gpu_overall_peak,
+        cpu_rss_start,
+        cpu_rss_end,
+    )
+    save_run_summary_csv(
+        run_folder,
+        args,
+        cls_report,
+        conf_matrix,
+        total_seconds,
+        epoch_times,
+        gpu_overall_peak,
+        cpu_rss_start,
+        cpu_rss_end,
+        on_cuda,
+    )
+       
     print("Training completed")
 
 

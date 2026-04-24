@@ -15,6 +15,27 @@ import math
 # =============================================================================
 # Model Architecture
 # =============================================================================
+def _get_backbone_hidden(embedding_model, input_ids, attention_mask=None, return_attn=False):
+    is_esm3 = getattr(embedding_model, "is_esm3", False)
+
+    if is_esm3:
+        out = embedding_model(sequence_tokens=input_ids)
+        h = out.embeddings
+        if return_attn:
+            attn = getattr(out, "attentions", None)
+            return h, attn
+        return h, None
+
+    out = embedding_model(
+        input_ids=input_ids,
+        attention_mask=attention_mask,
+        output_attentions=return_attn,
+        return_dict=True,
+    )
+    h = out.last_hidden_state
+    if return_attn:
+        return h, out.attentions
+    return h, None
 
 class BiLSTMClassificationModel(nn.Module):
     def __init__(self, embedding_model, hidden_size, num_layers,
@@ -39,7 +60,7 @@ class BiLSTMClassificationModel(nn.Module):
             self.fc = nn.Linear(self.output_dim, num_classes)
 
     def forward(self, input_ids, attention_mask, return_features="none"):
-        emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        emb, _ = _get_backbone_hidden(self.embedding_model, input_ids, attention_mask)
         h, _ = self.lstm(emb)              # [B, L, output_dim]
         h = self.dropout(h)
 
@@ -60,13 +81,9 @@ class ESMLinearTokenClassifier(nn.Module):
             self.fc = nn.Linear(embedding_model.config.hidden_size, num_classes)
 
     def forward(self, input_ids, attention_mask, return_features="none", return_attn=False):
-        outputs = self.embedding_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_attentions=return_attn,
-            return_dict=True,
-        )
-        h = outputs.last_hidden_state  # [B,L,D] from ESM
+        h, attn = _get_backbone_hidden(
+            self.embedding_model, input_ids, attention_mask, return_attn=return_attn
+        ) # [B,L,D] from ESM
         logits = self.fc(h) if self.use_fc else None
 
         feats = None
@@ -78,7 +95,7 @@ class ESMLinearTokenClassifier(nn.Module):
             feats = logits
 
         if return_attn:
-            return logits, feats, outputs.attentions
+            return logits, feats, attn
         return logits, feats
 
 
@@ -130,7 +147,7 @@ class BiLSTMWithSelfAttentionModel(nn.Module):
             self.fc = nn.Linear(self.output_dim, num_classes)
 
     def forward(self, input_ids, attention_mask, return_attention=False, return_features="none"):
-        emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        emb, _ = _get_backbone_hidden(self.embedding_model, input_ids, attention_mask)
         h, _ = self.lstm(emb)                                      # [B, L, output_dim]
         ctx, attn = (self.attention(h, attention_mask, True) if return_attention
                      else (self.attention(h, attention_mask), None))
@@ -193,9 +210,7 @@ class TransformerClassificationModel(nn.Module):
         input_ids: [batch_size, seq_len]
         attention_mask: [batch_size, seq_len]
         """
-        # Generate embeddings from the pretrained ESM model
-        outputs = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask)
-        embeddings = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
+        embeddings, _ = _get_backbone_hidden(self.embedding_model, input_ids, attention_mask)  # [batch_size, seq_len, hidden_size]
 
         # Add positional encoding
         embeddings = self.pos_encoder(embeddings)
