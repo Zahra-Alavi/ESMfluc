@@ -36,6 +36,24 @@ import sys
 import textwrap
 from pathlib import Path
 
+# ── networkx ≥ 3.3 required: earlier versions generate invalid Python
+#    identifiers from config keys like "nx-loopback" (hyphen), breaking
+#    Python 3.11 dataclasses at import time.
+def _ensure_networkx():
+    try:
+        import importlib.metadata as _im
+        from packaging.version import Version
+        nx_ver = Version(_im.version("networkx"))
+        if nx_ver < Version("3.3"):
+            raise ImportError(f"networkx {nx_ver} < 3.3")
+    except Exception:
+        print("[INFO] Upgrading networkx to >=3.3 to fix ESM3 import …")
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "networkx>=3.3", "-q"]
+        )
+
+_ensure_networkx()
+
 import numpy as np
 import pandas as pd
 import torch
