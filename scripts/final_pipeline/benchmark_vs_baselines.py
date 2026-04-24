@@ -43,32 +43,44 @@ def _ensure_networkx():
     """
     networkx < 3.3 uses config keys with hyphens (e.g. 'nx-loopback') as
     Python identifiers in generated dataclasses, causing a SyntaxError on
-    Python 3.11.  We upgrade and re-exec the process so the new version is
-    picked up from a clean import — in-process sys.modules patching is not
-    sufficient because networkx may already be partially imported by the
-    time this runs.
+    Python 3.11.  In conda environments pip install is shadowed by the conda
+    package, so we must upgrade via conda.  After upgrading we re-exec so the
+    new version is loaded from a clean process.
     """
-    import os
-    import importlib.metadata as _im
+    import os, shutil, importlib.metadata as _im
+
     needs_upgrade = False
     try:
-        # packaging may not be installed; fall back to simple string compare
         ver_str = _im.version("networkx")
         major, minor = [int(x) for x in ver_str.split(".")[:2]]
         if (major, minor) < (3, 3):
             needs_upgrade = True
     except Exception:
-        needs_upgrade = True  # can't tell → upgrade to be safe
+        needs_upgrade = True
 
-    if needs_upgrade and os.environ.get("_NX_UPGRADED") != "1":
-        print(f"[INFO] Upgrading networkx to >=3.3 and restarting …")
+    if not needs_upgrade or os.environ.get("_NX_UPGRADED") == "1":
+        return
+
+    print("[INFO] networkx < 3.3 detected — upgrading and restarting …")
+    conda = shutil.which("conda")
+    upgraded = False
+    if conda:
+        try:
+            subprocess.check_call(
+                [conda, "install", "-c", "conda-forge", "networkx>=3.3", "-y", "-q"],
+                timeout=300,
+            )
+            upgraded = True
+        except Exception as e:
+            print(f"  [WARN] conda upgrade failed: {e}")
+    if not upgraded:
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "networkx>=3.3", "-q"]
+            [sys.executable, "-m", "pip", "install", "--upgrade", "networkx>=3.3", "-q"]
         )
-        # Re-exec with a flag so we don't loop
-        env = os.environ.copy()
-        env["_NX_UPGRADED"] = "1"
-        os.execve(sys.executable, [sys.executable] + sys.argv, env)
+
+    env = os.environ.copy()
+    env["_NX_UPGRADED"] = "1"
+    os.execve(sys.executable, [sys.executable] + sys.argv, env)
 
 _ensure_networkx()
 
@@ -101,7 +113,7 @@ try:
     from esm.pretrained import ESM3_sm_open_v0
     from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
     ESM3_AVAILABLE = True
-except ImportError:
+except Exception:
     ESM3_AVAILABLE = False
 
 
