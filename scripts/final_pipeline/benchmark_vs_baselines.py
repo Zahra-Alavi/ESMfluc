@@ -299,8 +299,17 @@ def _run_dynamine_api(fasta_records):
                 verify=False,  # server cert has hostname mismatch (server-side issue)
             )
             resp.raise_for_status()
-            # Response is a CSV: residue, aa, backbone, coil, helix, sheet, ...
-            df_api = pd.read_csv(io.StringIO(resp.text))
+            # DynaMine returns whitespace/tab-delimited data, possibly with
+            # comment lines starting with '#' at the top.
+            text = resp.text
+            lines = [l for l in text.splitlines() if l.strip() and not l.startswith("#")]
+            clean_text = "\n".join(lines)
+            df_api = pd.read_csv(
+                io.StringIO(clean_text),
+                sep=None,
+                engine="python",
+                header=0,
+            )
             df_api.columns = [c.strip().lower() for c in df_api.columns]
             for j, row in enumerate(df_api.itertuples(), 1):
                 bb_val = getattr(row, "backbone", np.nan)
