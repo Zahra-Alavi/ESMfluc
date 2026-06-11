@@ -202,29 +202,36 @@ def set_up_embedding_model(args):
     embedding_model, model_type = load_esm_model(args.esm_model, device=args.device)
     print(f"Loaded {model_type} model: {args.esm_model}")
     
+    is_esm3 = "esm3" in args.esm_model.lower()
+
     if getattr(args, "freeze_all_backbone", False):
         for p in embedding_model.parameters():
             p.requires_grad = False
-        embedding_model.eval()    #disable dropout in the frozen backbone
+        embedding_model.eval()    # disable dropout in the frozen backbone
         print("Frozen ALL ESM parameters.")
-        n_trainable = sum(p.requires_grad for p in embedding_model.parameters())
+        n_trainable = sum(p.numel() for p in embedding_model.parameters() if p.requires_grad)
         print(f"Trainable ESM params: {n_trainable}")
         return embedding_model
-    
+
     embedding_model.train()
-    
-    # Free layers
+
+    # Partial layer freezing (ESM2 only — uses HuggingFace encoder.layer naming)
     if args.freeze_layers:
-        # Ex: '0-5' means freeze layers 0..5, and unfreeze the rest
-        start_layer, end_layer = map(int, args.freeze_layers.split("-"))
-        freeze_list = range(start_layer, end_layer+1)
-        for name, param in embedding_model.named_parameters():
-            if "encoder.layer" in name:
-                layer_num = int(name.split(".")[2])
-                param.requires_grad = not layer_num in freeze_list
-            else:   
-                param.requires_grad = True
-        print(f"Freezing layers {args.freeze_layers}")
+        if is_esm3:
+            print("WARNING: --freeze_layers is not supported for ESM3. "
+                  "Use --freeze_all_backbone to freeze the entire backbone, "
+                  "or omit both flags to fine-tune fully.")
+        else:
+            # Ex: '0-5' means freeze layers 0..5, and unfreeze the rest
+            start_layer, end_layer = map(int, args.freeze_layers.split("-"))
+            freeze_list = range(start_layer, end_layer + 1)
+            for name, param in embedding_model.named_parameters():
+                if "encoder.layer" in name:
+                    layer_num = int(name.split(".")[2])
+                    param.requires_grad = not layer_num in freeze_list
+                else:
+                    param.requires_grad = True
+            print(f"Freezing ESM2 layers {args.freeze_layers}")
         
     n_trainable = sum(p.numel() for p in embedding_model.parameters() if p.requires_grad)
     print(f"Trainable ESM params: {n_trainable}") 

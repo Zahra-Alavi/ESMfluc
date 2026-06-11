@@ -60,11 +60,13 @@ class ESM3Wrapper(nn.Module):
                 f"Available fields: {list(vars(out).keys())}")
         return _ESM3Output(h)
 
-    def parameters(self, recurse=True):
-        return self.esm3.parameters(recurse)
+    def train(self, mode=True):
+        # Only set the inner ESM3 model to train/eval — do not touch the wrapper.
+        self.esm3.train(mode)
+        return self
 
-    def named_parameters(self, prefix='', recurse=True):
-        return self.esm3.named_parameters(prefix, recurse)
+    def eval(self):
+        return self.train(False)
 
 
 # =============================================================================
