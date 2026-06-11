@@ -301,6 +301,7 @@ def _run_dynamine_api(fasta_records):
             resp.raise_for_status()
             # DynaMine returns whitespace/tab-delimited data, possibly with
             # comment lines starting with '#' at the top.
+            import csv as _csv
             text = resp.text
             lines = [l for l in text.splitlines() if l.strip() and not l.startswith("#")]
             clean_text = "\n".join(lines)
@@ -309,6 +310,7 @@ def _run_dynamine_api(fasta_records):
                 sep=None,
                 engine="python",
                 header=0,
+                quoting=_csv.QUOTE_NONE,
             )
             df_api.columns = [c.strip().lower() for c in df_api.columns]
             for j, row in enumerate(df_api.itertuples(), 1):
@@ -346,11 +348,11 @@ def run_b2btools(fasta_records, cache_path=None, force_api=False):
 
     if not force_api:
         if not B2B_AVAILABLE:
-            try:
-                _try_install_b2btools()
-            except Exception as e:
-                print(f"  [WARN] b2btools install failed ({e}), falling back to DynaMine web API …")
-                force_api = True
+            # b2btools requires pomegranate which needs Cython compilation —
+            # pre-built wheels rarely exist for Python 3.11.  Skip the install
+            # attempt and go straight to the DynaMine web API.
+            print("  [INFO] b2btools not installed; using DynaMine web API directly.")
+            force_api = True
 
     if force_api or not B2B_AVAILABLE:
         print("[INFO] Using DynaMine web API …")

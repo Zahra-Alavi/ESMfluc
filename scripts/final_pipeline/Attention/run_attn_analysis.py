@@ -386,17 +386,44 @@ def save_heatmap(matrix, title, path, seq=None, vmax=None):
     plt.close(fig)
 
 
+def _stacked_bar_logo(df_enr, ax, aa_colors, label_top=True):
+    """
+    Draw a colored stacked bar chart where each AA contributes its share of
+    enrichment (height = enrichment-1 for that AA at that position).
+    Dominant AA at each position is labeled on top.
+    """
+    positions = list(df_enr.index)
+    W = len(positions)
+    x = np.arange(W)
+    bottoms = np.zeros(W)
+    for aa in df_enr.columns:
+        vals = df_enr[aa].values.astype(float)
+        bars = ax.bar(x, vals, bottom=bottoms,
+                      color=aa_colors.get(aa, "#999999"),
+                      width=0.85, edgecolor="none")
+        bottoms = bottoms + vals
+    if label_top:
+        top_aa_idx = df_enr.values.argmax(axis=1)
+        for xi, aa_i in enumerate(top_aa_idx):
+            h = bottoms[xi]
+            if h > 0.05:
+                aa = df_enr.columns[aa_i]
+                ax.text(xi, h + h * 0.04, aa,
+                        ha="center", va="bottom", fontsize=9, fontweight="bold",
+                        color=aa_colors.get(aa, "#333333"))
+
+
 def plot_pwm_logo(pwm, title, path):
     """
-    Sequence logo using logomaker: letter height ∝ enrichment above uniform background.
-    Enriched residues (obs/exp > 1) shown above zero; depleted shown below.
+    Sequence logo: letter height ∝ enrichment above uniform background.
+    Uses logomaker if available; falls back to AA-colored stacked bars.
     pwm: (W, 20) numpy array of AA frequencies per position.
     """
     W = pwm.shape[0]
     bg = 1.0 / len(AAS)
     enr = pwm / (bg + 1e-12)              # (W, 20) obs/expected
     heights_pos = np.maximum(0, enr - 1)  # enrichment (≥ 0)
-    heights_neg = np.maximum(0, 1 - enr)  # depletion  (≥ 0, rendered below axis)
+    heights_neg = np.maximum(0, 1 - enr)  # depletion  (≥ 0)
     positions   = list(range(-(W // 2), W - (W // 2)))
 
     df_pos = pd.DataFrame(heights_pos, columns=AAS, index=positions)
@@ -410,21 +437,26 @@ def plot_pwm_logo(pwm, title, path):
         try:
             logomaker.Logo(df_pos, ax=ax_pos, color_scheme=AA_COLORS_LM, show_spines=False)
         except Exception:
-            ax_pos.bar(range(W), df_pos.max(axis=1), color="steelblue", alpha=0.7)
+            _stacked_bar_logo(df_pos, ax_pos, AA_COLORS_LM)
     else:
-        ax_pos.bar(range(W), df_pos.max(axis=1), color="steelblue", alpha=0.7)
+        _stacked_bar_logo(df_pos, ax_pos, AA_COLORS_LM)
     ax_pos.axhline(0, color="#aaaaaa", linewidth=0.8)
     ax_pos.set_ylabel("Enrichment − 1", fontsize=9)
     ax_pos.set_title(title, fontsize=10, fontweight="bold")
     ax_pos.set_xticks(range(W))
     ax_pos.set_xticklabels([f"{p:+d}" for p in positions], fontsize=8)
 
-    if _LOGOMAKER and df_neg.values.max() > 0:
-        try:
-            logomaker.Logo(df_neg, ax=ax_neg, color_scheme=AA_COLORS_LM, show_spines=False)
+    if df_neg.values.max() > 0:
+        if _LOGOMAKER:
+            try:
+                logomaker.Logo(df_neg, ax=ax_neg, color_scheme=AA_COLORS_LM, show_spines=False)
+                ax_neg.invert_yaxis()
+            except Exception:
+                _stacked_bar_logo(df_neg, ax_neg, AA_COLORS_LM, label_top=False)
+                ax_neg.invert_yaxis()
+        else:
+            _stacked_bar_logo(df_neg, ax_neg, AA_COLORS_LM, label_top=False)
             ax_neg.invert_yaxis()
-        except Exception:
-            pass
     ax_neg.axhline(0, color="#aaaaaa", linewidth=0.8)
     ax_neg.set_ylabel("Depletion", fontsize=9)
     ax_neg.set_xticks(range(W))
