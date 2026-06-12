@@ -28,6 +28,55 @@
 
 set -euo pipefail
 
+# ── Preflight checks ──────────────────────────────────────────────────────────
+echo "Running preflight checks..."
+
+# 1. CUDA-enabled PyTorch
+if ! python - <<'EOF'
+import sys, torch
+if not torch.cuda.is_available():
+    print("ERROR: torch.cuda.is_available() returned False.")
+    print("       The PyTorch in this environment is CPU-only.")
+    print("       Fix: pip install torch --index-url https://download.pytorch.org/whl/cu121")
+    print("       (replace cu121 with your CUDA version: check with `nvidia-smi`)")
+    sys.exit(1)
+n = torch.cuda.device_count()
+print(f"  CUDA OK  ({n} GPU(s) visible: {[torch.cuda.get_device_name(i) for i in range(n)]})")
+EOF
+then
+    exit 1
+fi
+
+# 2. ESM3 library
+if ! python - <<'EOF'
+import sys
+try:
+    from esm.pretrained import ESM3_sm_open_v0  # noqa: F401
+    print("  ESM3 OK")
+except ImportError as e:
+    print(f"ERROR: ESM3 library not found ({e})")
+    print("       Fix: pip install esm")
+    sys.exit(1)
+EOF
+then
+    exit 1
+fi
+
+# 3. At least 2 GPUs
+if ! python - <<'EOF'
+import sys, torch
+n = torch.cuda.device_count()
+if n < 2:
+    print(f"WARNING: Only {n} GPU(s) found. Both ESM2 and ESM3 groups will share GPU 0.")
+    # Not fatal — just warn
+EOF
+then
+    true  # non-fatal
+fi
+
+echo "Preflight checks passed."
+echo ""
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
