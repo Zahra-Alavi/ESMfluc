@@ -182,37 +182,6 @@ def extract_esm2_attn(esm2_model, tokenizer, seq, device):
 
 # ── ESM3 backbone attention ────────────────────────────────────────────────────
 
-_ESM3_HOOK_BUFFER = []
-
-
-def _make_esm3_hook():
-    """Return a fresh forward hook that captures attention weights."""
-    def hook_fn(module, inputs, output):
-        # output may be:
-        #   (context_tensor,)          – if the module only returns context
-        #   (context_tensor, weights)  – if weights are also returned
-        if isinstance(output, (tuple, list)) and len(output) >= 2:
-            w = output[1]
-            if w is not None and w.dim() == 4:       # [B, H, L, L]
-                _ESM3_HOOK_BUFFER.append(w.detach().cpu())
-    return hook_fn
-
-
-def _find_last_attn_module(model):
-    """
-    Walk all named modules and return the last one whose name contains 'attn'
-    and which has learnable parameters (i.e. is a real attention block,
-    not just a dropout or activation).
-    """
-    candidates = [
-        (name, mod)
-        for name, mod in model.named_modules()
-        if 'attn' in name.lower()
-        and sum(1 for _ in mod.parameters()) > 0
-    ]
-    return candidates[-1] if candidates else (None, None)
-
-
 def build_esm3_from_checkpoint(checkpoint, device):
     """
     Load the raw ESM3 model and inject fine-tuned backbone weights from checkpoint.
@@ -253,83 +222,42 @@ def build_esm3_from_checkpoint(checkpoint, device):
 
 def extract_esm3_attn(raw_esm3, tokenizer, seq, device):
     """
-    Run one sequence through the raw ESM3 model and capture backbone attention
-    via a forward hook on the last self-attention sub-module.
-
-    Returns (attn_matrix [L,L], method_str) where method_str is 'hook' or 'proxy'.
+    Run one sequence through ESM3 with output_attentions=True.
+    Returns a [L, L] numpy array (last layer, averaged over heads).
+    L is the sequence length (BOS/EOS tokens stripped).
     """
-    global _ESM3_HOOK_BUFFER
-    _ESM3_HOOK_BUFFER = []
-
-    # Register hook on the last attention-like module
-    mod_name, attn_mod = _find_last_attn_module(raw_esm3)
-    handle = None
-    if attn_mod is not None:
-        handle = attn_mod.register_forward_hook(_make_esm3_hook())
-
-    # Tokenise
     enc = tokenizer(seq, return_tensors="pt", add_special_tokens=True)
     input_ids = enc["input_ids"].to(device)
     L = len(seq)
 
     with torch.no_grad():
-        out = raw_esm3(sequence_tokens=input_ids)
+        out = raw_esm3(sequence_tokens=input_ids, output_attentions=True)
 
-    if handle is not None:
-        handle.remove()
-
-    # Try to use hook output
-    if _ESM3_HOOK_BUFFER:
-        w = _ESM3_HOOK_BUFFER[-1]          # [1, H, L', L']  (may include special tokens)
-        w = w[0]                            # [H, L', L']
-        avg = w.mean(dim=0)                 # [L', L']
-
-        # Strip special tokens at beginning/end to get [L, L]
-        Lp = avg.shape[0]
-        if Lp >= L + 2:
-            core = avg[1:L+1, 1:L+1]
-        elif Lp >= L:
-            core = avg[:L, :L]
-        else:
-            # Unexpected shape – fall through to proxy
-            core = None
-
-        if core is not None:
-            row_sums = core.sum(dim=-1, keepdim=True).clamp(min=1e-12)
-            core = (core / row_sums).numpy()
-            return core, "hook"
-
-    # ── Proxy: cosine-similarity attention from backbone embeddings ────────────
-    print(f"    [backbone/ESM3] Hook did not return attention; using cosine-similarity proxy.")
-    if hasattr(out, 'last_hidden_state') and out.last_hidden_state is not None:
-        h = out.last_hidden_state[0]
-    elif hasattr(out, 'sequence_last_hidden_states') and out.sequence_last_hidden_states is not None:
-        h = out.sequence_last_hidden_states[0]
-    elif hasattr(out, 'embeddings') and out.embeddings is not None:
-        h = out.embeddings[0]
-    else:
-        available = [k for k, v in vars(out).items() if v is not None]
+    # out.attentions: tuple of n_layers tensors, each [1, n_heads, L', L']
+    if not out.attentions:
         raise RuntimeError(
-            f"Cannot find hidden states in ESM3 output. "
-            f"Non-None fields: {available}")
+            "ESM3 returned an empty attentions tuple. "
+            "output_attentions=True is not supported by this build of the esm library."
+        )
 
-    # Strip special tokens
-    if h.shape[0] >= L + 2:
-        h = h[1:L+1]           # [L, D]
-    elif h.shape[0] > L:
-        h = h[:L]
+    last_layer = out.attentions[-1][0]      # [n_heads, L', L']
+    avg_heads  = last_layer.mean(dim=0)     # [L', L']
 
-    # Cosine similarity matrix
-    h = h.float()
-    norm = h.norm(dim=-1, keepdim=True).clamp(min=1e-12)
-    h_n  = h / norm
-    sim  = torch.mm(h_n, h_n.t()).cpu().numpy()      # [L, L], range [-1, 1]
+    # Strip BOS/EOS tokens
+    Lp = avg_heads.shape[0]
+    if Lp >= L + 2:
+        core = avg_heads[1:L+1, 1:L+1]
+    elif Lp >= L:
+        core = avg_heads[:L, :L]
+    else:
+        raise RuntimeError(
+            f"Attention shape {tuple(avg_heads.shape)} is smaller than seq len {L}."
+        )
 
-    # Shift to [0, 1] and row-normalise to mimic softmax attention
-    sim  = (sim + 1.0) / 2.0
-    row_sums = sim.sum(axis=-1, keepdims=True).clip(1e-12)
-    sim  = sim / row_sums
-    return sim, "proxy"
+    # Row-normalise (removing BOS/EOS breaks the softmax sum)
+    row_sums = core.sum(dim=-1, keepdim=True).clamp(min=1e-12)
+    core = (core / row_sums).float().cpu().numpy()
+    return core, "official_api"
 
 
 # ── Main ────────────────────────────────────────────────────────────────────────
