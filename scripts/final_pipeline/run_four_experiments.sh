@@ -28,6 +28,9 @@
 
 set -euo pipefail
 
+mkdir -p results/logs
+exec > >(tee -a "results/logs/run_four_experiments_$(date +%Y%m%d_%H%M%S).log") 2>&1
+
 # ── Preflight checks ──────────────────────────────────────────────────────────
 echo "Running preflight checks..."
 
