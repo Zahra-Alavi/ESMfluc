@@ -6,6 +6,7 @@ Created on Tue Feb  4 10:00:07 2025
 import os
 import datetime
 import time, json
+import re
 try:
     import psutil
 except ImportError:
@@ -198,6 +199,70 @@ def get_loss_fn(args, train_dataset):
         loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
     return loss_fn
 
+def parse_layer_range(layer_range):
+    start_layer, end_layer = map(int, layer_range.split("-"))
+    if end_layer < start_layer:
+        raise ValueError(
+            f"Invalid --freeze_layers '{layer_range}': end must be >= start."
+        )
+    return range(start_layer, end_layer + 1)
+
+def esm2_layer_index(name):
+    match = re.search(r"(?:^|\.)encoder\.layer\.(\d+)(?:\.|$)", name)
+    return int(match.group(1)) if match else None
+
+def esm3_layer_index(name):
+    """
+    Return the ESM3 transformer block index from a parameter name.
+    Handles common esm package layouts such as:
+      esm3.transformer.blocks.0.*
+      esm3.transformer.layers.0.*
+      transformer.blocks.0.*
+      trunk.blocks.0.*
+    """
+    patterns = (
+        r"(?:^|\.)transformer\.(?:blocks|layers)\.(\d+)(?:\.|$)",
+        r"(?:^|\.)(?:blocks|layers)\.(\d+)(?:\.|$)",
+        r"(?:^|\.)trunk\.(?:blocks|layers)\.(\d+)(?:\.|$)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, name)
+        if match:
+            return int(match.group(1))
+    return None
+
+def apply_partial_backbone_freeze(embedding_model, layer_range, is_esm3):
+    freeze_list = set(parse_layer_range(layer_range))
+    get_layer_index = esm3_layer_index if is_esm3 else esm2_layer_index
+    matched_layers = set()
+
+    for name, param in embedding_model.named_parameters():
+        layer_idx = get_layer_index(name)
+        if layer_idx is None:
+            param.requires_grad = True
+            continue
+        matched_layers.add(layer_idx)
+        param.requires_grad = layer_idx not in freeze_list
+
+    model_label = "ESM3" if is_esm3 else "ESM2"
+    if matched_layers:
+        frozen_matched = sorted(matched_layers & freeze_list)
+        trainable_matched = sorted(matched_layers - freeze_list)
+        print(f"Freezing {model_label} layers {layer_range}")
+        print(f"  Matched backbone layers: {min(matched_layers)}-{max(matched_layers)}")
+        print(f"  Frozen matched layers: {frozen_matched}")
+        print(f"  Trainable matched layers: {trainable_matched}")
+    else:
+        sample_names = [name for name, _ in list(embedding_model.named_parameters())[:12]]
+        print(f"WARNING: --freeze_layers was set to {layer_range}, but no {model_label} "
+              "transformer layer parameters matched known naming patterns.")
+        print(f"  Sample parameter names: {sample_names}")
+
+def keep_frozen_backbone_eval(model):
+    m = model.module if isinstance(model, nn.DataParallel) else model
+    if hasattr(m, "embedding_model"):
+        m.embedding_model.eval()
+
 def set_up_embedding_model(args):
     embedding_model, model_type = load_esm_model(args.esm_model, device=args.device)
     print(f"Loaded {model_type} model: {args.esm_model}")
@@ -215,23 +280,9 @@ def set_up_embedding_model(args):
 
     embedding_model.train()
 
-    # Partial layer freezing (ESM2 only — uses HuggingFace encoder.layer naming)
+    # Partial layer freezing. Non-transformer parameters remain trainable.
     if args.freeze_layers:
-        if is_esm3:
-            print("WARNING: --freeze_layers is not supported for ESM3. "
-                  "Use --freeze_all_backbone to freeze the entire backbone, "
-                  "or omit both flags to fine-tune fully.")
-        else:
-            # Ex: '0-5' means freeze layers 0..5, and unfreeze the rest
-            start_layer, end_layer = map(int, args.freeze_layers.split("-"))
-            freeze_list = range(start_layer, end_layer + 1)
-            for name, param in embedding_model.named_parameters():
-                if "encoder.layer" in name:
-                    layer_num = int(name.split(".")[2])
-                    param.requires_grad = not layer_num in freeze_list
-                else:
-                    param.requires_grad = True
-            print(f"Freezing ESM2 layers {args.freeze_layers}")
+        apply_partial_backbone_freeze(embedding_model, args.freeze_layers, is_esm3)
         
     n_trainable = sum(p.numel() for p in embedding_model.parameters() if p.requires_grad)
     print(f"Trainable ESM params: {n_trainable}") 
@@ -446,6 +497,8 @@ def train(args):
         if on_cuda:
             torch.cuda.reset_peak_memory_stats()
         model.train()
+        if getattr(args, "freeze_all_backbone", False):
+            keep_frozen_backbone_eval(model)
         total_loss = 0
         optimizer.zero_grad()
 
