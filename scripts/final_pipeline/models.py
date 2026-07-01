@@ -11,6 +11,7 @@ Created on Tue Feb  4 10:09:40 2025
 import torch.nn as nn
 import torch
 import math
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 # =============================================================================
 # ESM3 Compatibility Wrapper
@@ -73,6 +74,29 @@ class ESM3Wrapper(nn.Module):
 # Model Architecture
 # =============================================================================
 
+def run_masked_lstm(lstm, embeddings, attention_mask):
+    """Run an LSTM without allowing right-padding to affect valid positions."""
+    if attention_mask is None:
+        return lstm(embeddings)
+
+    lengths = attention_mask.to(dtype=torch.long).sum(dim=1)
+    if torch.any(lengths <= 0):
+        raise ValueError("Every sequence must contain at least one unmasked token.")
+
+    packed = pack_padded_sequence(
+        embeddings,
+        lengths.detach().cpu(),
+        batch_first=True,
+        enforce_sorted=False,
+    )
+    packed_output, hidden = lstm(packed)
+    output, _ = pad_packed_sequence(
+        packed_output,
+        batch_first=True,
+        total_length=embeddings.size(1),
+    )
+    return output, hidden
+
 class BiLSTMClassificationModel(nn.Module):
     def __init__(self, embedding_model, hidden_size, num_layers,
                  num_classes=4, dropout=0.3, bidirectional=1):
@@ -93,7 +117,7 @@ class BiLSTMClassificationModel(nn.Module):
 
     def forward(self, input_ids, attention_mask, return_features="none"):
         emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-        h, _ = self.lstm(emb)              # [B, L, output_dim]
+        h, _ = run_masked_lstm(self.lstm, emb, attention_mask)  # [B, L, output_dim]
         h = self.dropout(h)
 
         logits = self.fc(h)
@@ -175,7 +199,7 @@ class BiLSTMWithSelfAttentionModel(nn.Module):
 
     def forward(self, input_ids, attention_mask, return_attention=False, return_features="none"):
         emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-        h, _ = self.lstm(emb)                                      # [B, L, output_dim]
+        h, _ = run_masked_lstm(self.lstm, emb, attention_mask)     # [B, L, output_dim]
         ctx, attn = (self.attention(h, attention_mask, True) if return_attention
                      else (self.attention(h, attention_mask), None))
         ctx = self.dropout(ctx)
@@ -320,7 +344,7 @@ class BiLSTMRegressionModel(nn.Module):
 
     def forward(self, input_ids, attention_mask, return_features="none"):
         emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-        h, _ = self.lstm(emb)
+        h, _ = run_masked_lstm(self.lstm, emb, attention_mask)
         h = self.dropout(h)
         output = self.fc(h)  # [B, L, num_outputs]
         
@@ -360,7 +384,7 @@ class BiLSTMWithSelfAttentionRegressionModel(nn.Module):
 
     def forward(self, input_ids, attention_mask, return_attention=False, return_features="none"):
         emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-        h, _ = self.lstm(emb)
+        h, _ = run_masked_lstm(self.lstm, emb, attention_mask)
         ctx, attn = (self.attention(h, attention_mask, True) if return_attention
                      else (self.attention(h, attention_mask), None))
         ctx = self.dropout(ctx)
@@ -574,7 +598,7 @@ class BiLSTMOrdinalRegressionModel(nn.Module):
 
     def forward(self, input_ids, attention_mask, return_features="none", return_probs=False):
         emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-        h, _ = self.lstm(emb)
+        h, _ = run_masked_lstm(self.lstm, emb, attention_mask)
         h = self.dropout(h)
         logits = self.fc(h)  # [B, L, K-1]
 
@@ -610,7 +634,7 @@ class BiLSTMWithSelfAttentionOrdinalRegressionModel(nn.Module):
 
     def forward(self, input_ids, attention_mask, return_attention=False, return_features="none", return_probs=False):
         emb = self.embedding_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-        h, _ = self.lstm(emb)
+        h, _ = run_masked_lstm(self.lstm, emb, attention_mask)
         ctx, attn = (self.attention(h, attention_mask, True) if return_attention
                      else (self.attention(h, attention_mask), None))
         ctx = self.dropout(ctx)
