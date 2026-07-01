@@ -244,14 +244,18 @@ def run_model_bilstm_attn(model, tokenizer, sequence, device, task_type="classif
         y_probs = torch.softmax(logits, dim=-1)
         y_preds = torch.argmax(y_probs, dim=-1)
         y_preds = y_preds.view(-1)
+        class_probs = y_probs[0].cpu()
+        flexible_scores = class_probs[:, 1] if class_probs.shape[-1] > 1 else class_probs[:, 0]
     else:  # regression
         # logits shape: [B, L, num_outputs] -> squeeze to [B, L] then flatten to [L]
         if logits.dim() == 3 and logits.size(-1) == 1:
             y_preds = logits.squeeze(-1).view(-1)  # [B, L, 1] -> [B, L] -> [L]
         else:
             y_preds = logits.view(-1)  # Fallback: flatten everything
+        class_probs = None
+        flexible_scores = y_preds.detach().cpu()
     
-    return attn_weights, tokens, y_preds
+    return attn_weights, tokens, y_preds, flexible_scores, class_probs
 
 
 def run_model_esm_linear(model, tokenizer, sequence, device, layer_idx=-1, task_type="classification"):
@@ -276,14 +280,18 @@ def run_model_esm_linear(model, tokenizer, sequence, device, layer_idx=-1, task_
         y_probs = torch.softmax(logits, dim=-1)
         y_preds = torch.argmax(y_probs, dim=-1)
         y_preds = y_preds.view(-1)
+        class_probs = y_probs[0].cpu()
+        flexible_scores = class_probs[:, 1] if class_probs.shape[-1] > 1 else class_probs[:, 0]
     else:  # regression
         # logits shape: [B, L, num_outputs] -> squeeze to [B, L] then flatten to [L]
         if logits.dim() == 3 and logits.size(-1) == 1:
             y_preds = logits.squeeze(-1).view(-1)  # [B, L, 1] -> [B, L] -> [L]
         else:
             y_preds = logits.view(-1)  # Fallback: flatten everything
+        class_probs = None
+        flexible_scores = y_preds.detach().cpu()
     
-    return attn_weights, tokens, y_preds
+    return attn_weights, tokens, y_preds, flexible_scores, class_probs
 
 def infer_bilstm_params(checkpoint):
     """Infer hidden_size and num_layers for a BiLSTM model from its checkpoint keys."""
@@ -412,24 +420,10 @@ def main():
     
     model.to(device)
 
-    # checkpoint was already loaded above for param inference
-    # For ESM3, the training checkpoint stores keys as 'embedding_model.esm3.*'
-    # (because ESM3Wrapper wraps the raw model as self.esm3).
-    # We load the full checkpoint with strict=False so that:
-    #   - For frozen runs: backbone weights are the same as pretrained (no-op).
-    #   - For unfrozen runs: fine-tuned backbone weights are correctly restored.
-    # Any key mismatches (e.g., old checkpoints without the wrapper) are silently
-    # ignored and pretrained weights are kept for those parameters.
-    if args.is_esm3:
-        missing, unexpected = model.load_state_dict(checkpoint, strict=False)
-        if unexpected:
-            print(f"[warn] {len(unexpected)} unexpected keys in checkpoint "
-                  f"(first 5: {unexpected[:5]})")
-        if missing:
-            print(f"[info] {len(missing)} keys not in checkpoint "
-                  f"(pretrained weights kept for those).")
-    else:
-        model.load_state_dict(checkpoint)
+    # checkpoint was already loaded above for param inference.
+    # Load strictly so attention extraction cannot silently mix checkpointed
+    # layers with pretrained/randomly initialized weights.
+    model.load_state_dict(checkpoint, strict=True)
     print(f"Loaded checkpoint from {args.checkpoint}")
 
     ss_map = {}
@@ -448,7 +442,7 @@ def main():
             print(f"Warning: length mismatch for {seq_id}, skipping.")
             continue
 
-        attention_weights, tokens, neq_preds = run_fn(model, tokenizer, seq_str, device)
+        attention_weights, tokens, neq_preds, flexible_scores, class_probs = run_fn(model, tokenizer, seq_str, device)
         print(f"{seq_id:15s}  "
               f"seq_len = {len(seq_str):3d}  "
               f"tokens = {len(tokens):3d}  "
@@ -460,8 +454,11 @@ def main():
             "name": seq_id,
             "sequence": seq_str,
             "attention_weights": attn_list,
-            "neq_preds": neq_list
+            "neq_preds": neq_list,
+            "flexible_scores": flexible_scores.numpy().tolist()
         }
+        if class_probs is not None:
+            row_dict["class_probs"] = class_probs.numpy().tolist()
 
         if ss_available and ss_list is not None:
             row_dict["ss_pred"] = ss_list
