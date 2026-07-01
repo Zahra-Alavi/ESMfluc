@@ -39,3 +39,17 @@ scripts/final_pipeline/Attention/regression_bilstm_attn_unfrozen.json
 scripts/final_pipeline/Attention/esm3_attn
 scripts/final_pipeline/Attention/reg_attn 
 scripts/final_pipeline/Attention/esm2_attn_frozen.json
+
+# Generated results and heavy/report artifacts
+results/
+**/results/
+result/
+**/result/
+*.html
+*.htm
+*.pdf
+*.json
+*.pth
+scripts/final_pipeline/test_esm3.log
+scripts/final_pipeline/bip.fasta
+scripts/final_pipeline/1cuo_A.fasta
