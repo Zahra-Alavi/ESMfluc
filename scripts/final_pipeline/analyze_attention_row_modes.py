@@ -24,6 +24,7 @@ import ast
 import itertools
 import json
 import math
+import os
 from pathlib import Path
 
 import numpy as np
@@ -78,6 +79,12 @@ def parse_args():
         type=int,
         default=0,
         help="Random seed for KMeans. Default: 0.",
+    )
+    parser.add_argument(
+        "--kmeans_n_init",
+        type=int,
+        default=None,
+        help="KMeans n_init for low-row mode clustering. Default: ROW_MODE_KMEANS_N_INIT or 20.",
     )
     parser.add_argument(
         "--save_residue_assignments",
@@ -232,7 +239,13 @@ def label_low_modes_by_size(labels):
     return labels
 
 
-def analyze_attention_modes(attn, high_entropy_quantile, min_low_rows, kmeans_seed):
+def resolve_kmeans_n_init(kmeans_n_init=None):
+    if kmeans_n_init is not None:
+        return int(kmeans_n_init)
+    return int(os.environ.get("ROW_MODE_KMEANS_N_INIT", "20"))
+
+
+def analyze_attention_modes(attn, high_entropy_quantile, min_low_rows, kmeans_seed, kmeans_n_init=None):
     n = attn.shape[0]
     ent = row_entropy(attn)
     threshold = float(np.quantile(ent, high_entropy_quantile))
@@ -251,7 +264,7 @@ def analyze_attention_modes(attn, high_entropy_quantile, min_low_rows, kmeans_se
         labels[low_mask] = 1
         return labels, ent, threshold, False, np.nan, np.nan
 
-    km = KMeans(n_clusters=2, random_state=kmeans_seed, n_init=20)
+    km = KMeans(n_clusters=2, random_state=kmeans_seed, n_init=resolve_kmeans_n_init(kmeans_n_init))
     low_cluster = km.fit_predict(low_rows) + 1
 
     labels = np.zeros(n, dtype=int)
@@ -356,6 +369,7 @@ def summarize_one_record(record, run, args, neq_by_name, neq_by_sequence, ss_map
         args.high_entropy_quantile,
         args.min_low_rows,
         args.kmeans_seed,
+        args.kmeans_n_init,
     )
 
     neq_entry = get_neq_entry(record, neq_by_name, neq_by_sequence)
@@ -477,6 +491,7 @@ def summarize_one_record(record, run, args, neq_by_name, neq_by_sequence, ss_map
                 "mode": mode_name(int(labels[i])),
                 "row_entropy": float(ent[i]),
                 "ss": ss[i] if ss is not None else "",
+                "neq": float(neq_entry["neq"][i]) if neq_entry is not None and i < len(neq_entry["neq"]) else np.nan,
                 "flexible": int(flexible[i]) if flexible is not None else np.nan,
             })
 
@@ -679,6 +694,7 @@ def main():
         f"Runs in manifest: {len(manifest)}",
         f"Protein/run attention records analyzed: {len(summary)}",
         f"High-entropy quantile: {args.high_entropy_quantile}",
+        f"KMeans n_init: {resolve_kmeans_n_init(args.kmeans_n_init)}",
         f"Secondary structure maps loaded: {len(ss_map)}",
         f"Neq name maps loaded: {len(neq_by_name)}",
         "",

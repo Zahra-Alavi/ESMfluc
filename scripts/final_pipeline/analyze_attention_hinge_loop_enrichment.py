@@ -33,6 +33,12 @@ def parse_args():
     parser.add_argument("--output_dir", default=None, help="Default: result_root/analysis_hinge_loop_enrichment.")
     parser.add_argument("--pipeline_dir", default=None, help="Directory for resolving manifest paths.")
     parser.add_argument("--conditions", nargs="*", default=None)
+    parser.add_argument(
+        "--row_mode_assignments",
+        default=None,
+        help="Residue assignment CSV from analyze_attention_row_modes.py. "
+             "Default: result_root/analysis_row_modes/row_mode_assignments_by_residue.csv if present.",
+    )
     parser.add_argument("--top_frac", type=float, default=0.10)
     parser.add_argument("--peak_quantile", type=float, default=0.90)
     parser.add_argument("--high_entropy_quantile", type=float, default=0.67)
@@ -275,6 +281,22 @@ def matched_background_for_pwm(selected, modes, q3, rng, n_per_selected):
     return bg
 
 
+def load_assignment_maps(path, conditions=None):
+    path = Path(path)
+    if not path.exists():
+        return {}
+    print(f"[load] row-mode assignments: {path}")
+    cols = ["condition", "seed", "protein", "position_1based", "mode_label"]
+    df = pd.read_csv(path, usecols=lambda c: c in cols)
+    if conditions:
+        df = df[df["condition"].isin(conditions)].copy()
+    maps = {}
+    for key, group in df.groupby(["condition", "seed", "protein"], sort=False):
+        group = group.sort_values("position_1based")
+        maps[(key[0], int(key[1]), key[2])] = group["mode_label"].to_numpy(dtype=int)
+    return maps
+
+
 def try_plot_logo(pwm_df, title, out_path):
     try:
         import matplotlib
@@ -330,6 +352,12 @@ def main():
         manifest = manifest[manifest["condition"].isin(args.conditions)].copy()
     neq_by_name = load_neq_by_name(args.test_csv)
     ss_map = load_q3_q8_map(args.ss_csv)
+    assignment_path = (
+        Path(args.row_mode_assignments).expanduser()
+        if args.row_mode_assignments
+        else result_root / "analysis_row_modes" / "row_mode_assignments_by_residue.csv"
+    )
+    assignment_maps = load_assignment_maps(assignment_path, set(args.conditions or []))
     rng = np.random.default_rng(args.permutation_seed)
 
     observed_rows = []
@@ -360,9 +388,13 @@ def main():
 
             attn = np.asarray(record["attention_weights"], dtype=float)[:n, :n]
             received = attn.sum(axis=0)
-            modes, _, _, _, _, _ = analyze_attention_modes(
-                attn, args.high_entropy_quantile, args.min_low_rows, args.kmeans_seed
-            )
+            cached_modes = assignment_maps.get((run.condition, int(run.seed), protein))
+            if cached_modes is not None and len(cached_modes) >= n:
+                modes = cached_modes[:n]
+            else:
+                modes, _, _, _, _, _ = analyze_attention_modes(
+                    attn, args.high_entropy_quantile, args.min_low_rows, args.kmeans_seed
+                )
             bands, _, _, _ = detect_bands(
                 received,
                 quantile=args.band_quantile,
@@ -487,7 +519,12 @@ def main():
         n_obs = int((~pwm_instances["background"] & ((pwm_instances["condition"] + "__" + pwm_instances["selection"] + "__hinge_like") == key)).sum())
         n_bg = int((pwm_instances["background"] & ((pwm_instances["condition"] + "__" + pwm_instances["selection"] + "__hinge_like") == key)).sum())
         condition, selection_with_suffix = key.split("__", 1)
-        selection = selection_with_suffix.removesuffix("__hinge_like")
+        suffix = "__hinge_like"
+        selection = (
+            selection_with_suffix[:-len(suffix)]
+            if selection_with_suffix.endswith(suffix)
+            else selection_with_suffix
+        )
         written = n_obs >= args.min_instances_for_logo
         pwm_summary_rows.append({
             "condition": condition,

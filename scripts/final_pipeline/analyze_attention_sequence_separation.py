@@ -39,6 +39,12 @@ def parse_args():
     parser.add_argument("--test_csv", default=None, help="Optional CSV with name, sequence, neq.")
     parser.add_argument("--ss_csv", default=None, help="Optional NetSurfP CSV with id and q3 columns.")
     parser.add_argument("--conditions", nargs="*", default=None)
+    parser.add_argument(
+        "--row_mode_assignments",
+        default=None,
+        help="Residue assignment CSV from analyze_attention_row_modes.py. "
+             "Default: result_root/analysis_row_modes/row_mode_assignments_by_residue.csv if present.",
+    )
     parser.add_argument("--top_frac", type=float, default=0.10)
     parser.add_argument("--high_entropy_quantile", type=float, default=0.67)
     parser.add_argument("--min_low_rows", type=int, default=8)
@@ -120,7 +126,7 @@ def separation_matrix(n):
 
 def summarize_weighted_distances(weights, dist):
     weights = np.asarray(weights, dtype=float)
-    dist = np.asarray(dist, dtype=float)
+    dist = np.asarray(dist, dtype=int)
     total = float(np.sum(weights))
     if total <= 0:
         out = {
@@ -134,22 +140,25 @@ def summarize_weighted_distances(weights, dist):
         return out
 
     flat_w = weights.ravel()
-    flat_d = dist.ravel()
-    order = np.argsort(flat_d)
-    cum = np.cumsum(flat_w[order])
-    median = float(flat_d[order][np.searchsorted(cum, total / 2.0)])
+    flat_d = dist.ravel().astype(int, copy=False)
+    max_d = int(np.max(flat_d)) if len(flat_d) else 0
+    mass_by_dist = np.bincount(flat_d, weights=flat_w, minlength=max_d + 1)
+    dist_values = np.arange(len(mass_by_dist), dtype=float)
+    cum = np.cumsum(mass_by_dist)
+    median = float(np.searchsorted(cum, total / 2.0))
+    mean = float(np.sum(mass_by_dist * dist_values) / total)
     out = {
         "attention_mass": total,
-        "mean_abs_separation": float(np.sum(flat_w * flat_d) / total),
+        "mean_abs_separation": mean,
         "median_abs_separation": median,
-        "normalized_mean_separation": float(np.sum(flat_w * flat_d) / total / max(float(np.max(flat_d)), 1.0)),
+        "normalized_mean_separation": mean / max(float(max_d), 1.0),
     }
     for name, low, high in SEPARATION_BINS:
         if high is None:
-            mask = flat_d >= low
+            mass = np.sum(mass_by_dist[low:])
         else:
-            mask = (flat_d >= low) & (flat_d <= high)
-        out[f"mass_{name}"] = float(np.sum(flat_w[mask]) / total)
+            mass = np.sum(mass_by_dist[low:min(high, max_d) + 1]) if low <= max_d else 0.0
+        out[f"mass_{name}"] = float(mass / total)
     return out
 
 
@@ -178,12 +187,14 @@ def build_selected_keys(received, modes, bands, top_frac):
     return selected
 
 
-def summarize_key_set(attn, key_indices):
+def summarize_key_set(attn, key_indices, dist=None):
     key_indices = sorted(set(int(i) for i in key_indices))
     n = attn.shape[0]
     if not key_indices:
         return None
-    dist = separation_matrix(n)[:, key_indices]
+    if dist is None:
+        dist = separation_matrix(n)
+    dist = dist[:, key_indices]
     weights = attn[:, key_indices]
     out = summarize_weighted_distances(weights, dist)
     out["n_keys"] = len(key_indices)
@@ -213,16 +224,45 @@ def matched_keys(key_indices, modes, ss, rng):
     return sampled
 
 
-def summarize_record(record, run, args, ss_map, neq_by_name, rng):
+def load_assignment_maps(path, conditions=None):
+    path = Path(path)
+    if not path.exists():
+        return {}
+    print(f"[load] row-mode assignments: {path}")
+    cols = [
+        "condition", "seed", "protein", "position_1based", "mode_label",
+        "row_entropy", "ss", "flexible",
+    ]
+    df = pd.read_csv(path, usecols=lambda c: c in cols)
+    if conditions:
+        df = df[df["condition"].isin(conditions)].copy()
+    maps = {}
+    for key, group in df.groupby(["condition", "seed", "protein"], sort=False):
+        group = group.sort_values("position_1based")
+        maps[(key[0], int(key[1]), key[2])] = {
+            "modes": group["mode_label"].to_numpy(dtype=int),
+            "entropy": group["row_entropy"].to_numpy(dtype=float),
+            "ss": group["ss"].astype(str).to_numpy(),
+            "flexible": group["flexible"].to_numpy(dtype=float),
+        }
+    return maps
+
+
+def summarize_record(record, run, args, ss_map, neq_by_name, rng, assignment_maps):
     protein = record["name"]
     sequence = record["sequence"]
     n = len(sequence)
     attn = np.asarray(record["attention_weights"], dtype=float)[:n, :n]
     dist = separation_matrix(n)
     received = attn.sum(axis=0)
-    modes, ent, _, _, _, _ = analyze_attention_modes(
-        attn, args.high_entropy_quantile, args.min_low_rows, args.kmeans_seed
-    )
+    cached = assignment_maps.get((run.condition, int(run.seed), protein))
+    if cached is not None and len(cached["modes"]) >= n:
+        modes = cached["modes"][:n]
+        ent = cached["entropy"][:n]
+    else:
+        modes, ent, _, _, _, _ = analyze_attention_modes(
+            attn, args.high_entropy_quantile, args.min_low_rows, args.kmeans_seed
+        )
     bands, _, _, _ = detect_bands(
         received,
         quantile=args.band_quantile,
@@ -230,13 +270,18 @@ def summarize_record(record, run, args, ss_map, neq_by_name, rng):
         min_width=args.min_band_width,
         smooth_window=args.smooth_window,
     )
-    ss = ss_map.get(protein)
+    ss = cached["ss"][:n] if cached is not None and len(cached["ss"]) >= n else ss_map.get(protein)
     if ss is not None:
         ss = np.asarray(ss[:n])
         if len(ss) != n:
             ss = None
     neq_entry = neq_by_name.get(protein)
-    flexible = neq_entry["flexible"][:n] if neq_entry is not None and len(neq_entry["flexible"]) >= n else None
+    flexible = (
+        cached["flexible"][:n]
+        if cached is not None and len(cached["flexible"]) >= n
+        else neq_entry["flexible"][:n] if neq_entry is not None and len(neq_entry["flexible"]) >= n
+        else None
+    )
 
     protein_rows = []
     block_rows = []
@@ -281,7 +326,7 @@ def summarize_record(record, run, args, ss_map, neq_by_name, rng):
 
     selected = build_selected_keys(received, modes, bands, args.top_frac)
     for selection, keys in selected.items():
-        summary = summarize_key_set(attn, keys)
+        summary = summarize_key_set(attn, keys, dist)
         if summary is None:
             continue
         key_list = sorted(keys)
@@ -299,7 +344,7 @@ def summarize_record(record, run, args, ss_map, neq_by_name, rng):
 
         for perm in range(1, args.n_null_per_protein + 1):
             sampled = matched_keys(keys, modes, ss, rng)
-            null_summary = summarize_key_set(attn, sampled)
+            null_summary = summarize_key_set(attn, sampled, dist)
             if null_summary is None:
                 continue
             null_rows.append({
@@ -369,6 +414,12 @@ def main():
         manifest = manifest[manifest["condition"].isin(args.conditions)].copy()
     ss_map = load_ss_map(args.ss_csv)
     neq_by_name = load_neq_by_name(args.test_csv)
+    assignment_path = (
+        Path(args.row_mode_assignments).expanduser()
+        if args.row_mode_assignments
+        else result_root / "analysis_row_modes" / "row_mode_assignments_by_residue.csv"
+    )
+    assignment_maps = load_assignment_maps(assignment_path, set(args.conditions or []))
     rng = np.random.default_rng(args.random_seed)
 
     protein_rows = []
@@ -384,7 +435,9 @@ def main():
         print(f"[load] {run.condition} seed={run.seed}: {attention_path}")
         records = json.loads(attention_path.read_text())
         for record in records:
-            p_rows, b_rows, s_rows, n_rows = summarize_record(record, run, args, ss_map, neq_by_name, rng)
+            p_rows, b_rows, s_rows, n_rows = summarize_record(
+                record, run, args, ss_map, neq_by_name, rng, assignment_maps
+            )
             protein_rows.extend(p_rows)
             block_rows.extend(b_rows)
             selection_rows.extend(s_rows)

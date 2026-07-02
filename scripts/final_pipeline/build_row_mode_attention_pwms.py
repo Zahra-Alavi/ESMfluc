@@ -40,6 +40,12 @@ def parse_args():
     parser.add_argument("--output_dir", default=None, help="Default: result_root/analysis_row_mode_pwms.")
     parser.add_argument("--pipeline_dir", default=None, help="Directory for resolving manifest paths.")
     parser.add_argument("--conditions", nargs="*", default=None, help="Optional condition subset.")
+    parser.add_argument(
+        "--row_mode_assignments",
+        default=None,
+        help="Residue assignment CSV from analyze_attention_row_modes.py. "
+             "Default: result_root/analysis_row_modes/row_mode_assignments_by_residue.csv if present.",
+    )
     parser.add_argument("--motif_len", type=int, default=11, help="Odd motif/PWM window length.")
     parser.add_argument("--kmer_len", type=int, default=5, help="Centered k-mer length.")
     parser.add_argument("--top_frac", type=float, default=0.10)
@@ -161,6 +167,26 @@ def matched_background_indices(selected_indices, ss, rng, n_per_selected):
     return bg
 
 
+def load_assignment_maps(path, conditions=None):
+    path = Path(path)
+    if not path.exists():
+        return {}
+    print(f"[load] row-mode assignments: {path}")
+    cols = ["condition", "seed", "protein", "position_1based", "mode_label", "ss", "neq"]
+    df = pd.read_csv(path, usecols=lambda c: c in cols)
+    if conditions:
+        df = df[df["condition"].isin(conditions)].copy()
+    maps = {}
+    for key, group in df.groupby(["condition", "seed", "protein"], sort=False):
+        group = group.sort_values("position_1based")
+        maps[(key[0], int(key[1]), key[2])] = {
+            "modes": group["mode_label"].to_numpy(dtype=int),
+            "ss": group["ss"].astype(str).to_numpy(),
+            "neq": group["neq"].to_numpy(dtype=float),
+        }
+    return maps
+
+
 def pwm_to_df(obs_pwm, bg_pwm):
     rows = []
     obs_total = obs_pwm.sum(axis=1, keepdims=True)
@@ -223,6 +249,12 @@ def main():
         manifest = manifest[manifest["condition"].isin(args.conditions)].copy()
     neq_by_name = load_neq_by_name(args.test_csv)
     ss_map = load_ss_map(args.ss_csv)
+    assignment_path = (
+        Path(args.row_mode_assignments).expanduser()
+        if args.row_mode_assignments
+        else result_root / "analysis_row_modes" / "row_mode_assignments_by_residue.csv"
+    )
+    assignment_maps = load_assignment_maps(assignment_path, set(args.conditions or []))
     rng = np.random.default_rng(args.random_seed)
 
     obs_pwms = defaultdict(lambda: np.zeros((args.motif_len, len(AA20))))
@@ -241,19 +273,26 @@ def main():
         records = json.loads(attention_path.read_text())
         for record in records:
             protein = record["name"]
-            if protein not in neq_by_name or protein not in ss_map:
+            cached = assignment_maps.get((run.condition, int(run.seed), protein))
+            if protein not in neq_by_name or (protein not in ss_map and cached is None):
                 continue
             seq = record["sequence"]
             n = len(seq)
-            neq = neq_by_name[protein]["neq"][:n]
-            ss = np.asarray(ss_map[protein][:n])
+            if cached is not None and len(cached["modes"]) >= n:
+                modes = cached["modes"][:n]
+                neq = cached["neq"][:n]
+                ss = cached["ss"][:n]
+            else:
+                neq = neq_by_name[protein]["neq"][:n]
+                ss = np.asarray(ss_map[protein][:n])
+                attn = np.asarray(record["attention_weights"], dtype=float)[:n, :n]
+                modes, _, _, _, _, _ = analyze_attention_modes(
+                    attn, args.high_entropy_quantile, args.min_low_rows, args.kmeans_seed
+                )
             if len(neq) != n or len(ss) != n:
                 continue
             attn = np.asarray(record["attention_weights"], dtype=float)[:n, :n]
             received = attn.sum(axis=0)
-            modes, _, _, _, _, _ = analyze_attention_modes(
-                attn, args.high_entropy_quantile, args.min_low_rows, args.kmeans_seed
-            )
             bands, _, _, _ = detect_bands(
                 received,
                 quantile=args.band_quantile,

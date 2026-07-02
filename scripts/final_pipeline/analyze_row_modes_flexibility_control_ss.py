@@ -49,6 +49,12 @@ def parse_args():
     parser.add_argument("--output_dir", default=None, help="Default: result_root/analysis_row_modes_controlled_ss.")
     parser.add_argument("--pipeline_dir", default=None, help="Directory for resolving manifest paths.")
     parser.add_argument("--conditions", nargs="*", default=None, help="Optional subset of conditions.")
+    parser.add_argument(
+        "--row_mode_assignments",
+        default=None,
+        help="Optional residue assignment CSV from analyze_attention_row_modes.py. "
+             "Default: result_root/analysis_row_modes/row_mode_assignments_by_residue.csv if present.",
+    )
     parser.add_argument("--high_entropy_quantile", type=float, default=0.67)
     parser.add_argument("--min_low_rows", type=int, default=8)
     parser.add_argument("--kmeans_seed", type=int, default=0)
@@ -99,6 +105,32 @@ def mode_name(label):
 
 
 def build_residue_table(args, result_root, pipeline_dir):
+    assignment_path = (
+        Path(args.row_mode_assignments)
+        if args.row_mode_assignments
+        else result_root / "analysis_row_modes" / "row_mode_assignments_by_residue.csv"
+    )
+    if assignment_path.exists():
+        print(f"[load] row-mode assignments: {assignment_path}")
+        df = pd.read_csv(assignment_path)
+        required = {
+            "condition", "seed", "protein", "position_1based", "aa",
+            "ss", "mode_label", "mode", "row_entropy", "neq", "flexible",
+        }
+        missing_cols = required - set(df.columns)
+        if missing_cols:
+            raise ValueError(
+                f"{assignment_path} is missing required columns: {sorted(missing_cols)}"
+            )
+        if args.conditions:
+            df = df[df["condition"].isin(args.conditions)].copy()
+        df = df[df["ss"].isin(["C", "H", "E"])].copy()
+        df["seed"] = df["seed"].astype(int)
+        df["mode_label"] = df["mode_label"].astype(int)
+        df["neq"] = df["neq"].astype(float)
+        df["flexible"] = df["flexible"].astype(int)
+        return df
+
     manifest = pd.read_csv(result_root / "manifest.tsv", sep="\t")
     if args.conditions:
         manifest = manifest[manifest["condition"].isin(args.conditions)].copy()
