@@ -61,13 +61,16 @@ def parse_args() -> argparse.Namespace:
 
 def make_session() -> requests.Session:
     s = requests.Session()
-    retry = Retry(
-        total=4,
-        backoff_factor=0.6,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["GET"],
-        raise_on_status=False,
-    )
+    retry_kwargs = {
+        "total": 4,
+        "backoff_factor": 0.6,
+        "status_forcelist": [429, 500, 502, 503, 504],
+        "raise_on_status": False,
+    }
+    try:
+        retry = Retry(allowed_methods=["GET"], **retry_kwargs)
+    except TypeError:
+        retry = Retry(method_whitelist=["GET"], **retry_kwargs)
     adapter = HTTPAdapter(max_retries=retry)
     s.mount("http://", adapter)
     s.mount("https://", adapter)
@@ -76,10 +79,17 @@ def make_session() -> requests.Session:
 
 
 def parse_seq_id(seq_id: str) -> Tuple[str, str]:
-    if "_" not in seq_id:
-        raise ValueError(f"Invalid seq id '{seq_id}' (expected PDBID_CHAIN)")
-    pdb_id, chain = seq_id.split("_", 1)
-    return pdb_id.lower(), chain
+    if "_" in seq_id:
+        pdb_id, chain = seq_id.split("_", 1)
+        return pdb_id.lower(), chain
+
+    # CATH domain IDs commonly look like 1a39A00: PDB ID 1a39,
+    # chain A, domain 00. Without domain residue ranges we still extract the
+    # chain and rely on sequence_check downstream to reject mismatched lengths.
+    if len(seq_id) >= 5 and seq_id[:4].isalnum() and seq_id[4].isalnum():
+        return seq_id[:4].lower(), seq_id[4]
+
+    raise ValueError(f"Invalid seq id '{seq_id}' (expected PDBID_CHAIN or CATH-style PDBIDCHAIN...)")
 
 
 def download_pdb(session: requests.Session, pdb_id: str, out_dir: str, overwrite: bool = False) -> str:
