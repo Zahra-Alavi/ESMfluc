@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the full comparable publication batch:
-#   1. train/extract attention for 5 conditions x 3 seeds
+#   1. train/extract attention for publication conditions x seeds
 #   2. analyze seed variance and cross-condition agreement
 
 set -euo pipefail

@@ -5,9 +5,11 @@
 # Conditions, each across 3 seeds by default:
 #   1. ESM2 frozen BiLSTM-attention
 #   2. ESM2 top-4-layer finetuned BiLSTM-attention
-#   3. ESM3 frozen BiLSTM-attention
-#   4. ESM3 top-4-layer finetuned BiLSTM-attention
-#   5. ESM2 frozen linear classifier baseline
+#   3. ESM2 top-28-layer finetuned BiLSTM-attention
+#   4. ESM3 frozen BiLSTM-attention
+#   5. ESM3 top-4-layer finetuned BiLSTM-attention
+#   6. ESM3 top-28-layer finetuned BiLSTM-attention
+#   7. ESM2 frozen linear classifier baseline
 #
 # Outputs are kept under one distinct result set:
 #   results/<RESULT_SET>/runs/<condition>/seed_<seed>/
@@ -23,6 +25,7 @@
 #   GPU_ESM2=0
 #   GPU_ESM3=1
 #   MIXED_PRECISION=1
+#   EXTRACT_ESM2_BACKBONE_ATTN=1
 # =============================================================================
 
 set -euo pipefail
@@ -55,11 +58,15 @@ GPU_ESM3="${GPU_ESM3:-1}"
 MIXED_PRECISION="${MIXED_PRECISION:-1}"
 AMP_DTYPE="${AMP_DTYPE:-fp16}"
 SKIP_EXISTING="${SKIP_EXISTING:-1}"
+EXTRACT_ESM2_BACKBONE_ATTN="${EXTRACT_ESM2_BACKBONE_ATTN:-1}"
+BACKBONE_OUTPUT_NAME="${BACKBONE_OUTPUT_NAME:-backbone_attention.json}"
 
 ESM2_MODEL="${ESM2_MODEL:-esm2_t33_650M_UR50D}"
 ESM3_MODEL="${ESM3_MODEL:-esm3_sm_open_v1}"
 ESM2_TOP4_FREEZE="${ESM2_TOP4_FREEZE:-0-28}"
 ESM3_TOP4_FREEZE="${ESM3_TOP4_FREEZE:-0-43}"
+ESM2_TOP28_FREEZE="${ESM2_TOP28_FREEZE:-0-4}"
+ESM3_TOP28_FREEZE="${ESM3_TOP28_FREEZE:-0-19}"
 
 enabled() {
     case "$1" in
@@ -74,9 +81,12 @@ echo "Seeds: ${SEEDS}"
 echo "Batch size used for every run: ${BATCH}"
 echo "ESM2 top-4 freeze range: ${ESM2_TOP4_FREEZE}"
 echo "ESM3 top-4 freeze range: ${ESM3_TOP4_FREEZE}"
+echo "ESM2 top-28 freeze range: ${ESM2_TOP28_FREEZE}"
+echo "ESM3 top-28 freeze range: ${ESM3_TOP28_FREEZE}"
+echo "Extract ESM2 backbone attention: ${EXTRACT_ESM2_BACKBONE_ATTN}"
 echo ""
 
-echo "condition	seed	architecture	esm_model	is_esm3	freeze_mode	freeze_layers	run_dir	attention_json	checkpoint" > "$MANIFEST"
+echo "condition	seed	architecture	esm_model	is_esm3	freeze_mode	freeze_layers	run_dir	attention_json	backbone_attention_json	checkpoint" > "$MANIFEST"
 
 python - <<'PY'
 import torch
@@ -133,6 +143,8 @@ run_one() {
     local run_dir="${RESULT_ROOT}/runs/${condition}/seed_${seed}"
     local checkpoint="${run_dir}/best_model.pth"
     local attention_json="${run_dir}/attention.json"
+    local backbone_attention_json="${run_dir}/${BACKBONE_OUTPUT_NAME}"
+    local manifest_backbone_attention_json=""
 
     mkdir -p "$run_dir"
 
@@ -160,7 +172,7 @@ run_one() {
             frozen)
                 train_args+=(--freeze_all_backbone)
                 ;;
-            top4)
+            top4|top28)
                 train_args+=(--freeze_layers "$freeze_layers")
                 ;;
             none)
@@ -208,17 +220,56 @@ run_one() {
         echo "Attention JSON exists and SKIP_EXISTING=${SKIP_EXISTING}; skipping extraction."
     fi
 
-    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+    if enabled "$EXTRACT_ESM2_BACKBONE_ATTN" \
+        && [[ "$architecture" == "bilstm_attention" ]] \
+        && [[ "$is_esm3" == "false" ]]; then
+        if [[ ! -f "$backbone_attention_json" || "$SKIP_EXISTING" == "0" ]]; then
+            CUDA_VISIBLE_DEVICES="$gpu_id" python Attention/extract_backbone_attn.py \
+                --checkpoint "$checkpoint" \
+                --fasta_file "$FASTA" \
+                --esm_model "$esm_model" \
+                --output "$backbone_attention_json" \
+                2>&1 | tee "${run_dir}/backbone_attention.log"
+        else
+            echo "Backbone attention JSON exists and SKIP_EXISTING=${SKIP_EXISTING}; skipping extraction."
+        fi
+
+        if [[ -f "$backbone_attention_json" && -f "$attention_json" ]]; then
+            python - "$backbone_attention_json" "$attention_json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+backbone_path = Path(sys.argv[1])
+attention_path = Path(sys.argv[2])
+backbone = json.loads(backbone_path.read_text())
+attention = json.loads(attention_path.read_text())
+by_name = {record["name"]: record for record in attention}
+for record in backbone:
+    src = by_name.get(record["name"], {})
+    for key in ("neq_preds", "flexible_scores", "ss_pred"):
+        if key in src:
+            record[key] = src[key]
+backbone_path.write_text(json.dumps(backbone, indent=2) + "\n")
+PY
+            manifest_backbone_attention_json="$backbone_attention_json"
+        fi
+    fi
+
+    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
         "$condition" "$seed" "$architecture" "$esm_model" "$is_esm3" \
-        "$freeze_mode" "$freeze_layers" "$run_dir" "$attention_json" "$checkpoint" \
+        "$freeze_mode" "$freeze_layers" "$run_dir" "$attention_json" \
+        "$manifest_backbone_attention_json" "$checkpoint" \
         >> "$MANIFEST"
 }
 
 for seed in $SEEDS; do
     run_one "esm2_frozen_bilstm_attn" "$seed" "bilstm_attention" "$ESM2_MODEL" "false" "frozen" "" "$GPU_ESM2"
     run_one "esm2_top4_bilstm_attn" "$seed" "bilstm_attention" "$ESM2_MODEL" "false" "top4" "$ESM2_TOP4_FREEZE" "$GPU_ESM2"
+    run_one "esm2_top28_bilstm_attn" "$seed" "bilstm_attention" "$ESM2_MODEL" "false" "top28" "$ESM2_TOP28_FREEZE" "$GPU_ESM2"
     run_one "esm3_frozen_bilstm_attn" "$seed" "bilstm_attention" "$ESM3_MODEL" "true" "frozen" "" "$GPU_ESM3"
     run_one "esm3_top4_bilstm_attn" "$seed" "bilstm_attention" "$ESM3_MODEL" "true" "top4" "$ESM3_TOP4_FREEZE" "$GPU_ESM3"
+    run_one "esm3_top28_bilstm_attn" "$seed" "bilstm_attention" "$ESM3_MODEL" "true" "top28" "$ESM3_TOP28_FREEZE" "$GPU_ESM3"
     run_one "esm2_frozen_linear" "$seed" "esm_linear" "$ESM2_MODEL" "false" "frozen" "" "$GPU_ESM2"
 done
 
