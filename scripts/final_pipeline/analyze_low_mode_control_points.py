@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-Test whether low_mode_1 attention hubs are conformational control points.
+Test whether low-mode attention hubs are conformational control points.
 
 The analysis has two parts:
-  1. Within low_mode_1, rank key residues by received attention and compare
+  1. Within low attention modes, rank key residues by received attention and compare
      top/bottom quantiles against same-protein, same-SS matched backgrounds.
   2. Extract mode-specific bright attention blobs and motif windows around
-     key residues, then summarize exact k-mers, reduced-alphabet patterns,
-     and AA/class PWM enrichments.
+     peak key residues and all bright key columns, then summarize exact k-mers,
+     reduced-alphabet patterns, and AA/class PWM enrichments.
 """
 
 import argparse
 import ast
 import json
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -48,6 +49,7 @@ REDUCED_CLASS_LABELS = {
     "x": "cysteine_other",
     "-": "padding",
 }
+TAG_LIKE_RE = re.compile(r"H{4,}|G{5,}|S{5,}|K{5,}|E{5,}", re.IGNORECASE)
 
 
 def parse_args():
@@ -90,7 +92,19 @@ def parse_args():
     p.add_argument("--site_position_base", type=int, choices=[0, 1], default=1)
     p.add_argument("--top_fracs", nargs="+", type=float, default=[0.05, 0.10, 0.20])
     p.add_argument("--bottom_frac", type=float, default=0.50)
-    p.add_argument("--mode_label", type=int, default=1, help="Mode label to rank for quantile enrichment. Default: 1.")
+    p.add_argument(
+        "--mode_label",
+        type=int,
+        default=None,
+        help="Deprecated single mode label for quantile enrichment. Use --mode_labels instead.",
+    )
+    p.add_argument(
+        "--mode_labels",
+        nargs="+",
+        type=int,
+        default=[1, 2],
+        help="Mode labels to rank for quantile enrichment. Default: 1 2.",
+    )
     p.add_argument("--blob_mode_labels", nargs="+", type=int, default=[1, 2])
     p.add_argument("--high_neq_quantile", type=float, default=0.90)
     p.add_argument("--high_q8_entropy_quantile", type=float, default=0.90)
@@ -102,6 +116,17 @@ def parse_args():
     p.add_argument("--background_per_selected", type=int, default=5)
     p.add_argument("--motif_len", type=int, default=11)
     p.add_argument("--kmer_len", type=int, default=5)
+    p.add_argument(
+        "--terminal_exclusion",
+        type=int,
+        default=10,
+        help="Exclude motif/k-mer rows centered within this many residues of either terminus from k-mer reports.",
+    )
+    p.add_argument(
+        "--tag_like_regex",
+        default=TAG_LIKE_RE.pattern,
+        help="Regex used to exclude tag/polymer-like motif/k-mer rows from k-mer reports.",
+    )
     p.add_argument("--blob_top_frac", type=float, default=0.10)
     p.add_argument("--blob_min_component_size", type=int, default=4)
     p.add_argument("--exclude_diagonal_window", type=int, default=0)
@@ -470,6 +495,7 @@ def residue_rows(indices, run, protein, selection, background, seq, features, re
 
 def motif_rows(indices, run, protein, source, mode_label, background, seq, features, received, motif_len, kmer_len, weight_values=None):
     rows = []
+    n = len(seq)
     for idx in sorted(set(int(i) for i in indices)):
         motif = extract_window(seq, idx, motif_len)
         kmer = extract_window(seq, idx, kmer_len)
@@ -482,6 +508,7 @@ def motif_rows(indices, run, protein, source, mode_label, background, seq, featu
             "mode_label": int(mode_label),
             "background": bool(background),
             "position_1based": idx + 1,
+            "n_residues": n,
             "aa": seq[idx],
             "q3": features["q3"][idx],
             "q8": features["q8"][idx],
@@ -552,10 +579,10 @@ def detect_mode_blobs(attn, modes, mode_label, top_frac, min_component_size, exc
     for cid, comp in enumerate(comps, start=1):
         rr = np.asarray([p[0] for p in comp], dtype=int)
         cc = np.asarray([p[1] for p in comp], dtype=int)
-        cols = sorted(set(int(c) for c in cc))
-        peak_col = int(max(cols, key=lambda c: col_max[c] if np.isfinite(col_max[c]) else -np.inf))
-        if modes[peak_col] != mode_label:
+        cols = sorted(set(int(c) for c in cc if modes[int(c)] == mode_label))
+        if not cols:
             continue
+        peak_col = int(max(cols, key=lambda c: col_max[c] if np.isfinite(col_max[c]) else -np.inf))
         vals = attn[rr, cc]
         rows.append({
             "component_id": cid,
@@ -567,6 +594,8 @@ def detect_mode_blobs(attn, modes, mode_label, top_frac, min_component_size, exc
             "row_center_idx": int(np.round(rr.mean())),
             "col_center_idx": int(np.round(cc.mean())),
             "peak_key_idx": peak_col,
+            "all_key_indices": ";".join(str(c) for c in cols),
+            "n_key_columns": int(len(cols)),
             "threshold": threshold,
             "component_mean_value": float(np.mean(vals)),
             "component_max_value": float(np.max(vals)),
@@ -580,8 +609,16 @@ def aggregate_quantile_summaries(summary_df):
         return pd.DataFrame()
     metric_cols = [c for c in summary_df.columns if c.startswith("obs_")]
     rows = []
-    for key, group in summary_df.groupby(["condition", "selection"], sort=False):
-        row = {"condition": key[0], "selection": key[1], "n_units": len(group)}
+    group_cols = ["condition", "selection"]
+    if "mode" in summary_df.columns:
+        group_cols.insert(1, "mode")
+    if "mode_label" in summary_df.columns:
+        group_cols.insert(2, "mode_label")
+    for key, group in summary_df.groupby(group_cols, sort=False):
+        if not isinstance(key, tuple):
+            key = (key,)
+        row = {col: value for col, value in zip(group_cols, key)}
+        row["n_units"] = len(group)
         for obs_col in metric_cols:
             metric = obs_col[len("obs_"):]
             bg_col = f"bg_{metric}"
@@ -605,8 +642,39 @@ def aggregate_quantile_summaries(summary_df):
     return pd.DataFrame(rows)
 
 
-def motif_count_enrichment(rows, value_col, output_col):
+def is_terminal_center(position_1based, n_residues, terminal_exclusion):
+    if terminal_exclusion <= 0:
+        return False
+    try:
+        pos = int(position_1based)
+        n = int(n_residues)
+    except (TypeError, ValueError):
+        return True
+    return pos <= terminal_exclusion or pos > n - terminal_exclusion
+
+
+def filter_motif_rows_for_kmer_reports(rows, terminal_exclusion, tag_like_regex):
     df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    mask = pd.Series(True, index=df.index)
+    for col in ["motif", "kmer"]:
+        if col in df.columns:
+            text = df[col].fillna("").astype(str)
+            mask &= ~text.str.contains("-", regex=False)
+            if tag_like_regex:
+                mask &= ~text.str.contains(tag_like_regex, regex=True, case=False)
+    if "position_1based" in df.columns and "n_residues" in df.columns:
+        terminal = df.apply(
+            lambda row: is_terminal_center(row["position_1based"], row["n_residues"], terminal_exclusion),
+            axis=1,
+        )
+        mask &= ~terminal
+    return df[mask].copy()
+
+
+def motif_count_enrichment(rows, value_col, output_col):
+    df = rows if isinstance(rows, pd.DataFrame) else pd.DataFrame(rows)
     if df.empty:
         return pd.DataFrame()
     group_cols = ["condition", "mode", "source", value_col]
@@ -689,6 +757,8 @@ def main():
     args = parse_args()
     if args.motif_len % 2 != 1 or args.kmer_len % 2 != 1:
         raise ValueError("--motif_len and --kmer_len must be odd.")
+    quantile_mode_labels = [args.mode_label] if args.mode_label is not None else args.mode_labels
+    tag_like_regex = args.tag_like_regex or ""
 
     result_root = Path(args.result_root).expanduser().resolve()
     pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
@@ -770,56 +840,64 @@ def main():
 
             features = feature_arrays(q3, q8, neq, q8_entropy, pb_entropy, args)
             features.update(site_feature_arrays(site_map, protein, n))
-            low_idx = np.where(modes == args.mode_label)[0]
-            if len(low_idx) == 0:
-                processed_records += 1
-                continue
-
-            eligible_bg = low_idx if args.background_scope == "same_mode" else np.arange(n)
-            selection_sets = {}
-            for frac in args.top_fracs:
-                local = top_indices(received[low_idx], frac, largest=True)
-                selection_sets[f"top_{int(round(frac * 100))}pct"] = low_idx[local]
-            local = top_indices(received[low_idx], args.bottom_frac, largest=False)
-            selection_sets[f"bottom_{int(round(args.bottom_frac * 100))}pct"] = low_idx[local]
-
-            for selection, selected in selection_sets.items():
-                selected = sorted(set(int(i) for i in selected))
-                if not selected:
+            for quantile_mode in quantile_mode_labels:
+                low_idx = np.where(modes == quantile_mode)[0]
+                if len(low_idx) == 0:
                     continue
-                bg = matched_background(selected, eligible_bg, q3, rng, args.background_per_selected)
-                obs_summary = summarize_indices(selected, features, received)
-                bg_summary = summarize_indices(bg, features, received)
-                if obs_summary and bg_summary:
-                    row = {
-                        "condition": run.condition,
-                        "seed": int(run.seed),
-                        "protein": protein,
-                        "selection": selection,
-                    }
-                    row.update({f"obs_{k}": v for k, v in obs_summary.items()})
-                    row.update({f"bg_{k}": v for k, v in bg_summary.items()})
-                    summary_rows.append(row)
-                residue_out.extend(residue_rows(selected, run, protein, selection, False, seq, features, received, modes, row_entropy))
-                bg_residue_out.extend(residue_rows(bg, run, protein, selection, True, seq, features, received, modes, row_entropy))
-                motif_out.extend(motif_rows(
-                    selected, run, protein, f"quantile_{selection}", args.mode_label,
-                    False, seq, features, received, args.motif_len, args.kmer_len
-                ))
-                motif_out.extend(motif_rows(
-                    bg, run, protein, f"quantile_{selection}", args.mode_label,
-                    True, seq, features, received, args.motif_len, args.kmer_len
-                ))
+
+                eligible_bg = low_idx if args.background_scope == "same_mode" else np.arange(n)
+                selection_sets = {}
+                for frac in args.top_fracs:
+                    local = top_indices(received[low_idx], frac, largest=True)
+                    selection_sets[f"top_{int(round(frac * 100))}pct"] = low_idx[local]
+                local = top_indices(received[low_idx], args.bottom_frac, largest=False)
+                selection_sets[f"bottom_{int(round(args.bottom_frac * 100))}pct"] = low_idx[local]
+
+                for selection, selected in selection_sets.items():
+                    selected = sorted(set(int(i) for i in selected))
+                    if not selected:
+                        continue
+                    bg = matched_background(selected, eligible_bg, q3, rng, args.background_per_selected)
+                    obs_summary = summarize_indices(selected, features, received)
+                    bg_summary = summarize_indices(bg, features, received)
+                    if obs_summary and bg_summary:
+                        row = {
+                            "condition": run.condition,
+                            "mode": mode_name(int(quantile_mode)),
+                            "mode_label": int(quantile_mode),
+                            "seed": int(run.seed),
+                            "protein": protein,
+                            "selection": selection,
+                        }
+                        row.update({f"obs_{k}": v for k, v in obs_summary.items()})
+                        row.update({f"bg_{k}": v for k, v in bg_summary.items()})
+                        summary_rows.append(row)
+                    residue_out.extend(residue_rows(selected, run, protein, selection, False, seq, features, received, modes, row_entropy))
+                    bg_residue_out.extend(residue_rows(bg, run, protein, selection, True, seq, features, received, modes, row_entropy))
+                    motif_out.extend(motif_rows(
+                        selected, run, protein, f"quantile_{selection}", quantile_mode,
+                        False, seq, features, received, args.motif_len, args.kmer_len
+                    ))
+                    motif_out.extend(motif_rows(
+                        bg, run, protein, f"quantile_{selection}", quantile_mode,
+                        True, seq, features, received, args.motif_len, args.kmer_len
+                    ))
 
             for blob_mode in args.blob_mode_labels:
                 blobs, col_max = detect_mode_blobs(
                     attn, modes, blob_mode, args.blob_top_frac,
                     args.blob_min_component_size, args.exclude_diagonal_window
                 )
-                key_positions = []
+                peak_key_positions = []
+                all_key_positions = []
                 for blob in blobs:
                     idx = int(blob["peak_key_idx"])
-                    key_positions.append(idx)
+                    peak_key_positions.append(idx)
+                    blob_key_positions = [
+                        int(x) for x in str(blob.get("all_key_indices", "")).split(";")
+                        if str(x).strip() != ""
+                    ]
+                    all_key_positions.extend(blob_key_positions)
                     blob_rows.append({
                         "condition": run.condition,
                         "seed": int(run.seed),
@@ -832,18 +910,37 @@ def main():
                         "col_max": float(col_max[idx]) if np.isfinite(col_max[idx]) else np.nan,
                         **blob,
                     })
-                key_positions = sorted(set(key_positions))
-                if key_positions:
+                peak_key_positions = sorted(set(peak_key_positions))
+                all_key_positions = sorted(set(all_key_positions))
+                eligible_blob_bg = np.where(modes == blob_mode)[0] if args.background_scope == "same_mode" else np.arange(n)
+                if peak_key_positions:
                     blob_bg = matched_background(
-                        key_positions,
-                        np.where(modes == blob_mode)[0] if args.background_scope == "same_mode" else np.arange(n),
+                        peak_key_positions,
+                        eligible_blob_bg,
                         q3,
                         rng,
                         args.background_per_selected,
                     )
-                    source = f"blob_colmax_top_{int(round(args.blob_top_frac * 100))}pct"
+                    source = f"blob_peak_key_colmax_top_{int(round(args.blob_top_frac * 100))}pct"
                     motif_out.extend(motif_rows(
-                        key_positions, run, protein, source, blob_mode, False,
+                        peak_key_positions, run, protein, source, blob_mode, False,
+                        seq, features, received, args.motif_len, args.kmer_len, weight_values=col_max
+                    ))
+                    motif_out.extend(motif_rows(
+                        blob_bg, run, protein, source, blob_mode, True,
+                        seq, features, received, args.motif_len, args.kmer_len
+                    ))
+                if all_key_positions:
+                    blob_bg = matched_background(
+                        all_key_positions,
+                        eligible_blob_bg,
+                        q3,
+                        rng,
+                        args.background_per_selected,
+                    )
+                    source = f"blob_all_key_columns_colmax_top_{int(round(args.blob_top_frac * 100))}pct"
+                    motif_out.extend(motif_rows(
+                        all_key_positions, run, protein, source, blob_mode, False,
                         seq, features, received, args.motif_len, args.kmer_len, weight_values=col_max
                     ))
                     motif_out.extend(motif_rows(
@@ -860,16 +957,18 @@ def main():
     summary_df = pd.DataFrame(summary_rows)
     motif_df = pd.DataFrame(motif_out)
     blob_df = pd.DataFrame(blob_rows)
+    kmer_motif_df = filter_motif_rows_for_kmer_reports(motif_df, args.terminal_exclusion, tag_like_regex)
 
-    residue_df.to_csv(output_dir / "low_mode1_quantile_residues.csv", index=False)
-    bg_residue_df.to_csv(output_dir / "low_mode1_quantile_matched_background_residues.csv", index=False)
-    summary_df.to_csv(output_dir / "low_mode1_quantile_enrichment_by_run.csv", index=False)
-    aggregate_quantile_summaries(summary_df).to_csv(output_dir / "low_mode1_quantile_enrichment_by_condition.csv", index=False)
+    residue_df.to_csv(output_dir / "low_mode_quantile_residues.csv", index=False)
+    bg_residue_df.to_csv(output_dir / "low_mode_quantile_matched_background_residues.csv", index=False)
+    summary_df.to_csv(output_dir / "low_mode_quantile_enrichment_by_run.csv", index=False)
+    aggregate_quantile_summaries(summary_df).to_csv(output_dir / "low_mode_quantile_enrichment_by_condition.csv", index=False)
     blob_df.to_csv(output_dir / "mode_attention_blobs.csv", index=False)
     motif_df.to_csv(output_dir / "mode_attention_motif_instances.csv", index=False)
+    kmer_motif_df.to_csv(output_dir / "mode_attention_motif_instances_kmer_filtered.csv", index=False)
 
-    motif_count_enrichment(motif_out, "kmer", "kmer").to_csv(output_dir / "exact_kmer_recurrence_enrichment.csv", index=False)
-    motif_count_enrichment(motif_out, "reduced_kmer", "reduced_kmer").to_csv(
+    motif_count_enrichment(kmer_motif_df, "kmer", "kmer").to_csv(output_dir / "exact_kmer_recurrence_enrichment.csv", index=False)
+    motif_count_enrichment(kmer_motif_df, "reduced_kmer", "reduced_kmer").to_csv(
         output_dir / "reduced_alphabet_kmer_recurrence_enrichment.csv", index=False
     )
     pwm_enrichment(motif_out, "motif", AA20 + ["-"], "AA").to_csv(output_dir / "aa_pwm_enrichment.csv", index=False)
@@ -889,15 +988,19 @@ def main():
         f"Matched background residue rows: {len(bg_residue_df)}",
         f"Blob rows: {len(blob_df)}",
         f"Motif rows: {len(motif_df)}",
+        f"Motif rows used for k-mer reports after filtering: {len(kmer_motif_df)}",
+        f"K-mer terminal exclusion: {args.terminal_exclusion}",
+        f"K-mer tag-like regex: {tag_like_regex}",
         f"PB entropy available: {bool(pb_map)}",
         f"Site annotations available: {bool(site_map)}",
         f"Reduced alphabet: {json.dumps(REDUCED_CLASS_LABELS, sort_keys=True)}",
         "",
         "Key outputs:",
-        "  low_mode1_quantile_enrichment_by_condition.csv",
-        "  low_mode1_quantile_residues.csv",
+        "  low_mode_quantile_enrichment_by_condition.csv",
+        "  low_mode_quantile_residues.csv",
         "  mode_attention_blobs.csv",
         "  mode_attention_motif_instances.csv",
+        "  mode_attention_motif_instances_kmer_filtered.csv",
         "  exact_kmer_recurrence_enrichment.csv",
         "  reduced_alphabet_kmer_recurrence_enrichment.csv",
         "  aa_pwm_enrichment.csv",
