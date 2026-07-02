@@ -39,7 +39,18 @@ ESM2_BACKBONE_CONDITIONS = {
 def parse_args():
     p = argparse.ArgumentParser(description="Build 10-condition attention-source manifest.")
     p.add_argument("--source_result_root", required=True)
-    p.add_argument("--output_result_root", required=True)
+    p.add_argument(
+        "--output_result_root",
+        default=None,
+        help="Optional result root to receive manifest.tsv and copied inputs. "
+             "If omitted, writes source_result_root/manifest_attention_sources.tsv only.",
+    )
+    p.add_argument(
+        "--output_manifest",
+        default=None,
+        help="Optional output manifest path. Default: source_result_root/manifest_attention_sources.tsv "
+             "when --output_result_root is omitted, otherwise output_result_root/manifest.tsv.",
+    )
     p.add_argument("--backbone_filename", default="backbone_attention.json")
     p.add_argument(
         "--write_source_copy",
@@ -89,7 +100,7 @@ def backbone_attention_path(source_row: pd.Series, filename: str) -> Path:
 def main() -> None:
     args = parse_args()
     source_root = Path(args.source_result_root).expanduser().resolve()
-    output_root = Path(args.output_result_root).expanduser().resolve()
+    output_root = Path(args.output_result_root).expanduser().resolve() if args.output_result_root else None
     manifest_path = source_root / "manifest.tsv"
     if not manifest_path.exists():
         raise FileNotFoundError(f"Missing source manifest: {manifest_path}")
@@ -127,14 +138,28 @@ def main() -> None:
     expanded = pd.DataFrame(rows)
     expanded = expanded.sort_values(["condition", "seed"]).reset_index(drop=True)
 
-    copy_reference_inputs(source_root, output_root)
-    expanded.to_csv(output_root / "manifest.tsv", sep="\t", index=False)
-    if args.write_source_copy:
+    if args.output_manifest:
+        output_manifest = Path(args.output_manifest).expanduser()
+        if not output_manifest.is_absolute():
+            output_manifest = source_root / output_manifest
+        output_manifest = output_manifest.resolve()
+    elif output_root:
+        output_manifest = output_root / "manifest.tsv"
+    else:
+        output_manifest = source_root / "manifest_attention_sources.tsv"
+
+    output_manifest.parent.mkdir(parents=True, exist_ok=True)
+    if output_root:
+        copy_reference_inputs(source_root, output_root)
+    expanded.to_csv(output_manifest, sep="\t", index=False)
+    if args.write_source_copy and output_manifest != source_root / "manifest_attention_sources.tsv":
         expanded.to_csv(source_root / "manifest_attention_sources.tsv", sep="\t", index=False)
 
     missing = [p for p in expanded["attention_json"].map(Path) if not p.exists()]
     print(f"Source root: {source_root}")
-    print(f"Output root: {output_root}")
+    print(f"Output manifest: {output_manifest}")
+    if output_root:
+        print(f"Output root: {output_root}")
     print(f"Rows: {len(expanded)}")
     print(f"Conditions: {expanded['condition'].nunique()}")
     print(f"Seeds: {', '.join(map(str, seeds))}")

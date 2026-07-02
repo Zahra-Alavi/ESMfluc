@@ -43,6 +43,12 @@ def parse_args():
         help="Result root containing manifest.tsv, e.g. results/publication_comparable_v1.",
     )
     parser.add_argument(
+        "--manifest_tsv",
+        default=None,
+        help="Manifest TSV to analyze. Defaults to result_root/manifest.tsv. "
+             "Use manifest_attention_sources.tsv for the 30-attention source view.",
+    )
+    parser.add_argument(
         "--test_csv",
         default=None,
         help="CSV with sequence, neq, and optionally name. Defaults to result_root/test_data_with_names.csv, then test_data.csv.",
@@ -177,6 +183,22 @@ def resolve_existing_path(path_value, result_root, pipeline_dir):
         if candidate.exists():
             return candidate
     return candidates[0]
+
+
+def resolve_manifest_path(result_root, manifest_tsv=None):
+    path = Path(manifest_tsv).expanduser() if manifest_tsv else result_root / "manifest.tsv"
+    if not path.is_absolute():
+        path = result_root / path
+    return path.resolve()
+
+
+def default_analysis_dir(result_root, base_name, manifest_path):
+    if manifest_path.name == "manifest.tsv":
+        return result_root / base_name
+    suffix = manifest_path.stem
+    if suffix.startswith("manifest_"):
+        suffix = suffix[len("manifest_"):]
+    return result_root / f"{base_name}_{suffix}"
 
 
 def load_neq_maps(test_csv):
@@ -564,12 +586,15 @@ def main():
     args = parse_args()
     result_root = Path(args.result_root).expanduser().resolve()
     pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
-    output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else result_root / "analysis_row_modes"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    manifest_path = result_root / "manifest.tsv"
+    manifest_path = resolve_manifest_path(result_root, args.manifest_tsv)
     if not manifest_path.exists():
-        raise FileNotFoundError(f"Missing manifest.tsv: {manifest_path}")
+        raise FileNotFoundError(f"Missing manifest TSV: {manifest_path}")
+    output_dir = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else default_analysis_dir(result_root, "analysis_row_modes", manifest_path)
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     test_csv = args.test_csv
     if test_csv is None:

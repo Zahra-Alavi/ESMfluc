@@ -21,13 +21,24 @@ import pandas as pd
 
 from analyze_attention_hubs_vs_neq_peaks import neq_peak_mask
 from analyze_attention_morphology_biology import detect_bands
-from analyze_attention_row_modes import analyze_attention_modes, resolve_existing_path
+from analyze_attention_row_modes import (
+    analyze_attention_modes,
+    default_analysis_dir,
+    resolve_existing_path,
+    resolve_manifest_path,
+)
 from build_row_mode_attention_pwms import AA20, add_pwm, extract_window, pwm_to_df, sanitize
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Q8 hinge/loop enrichment for low_mode_1 attention hubs.")
     parser.add_argument("--result_root", required=True, help="Result root containing manifest.tsv.")
+    parser.add_argument(
+        "--manifest_tsv",
+        default=None,
+        help="Manifest TSV to analyze. Defaults to result_root/manifest.tsv. "
+             "Use manifest_attention_sources.tsv for the 30-attention source view.",
+    )
     parser.add_argument("--test_csv", required=True, help="CSV with name, sequence, neq.")
     parser.add_argument("--ss_csv", required=True, help="NetSurfP CSV with id, q3, and q8 columns.")
     parser.add_argument("--output_dir", default=None, help="Default: result_root/analysis_hinge_loop_enrichment.")
@@ -340,14 +351,21 @@ def main():
 
     result_root = Path(args.result_root).expanduser().resolve()
     pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
-    output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else result_root / "analysis_hinge_loop_enrichment"
+    manifest_path = resolve_manifest_path(result_root, args.manifest_tsv)
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"Missing manifest TSV: {manifest_path}")
+    output_dir = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else default_analysis_dir(result_root, "analysis_hinge_loop_enrichment", manifest_path)
+    )
     pwm_dir = output_dir / "pwms"
     logo_dir = output_dir / "logos"
     output_dir.mkdir(parents=True, exist_ok=True)
     pwm_dir.mkdir(exist_ok=True)
     logo_dir.mkdir(exist_ok=True)
 
-    manifest = pd.read_csv(result_root / "manifest.tsv", sep="\t")
+    manifest = pd.read_csv(manifest_path, sep="\t")
     if args.conditions:
         manifest = manifest[manifest["condition"].isin(args.conditions)].copy()
     neq_by_name = load_neq_by_name(args.test_csv)
@@ -355,7 +373,7 @@ def main():
     assignment_path = (
         Path(args.row_mode_assignments).expanduser()
         if args.row_mode_assignments
-        else result_root / "analysis_row_modes" / "row_mode_assignments_by_residue.csv"
+        else default_analysis_dir(result_root, "analysis_row_modes", manifest_path) / "row_mode_assignments_by_residue.csv"
     )
     assignment_maps = load_assignment_maps(assignment_path, set(args.conditions or []))
     rng = np.random.default_rng(args.permutation_seed)

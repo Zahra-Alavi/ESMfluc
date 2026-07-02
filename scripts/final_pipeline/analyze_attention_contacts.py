@@ -27,7 +27,7 @@ except Exception:  # pragma: no cover
     average_precision_score = None
     roc_auc_score = None
 
-from analyze_attention_row_modes import resolve_existing_path
+from analyze_attention_row_modes import default_analysis_dir, resolve_existing_path, resolve_manifest_path
 
 
 DEFAULT_SEP_BINS = "6-11,12-23,24-47,48-inf"
@@ -38,6 +38,12 @@ def parse_args():
         description="Contact-map recovery analysis for attention matrices."
     )
     parser.add_argument("--result_root", required=True, help="Result root containing manifest.tsv.")
+    parser.add_argument(
+        "--manifest_tsv",
+        default=None,
+        help="Manifest TSV to analyze. Defaults to result_root/manifest.tsv. "
+             "Use manifest_attention_sources.tsv for the 30-attention source view.",
+    )
     parser.add_argument(
         "--contact_json",
         default=None,
@@ -325,12 +331,15 @@ def main():
     result_root = Path(args.result_root).expanduser().resolve()
     pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
     contact_json = Path(args.contact_json).expanduser().resolve() if args.contact_json else result_root / "contact_maps_ca8.json"
-    output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else result_root / "analysis_contacts"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    manifest_path = result_root / "manifest.tsv"
+    manifest_path = resolve_manifest_path(result_root, args.manifest_tsv)
     if not manifest_path.exists():
-        raise FileNotFoundError(f"Missing manifest.tsv: {manifest_path}")
+        raise FileNotFoundError(f"Missing manifest TSV: {manifest_path}")
+    output_dir = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else default_analysis_dir(result_root, "analysis_contacts", manifest_path)
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
     if not contact_json.exists():
         raise FileNotFoundError(
             f"Missing contact JSON: {contact_json}\n"
@@ -359,23 +368,28 @@ def main():
             source_paths["backbone"] = resolve_backbone_path(run, result_root, pipeline_dir, args.backbone_filenames)
 
         for source, attention_path in source_paths.items():
+            source_label = (
+                str(run.attention_kind)
+                if source == "bilstm" and hasattr(run, "attention_kind")
+                else source
+            )
             if not attention_path.exists():
                 skip_rows.append({
                     "condition": run.condition,
                     "seed": int(run.seed),
-                    "attention_source": source,
+                    "attention_source": source_label,
                     "protein": "",
                     "reason": f"missing attention file: {attention_path}",
                 })
                 continue
-            print(f"[load] {run.condition} seed={run.seed} source={source}: {attention_path}")
+            print(f"[load] {run.condition} seed={run.seed} source={source_label}: {attention_path}")
             records = load_attention_records(attention_path)
             for protein, contact_record in contacts.items():
                 if protein not in records:
                     skip_rows.append({
                         "condition": run.condition,
                         "seed": int(run.seed),
-                        "attention_source": source,
+                        "attention_source": source_label,
                         "protein": protein,
                         "reason": "protein missing from attention JSON",
                     })
@@ -389,7 +403,7 @@ def main():
                     protein,
                     run.condition,
                     run.seed,
-                    source,
+                    source_label,
                     args,
                     bins,
                     rng,
@@ -398,7 +412,7 @@ def main():
                     skip_rows.append({
                         "condition": run.condition,
                         "seed": int(run.seed),
-                        "attention_source": source,
+                        "attention_source": source_label,
                         "protein": protein,
                         "reason": "no valid pair/contact set or length mismatch",
                     })

@@ -36,7 +36,12 @@ from sklearn.metrics import average_precision_score, brier_score_loss, log_loss,
 from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import OneHotEncoder
 
-from analyze_attention_row_modes import analyze_attention_modes, resolve_existing_path
+from analyze_attention_row_modes import (
+    analyze_attention_modes,
+    default_analysis_dir,
+    resolve_existing_path,
+    resolve_manifest_path,
+)
 
 
 def parse_args():
@@ -44,6 +49,12 @@ def parse_args():
         description="Ask whether row modes predict Neq/flexibility after controlling for C/H/E."
     )
     parser.add_argument("--result_root", required=True, help="Result root containing manifest.tsv.")
+    parser.add_argument(
+        "--manifest_tsv",
+        default=None,
+        help="Manifest TSV to analyze. Defaults to result_root/manifest.tsv. "
+             "Use manifest_attention_sources.tsv for the 30-attention source view.",
+    )
     parser.add_argument("--test_csv", required=True, help="CSV with name, sequence, neq.")
     parser.add_argument("--ss_csv", required=True, help="NetSurfP CSV with id and q3 columns.")
     parser.add_argument("--output_dir", default=None, help="Default: result_root/analysis_row_modes_controlled_ss.")
@@ -104,11 +115,11 @@ def mode_name(label):
     return {0: "diffuse_high_entropy", 1: "low_mode_1", 2: "low_mode_2"}.get(int(label), str(label))
 
 
-def build_residue_table(args, result_root, pipeline_dir):
+def build_residue_table(args, result_root, pipeline_dir, manifest_path):
     assignment_path = (
         Path(args.row_mode_assignments)
         if args.row_mode_assignments
-        else result_root / "analysis_row_modes" / "row_mode_assignments_by_residue.csv"
+        else default_analysis_dir(result_root, "analysis_row_modes", manifest_path) / "row_mode_assignments_by_residue.csv"
     )
     if assignment_path.exists():
         print(f"[load] row-mode assignments: {assignment_path}")
@@ -131,7 +142,7 @@ def build_residue_table(args, result_root, pipeline_dir):
         df["flexible"] = df["flexible"].astype(int)
         return df
 
-    manifest = pd.read_csv(result_root / "manifest.tsv", sep="\t")
+    manifest = pd.read_csv(manifest_path, sep="\t")
     if args.conditions:
         manifest = manifest[manifest["condition"].isin(args.conditions)].copy()
 
@@ -368,10 +379,17 @@ def main():
     args = parse_args()
     result_root = Path(args.result_root).expanduser().resolve()
     pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
-    output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else result_root / "analysis_row_modes_controlled_ss"
+    manifest_path = resolve_manifest_path(result_root, args.manifest_tsv)
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"Missing manifest TSV: {manifest_path}")
+    output_dir = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else default_analysis_dir(result_root, "analysis_row_modes_controlled_ss", manifest_path)
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    residues = build_residue_table(args, result_root, pipeline_dir)
+    residues = build_residue_table(args, result_root, pipeline_dir, manifest_path)
     conditions = sorted(residues["condition"].unique())
     rng = np.random.default_rng(args.permutation_seed)
 
