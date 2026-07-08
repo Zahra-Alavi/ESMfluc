@@ -92,6 +92,26 @@ def resolve_run_path(path_value, result_root, pipeline_dir):
     return path
 
 
+def resolve_manifest_arg(result_root, manifest_tsv):
+    if manifest_tsv is None:
+        return (result_root / "manifest_attention_sources.tsv").resolve()
+    raw = Path(manifest_tsv).expanduser()
+    candidates = []
+    if raw.is_absolute():
+        candidates.append(raw)
+    else:
+        candidates.extend([
+            Path.cwd() / raw,
+            result_root / raw,
+            result_root.parent / raw,
+            raw,
+        ])
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0].resolve()
+
+
 def required_conditions():
     out = []
     for level in FREEZE_LEVELS:
@@ -351,7 +371,7 @@ def main():
         raise ValueError("--seed is required with --seed_mode single.")
     result_root = Path(args.result_root).expanduser().resolve()
     pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
-    manifest_path = resolve_manifest_path(result_root, args.manifest_tsv or (result_root / "manifest_attention_sources.tsv"))
+    manifest_path = resolve_manifest_arg(result_root, args.manifest_tsv)
     output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else result_root / "analysis_esm2_esm3_differential_attention"
     output_dir.mkdir(parents=True, exist_ok=True)
 
