@@ -51,7 +51,7 @@ def parse_args():
     p.add_argument("--output_dir", default=None)
     p.add_argument("--pipeline_dir", default=None)
     p.add_argument("--conditions", nargs="*", default=None)
-    p.add_argument("--num_classes", type=int, default=4)
+    p.add_argument("--num_classes", type=int, default=0, help="0 means infer from the first checkpoint.")
     p.add_argument("--neq_thresholds", nargs="+", type=float, default=[1.0, 2.0, 4.0])
     p.add_argument("--dropout", type=float, default=0.0)
     p.add_argument("--bidirectional", type=int, choices=[0, 1], default=1)
@@ -161,15 +161,37 @@ def infer_bilstm_params(checkpoint):
     return hidden_size, num_layers
 
 
+def infer_num_classes(checkpoint):
+    value = checkpoint.get("fc.weight")
+    if value is None:
+        raise ValueError("Could not infer num_classes: checkpoint has no fc.weight.")
+    return int(value.shape[0])
+
+
+def infer_num_classes_from_manifest(manifest, result_root, pipeline_dir):
+    for run in manifest.itertuples(index=False):
+        checkpoint_path = resolve_run_path(run.checkpoint, result_root, pipeline_dir)
+        if checkpoint_path.exists():
+            checkpoint = torch.load(checkpoint_path, map_location="cpu")
+            return infer_num_classes(checkpoint), checkpoint_path
+    raise FileNotFoundError("Could not find any checkpoint listed in the manifest.")
+
+
 def build_model(run, checkpoint_path, device, args):
     checkpoint = torch.load(checkpoint_path, map_location=device)
     hidden_size, num_layers = infer_bilstm_params(checkpoint)
+    num_classes = infer_num_classes(checkpoint)
+    if args.num_classes and int(args.num_classes) != num_classes:
+        raise ValueError(
+            f"Checkpoint {checkpoint_path} has {num_classes} classes, "
+            f"but --num_classes={args.num_classes}."
+        )
     embedding_model, _ = load_esm_model(str(run.esm_model), device=str(device))
     model = BiLSTMWithSelfAttentionModel(
         embedding_model=embedding_model,
         hidden_size=hidden_size,
         num_layers=num_layers,
-        num_classes=args.num_classes,
+        num_classes=num_classes,
         dropout=args.dropout,
         bidirectional=args.bidirectional,
     ).to(device)
@@ -414,19 +436,39 @@ def main():
     device = torch.device(args.device if torch.cuda.is_available() or not str(args.device).startswith("cuda") else "cpu")
     rng = np.random.default_rng(args.random_seed)
 
-    classify = create_classification_func(args.num_classes, args.neq_thresholds)
-    test_rows = load_test_rows(args.test_csv, classify)
-    ss_map = load_q3_q8_map(args.ss_csv)
-    pb_map = load_pb_entropy_map(args.pb_entropy_csv, args.pb_id_col, args.pb_entropy_col)
-    residual_targets = residualize_targets(test_rows, ss_map, pb_map)
-    residual_targets.to_csv(output_dir / "neq_residual_targets_q3_q8_pb.csv", index=False)
-
     manifest = pd.read_csv(manifest_path, sep="\t")
     if args.conditions:
         manifest = manifest[manifest["condition"].isin(args.conditions)].copy()
     manifest = manifest[manifest["architecture"].astype(str) == "bilstm_attention"].copy()
     if args.max_runs:
         manifest = manifest.head(args.max_runs).copy()
+    if manifest.empty:
+        raise ValueError("No BiLSTM-attention manifest rows remain after filtering.")
+
+    if args.num_classes == 0:
+        inferred_classes, inferred_from = infer_num_classes_from_manifest(manifest, result_root, pipeline_dir)
+        args.num_classes = inferred_classes
+        print(f"[info] Inferred num_classes={args.num_classes} from {inferred_from}")
+    if len(args.neq_thresholds) != args.num_classes - 1:
+        if args.num_classes == 2 and len(args.neq_thresholds) > 1:
+            old = list(args.neq_thresholds)
+            args.neq_thresholds = [args.neq_thresholds[0]]
+            print(
+                f"[info] Binary checkpoint detected; using first Neq threshold only: "
+                f"{args.neq_thresholds} instead of {old}"
+            )
+        else:
+            raise ValueError(
+                f"--num_classes={args.num_classes} requires {args.num_classes - 1} "
+                f"thresholds, got {args.neq_thresholds}."
+            )
+
+    classify = create_classification_func(args.num_classes, args.neq_thresholds)
+    test_rows = load_test_rows(args.test_csv, classify)
+    ss_map = load_q3_q8_map(args.ss_csv)
+    pb_map = load_pb_entropy_map(args.pb_entropy_csv, args.pb_id_col, args.pb_entropy_col)
+    residual_targets = residualize_targets(test_rows, ss_map, pb_map)
+    residual_targets.to_csv(output_dir / "neq_residual_targets_q3_q8_pb.csv", index=False)
 
     per_protein = []
     selected_rows = []
