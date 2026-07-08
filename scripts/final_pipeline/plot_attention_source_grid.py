@@ -8,8 +8,9 @@ Default layout:
   row 2: ESM2 BiLSTM attention
   row 3: ESM3 BiLSTM attention
 
-The script writes one interactive Plotly HTML page containing one 3x3 heatmap
-grid per protein.  All heatmaps share one color scale by default.
+The script writes one interactive Plotly HTML page per protein, plus an index
+page linking all selected proteins.  All heatmaps share one color scale by
+default.
 """
 
 import argparse
@@ -48,8 +49,8 @@ def parse_args():
     p = argparse.ArgumentParser(description="Plot comparable attention-source grids for random proteins.")
     p.add_argument("--result_root", required=True, help="Result root containing manifest_attention_sources.tsv.")
     p.add_argument("--manifest_tsv", default=None, help="Default: result_root/manifest_attention_sources.tsv.")
-    p.add_argument("--output_html", default=None, help="Default: result_root/attention_source_grid_random.html.")
-    p.add_argument("--output_dir", default=None, help="Directory for selected_proteins.txt if --output_html is omitted.")
+    p.add_argument("--output_html", default=None, help="Index HTML path. Default: output_dir/index.html.")
+    p.add_argument("--output_dir", default=None, help="Default: result_root/attention_source_grids.")
     p.add_argument("--pipeline_dir", default=None, help="Directory for resolving relative manifest paths.")
     p.add_argument("--n_proteins", type=int, default=5)
     p.add_argument("--proteins", nargs="*", default=None, help="Explicit protein IDs. Overrides random sampling.")
@@ -267,30 +268,58 @@ def figure_for_protein(protein, grouped, scale_scope, global_zmax, args):
     return fig
 
 
-def write_html_page(figures, proteins, output_html, include_plotlyjs, selected_path, zmax, args):
+def safe_name(name):
+    return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in str(name))
+
+
+def write_protein_page(fig, protein, output_html, include_plotlyjs, zmax, args):
     include_js = include_plotlyjs == "inline"
     parts = [
         "<!doctype html><html><head><meta charset='utf-8'>",
-        "<title>Attention Source Grid</title>",
+        f"<title>{html.escape(protein)} Attention Source Grid</title>",
         "<style>body{font-family:Arial,sans-serif;margin:24px;} "
         "h1{font-size:22px;} h2{font-size:18px;margin-top:36px;} "
         ".meta{color:#444;font-size:13px;line-height:1.5;} "
         ".figure{margin-bottom:42px;}</style>",
         "</head><body>",
-        "<h1>Attention Source Grid</h1>",
+        f"<h1>{html.escape(protein)} Attention Source Grid</h1>",
         "<div class='meta'>",
-        f"Proteins: {html.escape(', '.join(proteins))}<br>",
+        f"Seed mode: {html.escape(args.seed_mode)}<br>",
+        f"Scale scope: {html.escape(args.scale_scope)}; zmin={args.zmin:g}; zmax={zmax:g}; quantile={args.scale_quantile:g}<br>",
+        "Rows: ESM2 backbone, ESM2 BiLSTM, ESM3 BiLSTM<br>",
+        "Columns: frozen, top4, top28",
+        "</div>",
+        "<div class='figure'>",
+        fig.to_html(full_html=False, include_plotlyjs=("inline" if include_js else "cdn")),
+        "</div>",
+        "</body></html>",
+    ]
+    Path(output_html).write_text("\n".join(parts))
+
+
+def write_index_page(protein_pages, output_html, selected_path, zmax, args):
+    rows = []
+    for protein, page in protein_pages:
+        rel = Path(page).name
+        rows.append(f"<li><a href='{html.escape(rel)}'>{html.escape(protein)}</a></li>")
+    parts = [
+        "<!doctype html><html><head><meta charset='utf-8'>",
+        "<title>Attention Source Grid Index</title>",
+        "<style>body{font-family:Arial,sans-serif;margin:24px;} "
+        "h1{font-size:22px;} .meta{color:#444;font-size:13px;line-height:1.5;} "
+        "li{margin:8px 0;}</style>",
+        "</head><body>",
+        "<h1>Attention Source Grid Index</h1>",
+        "<div class='meta'>",
         f"Seed mode: {html.escape(args.seed_mode)}<br>",
         f"Scale scope: {html.escape(args.scale_scope)}; zmin={args.zmin:g}; zmax={zmax:g}; quantile={args.scale_quantile:g}<br>",
         f"Selected proteins file: {html.escape(str(selected_path))}",
         "</div>",
+        "<ul>",
+        "\n".join(rows),
+        "</ul>",
+        "</body></html>",
     ]
-    for idx, (protein, fig) in enumerate(zip(proteins, figures)):
-        parts.append(f"<h2>{html.escape(protein)}</h2>")
-        parts.append("<div class='figure'>")
-        parts.append(fig.to_html(full_html=False, include_plotlyjs=("cdn" if idx == 0 and not include_js else include_js)))
-        parts.append("</div>")
-    parts.append("</body></html>")
     Path(output_html).write_text("\n".join(parts))
 
 
@@ -303,9 +332,9 @@ def main():
     manifest_path = resolve_manifest_path(result_root, args.manifest_tsv or (result_root / "manifest_attention_sources.tsv"))
     if not manifest_path.exists():
         raise FileNotFoundError(f"Missing manifest: {manifest_path}")
-    output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else result_root
+    output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else result_root / "attention_source_grids"
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_html = Path(args.output_html).expanduser().resolve() if args.output_html else output_dir / "attention_source_grid_random.html"
+    output_html = Path(args.output_html).expanduser().resolve() if args.output_html else output_dir / "index.html"
 
     manifest = pd.read_csv(manifest_path, sep="\t")
     required_conditions = condition_names()
@@ -326,17 +355,22 @@ def main():
     else:
         global_zmax = np.nan
 
-    figures = [
-        figure_for_protein(protein, grouped, args.scale_scope, global_zmax, args)
-        for protein in proteins
-    ]
-    write_html_page(figures, proteins, output_html, args.include_plotlyjs, selected_path, global_zmax, args)
+    protein_pages = []
+    for protein in proteins:
+        fig = figure_for_protein(protein, grouped, args.scale_scope, global_zmax, args)
+        page = output_dir / f"{safe_name(protein)}_attention_source_grid.html"
+        write_protein_page(fig, protein, page, args.include_plotlyjs, global_zmax, args)
+        protein_pages.append((protein, page))
+    write_index_page(protein_pages, output_html, selected_path, global_zmax, args)
 
     summary = [
         f"Manifest: {manifest_path}",
-        f"Output HTML: {output_html}",
+        f"Output index HTML: {output_html}",
+        f"Output dir: {output_dir}",
         f"Selected proteins: {', '.join(proteins)}",
         f"Selected protein list: {selected_path}",
+        "Protein pages:",
+        *[f"  {protein}: {page}" for protein, page in protein_pages],
         f"Seed mode: {args.seed_mode}",
         f"Scale scope: {args.scale_scope}",
         f"zmax: {global_zmax if np.isfinite(global_zmax) else 'per-protein'}",
