@@ -34,7 +34,6 @@ from plot_attention_source_grid import (
     common_proteins,
     compute_zmax,
     condition_names,
-    hover_text,
     safe_name,
     ticks,
 )
@@ -105,6 +104,24 @@ def parse_args():
         "--test_csv",
         default=None,
         help="Optional CSV with name, sequence, neq columns. Default: result_root/test_data_with_names.csv if present.",
+    )
+    p.add_argument(
+        "--click_attention_threshold_fraction",
+        type=float,
+        default=0.50,
+        help="On heatmap click, select query residues with attention to the clicked key >= this fraction of the heatmap zmax. Default: 0.50.",
+    )
+    p.add_argument(
+        "--click_attention_threshold_abs",
+        type=float,
+        default=None,
+        help="Absolute attention threshold for click-linked query residue selection. Overrides --click_attention_threshold_fraction.",
+    )
+    p.add_argument(
+        "--click_max_query_residues",
+        type=int,
+        default=80,
+        help="Maximum number of query residues highlighted on structure for a clicked key. Highest attention values are kept. Default: 80.",
     )
     return p.parse_args()
 
@@ -496,14 +513,19 @@ def plotly_script_tag(include_plotlyjs):
     return f"<script>{offline.get_plotlyjs()}</script>"
 
 
-def viewer_script(protein, sequence, pdb_text, position_map, has_structure):
+def viewer_script(protein, sequence, pdb_text, position_map, has_structure, zmax, args):
     return f"""
 <script>
 const PDB_TEXT = {json.dumps(pdb_text)};
 const SEQUENCE = {json.dumps(sequence)};
 const POSITION_MAP = {json.dumps(position_map)};
 const HAS_STRUCTURE = {json.dumps(bool(has_structure))};
+const HEATMAP_ZMAX = {json.dumps(float(zmax) if np.isfinite(zmax) else None)};
+const CLICK_THRESHOLD_ABS = {json.dumps(args.click_attention_threshold_abs)};
+const CLICK_THRESHOLD_FRACTION = {json.dumps(args.click_attention_threshold_fraction)};
+const CLICK_MAX_QUERY_RESIDUES = {json.dumps(args.click_max_query_residues)};
 let viewer = null;
+let lockedSelection = false;
 
 function residueSelection(seqPos) {{
   const entry = POSITION_MAP[String(seqPos)] || POSITION_MAP[seqPos];
@@ -520,9 +542,11 @@ function baseStyle() {{
   viewer.setStyle({{}}, {{cartoon: {{color: "lightgray", opacity: 0.82}}}});
 }}
 
-function addResidueStyle(selection, color) {{
+function addResidueStyle(selection, color, sphereRadius, stickRadius) {{
   if (!selection) return false;
-  viewer.setStyle(selection, {{cartoon: {{color: color, opacity: 1.0}}}});
+  viewer.addStyle(selection, {{cartoon: {{color: color, opacity: 1.0}}}});
+  viewer.addStyle(selection, {{stick: {{color: color, radius: stickRadius}}}});
+  viewer.addStyle(selection, {{sphere: {{color: color, radius: sphereRadius, opacity: 0.95}}}});
   return true;
 }}
 
@@ -541,9 +565,23 @@ function renderSequenceStrip() {{
 
 function highlightSequence(queryPos, keyPos) {{
   document.querySelectorAll(".seq-residue").forEach(function(el) {{
-    el.classList.remove("query-highlight", "key-highlight");
+    el.classList.remove("query-highlight", "key-highlight", "attending-highlight");
   }});
   const queryEl = document.querySelector('.seq-residue[data-pos="' + queryPos + '"]');
+  const keyEl = document.querySelector('.seq-residue[data-pos="' + keyPos + '"]');
+  if (queryEl) queryEl.classList.add("query-highlight");
+  if (keyEl) keyEl.classList.add("key-highlight");
+}}
+
+function highlightSequenceGroup(keyPos, attendingPositions, clickedQueryPos) {{
+  document.querySelectorAll(".seq-residue").forEach(function(el) {{
+    el.classList.remove("query-highlight", "key-highlight", "attending-highlight");
+  }});
+  attendingPositions.forEach(function(pos) {{
+    const el = document.querySelector('.seq-residue[data-pos="' + pos + '"]');
+    if (el) el.classList.add("attending-highlight");
+  }});
+  const queryEl = document.querySelector('.seq-residue[data-pos="' + clickedQueryPos + '"]');
   const keyEl = document.querySelector('.seq-residue[data-pos="' + keyPos + '"]');
   if (queryEl) queryEl.classList.add("query-highlight");
   if (keyEl) keyEl.classList.add("key-highlight");
@@ -554,14 +592,70 @@ function highlightResidues(queryPos, keyPos) {{
     baseStyle();
     const querySelection = residueSelection(queryPos);
     const keySelection = residueSelection(keyPos);
-    addResidueStyle(querySelection, "orange");
-    addResidueStyle(keySelection, "cyan");
+    addResidueStyle(querySelection, "orange", 0.42, 0.16);
+    addResidueStyle(keySelection, "cyan", 0.72, 0.32);
     viewer.render();
   }}
   highlightSequence(queryPos, keyPos);
   const status = document.getElementById("hover-status");
   if (status) {{
     status.textContent = "Query residue " + queryPos + " highlighted orange; key residue " + keyPos + " highlighted cyan.";
+  }}
+}}
+
+function clickThreshold() {{
+  if (CLICK_THRESHOLD_ABS !== null && CLICK_THRESHOLD_ABS !== undefined) {{
+    return Number(CLICK_THRESHOLD_ABS);
+  }}
+  if (HEATMAP_ZMAX !== null && HEATMAP_ZMAX !== undefined && Number.isFinite(Number(HEATMAP_ZMAX))) {{
+    return Number(CLICK_THRESHOLD_FRACTION) * Number(HEATMAP_ZMAX);
+  }}
+  return 0;
+}}
+
+function queryResiduesForClickedKey(point) {{
+  const trace = ATTENTION_FIG.data[point.curveNumber];
+  if (!trace || !trace.z || !point.customdata || point.customdata.length < 2) return [];
+  const keyPos = Number(point.customdata[1]);
+  const keyIdx = keyPos - 1;
+  const threshold = clickThreshold();
+  const rows = [];
+  for (let i = 0; i < trace.z.length; i++) {{
+    const row = trace.z[i];
+    if (!row || keyIdx < 0 || keyIdx >= row.length) continue;
+    const value = Number(row[keyIdx]);
+    if (Number.isFinite(value) && value >= threshold) {{
+      rows.push({{pos: i + 1, value: value}});
+    }}
+  }}
+  rows.sort(function(a, b) {{ return b.value - a.value; }});
+  return rows.slice(0, Math.max(1, Number(CLICK_MAX_QUERY_RESIDUES) || rows.length));
+}}
+
+function highlightKeyColumn(point) {{
+  lockedSelection = true;
+  const queryPos = Number(point.customdata[0]);
+  const keyPos = Number(point.customdata[1]);
+  let attending = queryResiduesForClickedKey(point);
+  if (!attending.length) attending = [{{pos: queryPos, value: Number(point.z)}}];
+  const attendingPositions = attending.map(function(x) {{ return x.pos; }});
+  if (viewer) {{
+    baseStyle();
+    attendingPositions.forEach(function(pos) {{
+      if (pos !== keyPos) {{
+        addResidueStyle(residueSelection(pos), "#ffd94a", 0.30, 0.12);
+      }}
+    }});
+    addResidueStyle(residueSelection(queryPos), "orange", 0.44, 0.17);
+    addResidueStyle(residueSelection(keyPos), "cyan", 0.82, 0.36);
+    viewer.render();
+  }}
+  highlightSequenceGroup(keyPos, attendingPositions, queryPos);
+  const status = document.getElementById("hover-status");
+  if (status) {{
+    status.textContent = "Clicked key residue " + keyPos + ": highlighted " + attendingPositions.length +
+      " query residues with attention >= " + clickThreshold().toPrecision(4) +
+      ". Key is cyan; clicked query is orange; other attending residues are yellow.";
   }}
 }}
 
@@ -579,10 +673,29 @@ function initHoverBridge() {{
   const plot = document.getElementById("attention-plot");
   if (!plot || !plot.on) return;
   plot.on("plotly_hover", function(eventData) {{
+    if (lockedSelection) return;
     if (!eventData.points || !eventData.points.length) return;
     const point = eventData.points[0];
     if (!point.customdata || point.customdata.length < 2) return;
     highlightResidues(point.customdata[0], point.customdata[1]);
+  }});
+  plot.on("plotly_click", function(eventData) {{
+    if (!eventData.points || !eventData.points.length) return;
+    const point = eventData.points[0];
+    if (!point.customdata || point.customdata.length < 2) return;
+    highlightKeyColumn(point);
+  }});
+  plot.on("plotly_doubleclick", function() {{
+    lockedSelection = false;
+    if (viewer) {{
+      baseStyle();
+      viewer.render();
+    }}
+    document.querySelectorAll(".seq-residue").forEach(function(el) {{
+      el.classList.remove("query-highlight", "key-highlight", "attending-highlight");
+    }});
+    const status = document.getElementById("hover-status");
+    if (status) status.textContent = "Selection cleared. Hover over a heatmap cell to highlight query and key residues.";
   }});
 }}
 
@@ -609,6 +722,10 @@ def sequence_strip_html(sequence):
 def write_protein_page(fig, protein, sequence, output_html, pdb_path, pdb_text, position_map, map_source, zmax, args):
     plot_json = json.dumps(fig.to_plotly_json(), cls=PlotlyJSONEncoder)
     has_structure = bool(pdb_text)
+    if args.click_attention_threshold_abs is not None:
+        click_threshold_text = f"attention >= {args.click_attention_threshold_abs:g} absolute"
+    else:
+        click_threshold_text = f"attention >= {args.click_attention_threshold_fraction:g} x heatmap zmax"
     missing_message = ""
     if not has_structure:
         missing_message = (
@@ -634,6 +751,7 @@ def write_protein_page(fig, protein, sequence, output_html, pdb_path, pdb_text, 
         ".seq-residue{display:inline-block;min-width:1ch;padding:0 2px;border-radius:3px;color:#333;}",
         ".seq-residue.query-highlight{background:orange;color:#111;}",
         ".seq-residue.key-highlight{background:cyan;color:#111;}",
+        ".seq-residue.attending-highlight{background:#ffe66b;color:#111;}",
         "#structure-viewer{width:100%;height:560px;border:1px solid #ccc;background:#fff;}",
         ".viewer-title{font-weight:bold;margin:0 0 8px;}",
         ".viewer-note,.missing,#hover-status{font-size:13px;line-height:1.45;color:#444;margin-top:8px;}",
@@ -648,7 +766,8 @@ def write_protein_page(fig, protein, sequence, output_html, pdb_path, pdb_text, 
         "Rows: ESM2 backbone, ESM2 BiLSTM, ESM3 BiLSTM<br>",
         "Columns: frozen, top4, top28<br>",
         f"Structure: {html.escape(structure_line)}<br>",
-        f"Residue mapping: {html.escape(map_source)}",
+        f"Residue mapping: {html.escape(map_source)}<br>",
+        f"Click threshold: {html.escape(click_threshold_text)}",
         "</div></header>",
         "<main class='layout'>",
         "<section class='plot-panel'><div id='attention-plot'></div></section>",
@@ -658,12 +777,12 @@ def write_protein_page(fig, protein, sequence, output_html, pdb_path, pdb_text, 
         "<div class='viewer-title'>3D structure</div>",
         "<div id='structure-viewer'></div>",
         missing_message,
-        "<div id='hover-status'>Hover over a heatmap cell to highlight query and key residues.</div>",
-        "<div class='viewer-note'>Key/x-axis residues are cyan; query/y-axis residues are orange.</div>",
+        "<div id='hover-status'>Hover over a heatmap cell to highlight query and key residues. Click a cell to lock the key column and all above-threshold attending query residues. Double-click the heatmap to clear.</div>",
+        "<div class='viewer-note'>Hover: key/x-axis is cyan, query/y-axis is orange. Click: key is cyan, clicked query is orange, other above-threshold attending residues are yellow.</div>",
         "</aside></main>",
         f"<script>const ATTENTION_FIG = {plot_json};",
         "Plotly.newPlot('attention-plot', ATTENTION_FIG.data, ATTENTION_FIG.layout, {responsive: true});</script>",
-        viewer_script(protein, sequence, pdb_text, position_map, has_structure),
+        viewer_script(protein, sequence, pdb_text, position_map, has_structure, zmax, args),
         "</body></html>",
     ]
     Path(output_html).write_text("\n".join(parts))
@@ -778,6 +897,9 @@ def main():
         f"PDB download URL template: {args.pdb_download_url}",
         f"Real Neq: {neq_summary}",
         f"Position mapping: {mapping_summary}",
+        f"Click attention threshold absolute: {args.click_attention_threshold_abs}",
+        f"Click attention threshold fraction of zmax: {args.click_attention_threshold_fraction}",
+        f"Click maximum highlighted query residues: {args.click_max_query_residues}",
         "Default mapping assumption: without --position_map_csv, protein IDs are assumed to look like 3d7a_B; "
         "the chain is the suffix after the final underscore and seq_pos maps directly to pdb_resi.",
         "Protein pages:",
