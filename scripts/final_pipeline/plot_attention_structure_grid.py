@@ -14,6 +14,7 @@ default.
 """
 
 import argparse
+import ast
 import html
 import json
 import urllib.error
@@ -76,7 +77,7 @@ def parse_args():
     p.add_argument(
         "--structure_dir",
         default=None,
-        help="Directory containing/caching PDB files. Default: output_dir/pdb_cache.",
+        help="Directory containing/caching PDB files. Default: result_root/pdb_cache when present, otherwise output_dir/pdb_cache.",
     )
     p.add_argument(
         "--structure_pattern",
@@ -100,10 +101,27 @@ def parse_args():
         default=None,
         help="Optional CSV with columns: protein,seq_pos,pdb_chain,pdb_resi.",
     )
+    p.add_argument(
+        "--test_csv",
+        default=None,
+        help="Optional CSV with name, sequence, neq columns. Default: result_root/test_data_with_names.csv if present.",
+    )
     return p.parse_args()
 
 
-def resolve_manifest_arg(result_root, manifest_tsv):
+def corrected_results_sibling_candidates(raw, pipeline_dir, leaf_is_file=False):
+    parts = raw.parts
+    if "results" not in parts or len(parts) < 2:
+        return []
+    results_index = parts.index("results")
+    if leaf_is_file and len(parts) >= 3:
+        sibling = Path(*parts[: results_index + 1]) / parts[-2] / parts[-1]
+    else:
+        sibling = Path(*parts[: results_index + 1]) / parts[-1]
+    return [Path.cwd() / sibling, pipeline_dir / sibling, sibling]
+
+
+def resolve_manifest_arg(result_root, pipeline_dir, manifest_tsv):
     if manifest_tsv is None:
         return (result_root / "manifest_attention_sources.tsv").resolve()
     raw = Path(manifest_tsv).expanduser()
@@ -117,9 +135,31 @@ def resolve_manifest_arg(result_root, manifest_tsv):
             result_root.parent / raw,
             raw,
         ])
+        candidates.extend(corrected_results_sibling_candidates(raw, pipeline_dir, leaf_is_file=True))
     for candidate in candidates:
         if candidate.exists():
             return candidate.resolve()
+    return candidates[0].resolve()
+
+
+def resolve_result_root_arg(result_root_arg, pipeline_dir):
+    raw = Path(result_root_arg).expanduser()
+    candidates = []
+    if raw.is_absolute():
+        candidates.append(raw)
+    else:
+        candidates.extend([Path.cwd() / raw, pipeline_dir / raw, raw])
+
+    candidates.extend(corrected_results_sibling_candidates(raw, pipeline_dir, leaf_is_file=False))
+
+    seen = set()
+    for candidate in candidates:
+        candidate = candidate.resolve()
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return candidate
     return candidates[0].resolve()
 
 
@@ -184,7 +224,89 @@ def sequence_position_customdata(n):
     return [[(i + 1, j + 1) for j in range(n)] for i in range(n)]
 
 
-def figure_for_protein(protein, grouped, scale_scope, global_zmax, args):
+def parse_listlike(value):
+    if isinstance(value, str):
+        return ast.literal_eval(value)
+    return value
+
+
+def resolve_test_csv_arg(result_root, pipeline_dir, test_csv):
+    if test_csv is not None:
+        raw = Path(test_csv).expanduser()
+        candidates = []
+        if raw.is_absolute():
+            candidates.append(raw)
+        else:
+            candidates.extend([Path.cwd() / raw, result_root / raw, result_root.parent / raw, pipeline_dir / raw, raw])
+            candidates.extend(corrected_results_sibling_candidates(raw, pipeline_dir, leaf_is_file=True))
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate.resolve()
+        return candidates[0].resolve()
+
+    candidates = [
+        result_root / "test_data_with_names.csv",
+        result_root.parent / "test_data_with_names.csv",
+        pipeline_dir / "data/test_data_with_names.csv",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return None
+
+
+def load_real_neq_map(path):
+    if path is None:
+        return {}, "No test CSV found; real Neq omitted from hover text."
+    df = pd.read_csv(path)
+    required = {"name", "sequence", "neq"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Test CSV missing required columns for real Neq: {sorted(missing)}")
+    out = {}
+    for row in df.itertuples(index=False):
+        name = str(row.name)
+        neq = np.asarray(parse_listlike(row.neq), dtype=float)
+        out[name] = {"sequence": str(row.sequence), "neq": neq}
+    return out, f"Real Neq loaded from: {path}"
+
+
+def neq_for_protein(protein, sequence, neq_map):
+    entry = neq_map.get(protein)
+    if not entry:
+        return None
+    neq = np.asarray(entry["neq"], dtype=float)
+    if len(neq) < len(sequence):
+        return None
+    if entry.get("sequence") and str(entry["sequence"])[: len(sequence)] != sequence:
+        return None
+    return neq[: len(sequence)]
+
+
+def hover_text(matrix, sequence, title, seeds, real_neq):
+    seeds_text = ",".join(str(s) for s in seeds)
+    text = []
+    for i in range(matrix.shape[0]):
+        row = []
+        query_neq = real_neq[i] if real_neq is not None and i < len(real_neq) else np.nan
+        query_neq_text = f"{query_neq:.6g}" if np.isfinite(query_neq) else "NA"
+        for j in range(matrix.shape[1]):
+            key_neq = real_neq[j] if real_neq is not None and j < len(real_neq) else np.nan
+            key_neq_text = f"{key_neq:.6g}" if np.isfinite(key_neq) else "NA"
+            row.append(
+                f"{title}<br>"
+                f"Seeds: {seeds_text}<br>"
+                f"Query: {i + 1}-{sequence[i]}<br>"
+                f"Query real Neq: {query_neq_text}<br>"
+                f"Key: {j + 1}-{sequence[j]}<br>"
+                f"Key real Neq: {key_neq_text}<br>"
+                f"Attention: {matrix[i, j]:.6g}"
+            )
+        text.append(row)
+    return text
+
+
+def figure_for_protein(protein, grouped, scale_scope, global_zmax, real_neq, args):
     matrices = {}
     sequence = None
     all_mats = []
@@ -218,7 +340,7 @@ def figure_for_protein(protein, grouped, scale_scope, global_zmax, args):
             fig.add_trace(
                 go.Heatmap(
                     z=matrix,
-                    text=hover_text(matrix, sequence, title, seeds_by_condition[condition]),
+                    text=hover_text(matrix, sequence, title, seeds_by_condition[condition], real_neq),
                     hoverinfo="text",
                     customdata=customdata,
                     colorscale=args.colorscale,
@@ -374,10 +496,11 @@ def plotly_script_tag(include_plotlyjs):
     return f"<script>{offline.get_plotlyjs()}</script>"
 
 
-def viewer_script(protein, pdb_text, position_map, has_structure):
+def viewer_script(protein, sequence, pdb_text, position_map, has_structure):
     return f"""
 <script>
 const PDB_TEXT = {json.dumps(pdb_text)};
+const SEQUENCE = {json.dumps(sequence)};
 const POSITION_MAP = {json.dumps(position_map)};
 const HAS_STRUCTURE = {json.dumps(bool(has_structure))};
 let viewer = null;
@@ -397,25 +520,49 @@ function baseStyle() {{
   viewer.setStyle({{}}, {{cartoon: {{color: "lightgray", opacity: 0.82}}}});
 }}
 
-function addResidueStyle(selection, color, sphereRadius, stickRadius) {{
+function addResidueStyle(selection, color) {{
   if (!selection) return false;
-  viewer.addStyle(selection, {{stick: {{color: color, radius: stickRadius}}}});
-  viewer.addStyle(selection, {{sphere: {{color: color, radius: sphereRadius, opacity: 0.95}}}});
+  viewer.setStyle(selection, {{cartoon: {{color: color, opacity: 1.0}}}});
   return true;
 }}
 
+function renderSequenceStrip() {{
+  const strip = document.getElementById("sequence-strip");
+  if (!strip || strip.children.length) return;
+  for (let i = 0; i < SEQUENCE.length; i++) {{
+    const span = document.createElement("span");
+    span.className = "seq-residue";
+    span.dataset.pos = String(i + 1);
+    span.title = String(i + 1) + "-" + SEQUENCE[i];
+    span.textContent = SEQUENCE[i];
+    strip.appendChild(span);
+  }}
+}}
+
+function highlightSequence(queryPos, keyPos) {{
+  document.querySelectorAll(".seq-residue").forEach(function(el) {{
+    el.classList.remove("query-highlight", "key-highlight");
+  }});
+  const queryEl = document.querySelector('.seq-residue[data-pos="' + queryPos + '"]');
+  const keyEl = document.querySelector('.seq-residue[data-pos="' + keyPos + '"]');
+  if (queryEl) queryEl.classList.add("query-highlight");
+  if (keyEl) keyEl.classList.add("key-highlight");
+}}
+
 function highlightResidues(queryPos, keyPos) {{
-  if (!viewer) return;
-  baseStyle();
-  const querySelection = residueSelection(queryPos);
-  const keySelection = residueSelection(keyPos);
-  addResidueStyle(querySelection, "orange", 0.46, 0.18);
-  addResidueStyle(keySelection, "cyan", 0.78, 0.34);
+  if (viewer) {{
+    baseStyle();
+    const querySelection = residueSelection(queryPos);
+    const keySelection = residueSelection(keyPos);
+    addResidueStyle(querySelection, "orange");
+    addResidueStyle(keySelection, "cyan");
+    viewer.render();
+  }}
+  highlightSequence(queryPos, keyPos);
   const status = document.getElementById("hover-status");
   if (status) {{
     status.textContent = "Query residue " + queryPos + " highlighted orange; key residue " + keyPos + " highlighted cyan.";
   }}
-  viewer.render();
 }}
 
 function initStructureViewer() {{
@@ -440,6 +587,7 @@ function initHoverBridge() {{
 }}
 
 document.addEventListener("DOMContentLoaded", function() {{
+  renderSequenceStrip();
   initStructureViewer();
   initHoverBridge();
 }});
@@ -447,7 +595,18 @@ document.addEventListener("DOMContentLoaded", function() {{
 """
 
 
-def write_protein_page(fig, protein, output_html, pdb_path, pdb_text, position_map, map_source, zmax, args):
+def sequence_strip_html(sequence):
+    spans = []
+    for i, aa in enumerate(sequence, start=1):
+        label = f"{i}-{aa}"
+        spans.append(
+            "<span class='seq-residue' "
+            f"data-pos='{i}' title='{html.escape(label)}'>{html.escape(aa)}</span>"
+        )
+    return "".join(spans)
+
+
+def write_protein_page(fig, protein, sequence, output_html, pdb_path, pdb_text, position_map, map_source, zmax, args):
     plot_json = json.dumps(fig.to_plotly_json(), cls=PlotlyJSONEncoder)
     has_structure = bool(pdb_text)
     missing_message = ""
@@ -470,6 +629,11 @@ def write_protein_page(fig, protein, output_html, pdb_path, pdb_text, position_m
         ".layout{display:flex;align-items:flex-start;gap:18px;padding:18px 24px 28px;}",
         ".plot-panel{min-width:0;overflow:auto;}",
         ".structure-panel{width:420px;min-width:360px;position:sticky;top:16px;}",
+        ".sequence-label{font-weight:bold;margin:0 0 6px;}",
+        "#sequence-strip{font-family:Consolas,Menlo,monospace;font-size:12px;line-height:1.75;word-break:break-all;border:1px solid #ccc;border-bottom:0;padding:8px;background:#fafafa;max-height:132px;overflow:auto;}",
+        ".seq-residue{display:inline-block;min-width:1ch;padding:0 2px;border-radius:3px;color:#333;}",
+        ".seq-residue.query-highlight{background:orange;color:#111;}",
+        ".seq-residue.key-highlight{background:cyan;color:#111;}",
         "#structure-viewer{width:100%;height:560px;border:1px solid #ccc;background:#fff;}",
         ".viewer-title{font-weight:bold;margin:0 0 8px;}",
         ".viewer-note,.missing,#hover-status{font-size:13px;line-height:1.45;color:#444;margin-top:8px;}",
@@ -489,15 +653,17 @@ def write_protein_page(fig, protein, output_html, pdb_path, pdb_text, position_m
         "<main class='layout'>",
         "<section class='plot-panel'><div id='attention-plot'></div></section>",
         "<aside class='structure-panel'>",
+        "<div class='sequence-label'>Sequence</div>",
+        f"<div id='sequence-strip'>{sequence_strip_html(sequence)}</div>",
         "<div class='viewer-title'>3D structure</div>",
         "<div id='structure-viewer'></div>",
         missing_message,
         "<div id='hover-status'>Hover over a heatmap cell to highlight query and key residues.</div>",
-        "<div class='viewer-note'>Key/x-axis residues are drawn larger in cyan; query/y-axis residues are orange.</div>",
+        "<div class='viewer-note'>Key/x-axis residues are cyan; query/y-axis residues are orange.</div>",
         "</aside></main>",
         f"<script>const ATTENTION_FIG = {plot_json};",
         "Plotly.newPlot('attention-plot', ATTENTION_FIG.data, ATTENTION_FIG.layout, {responsive: true});</script>",
-        viewer_script(protein, pdb_text, position_map, has_structure),
+        viewer_script(protein, sequence, pdb_text, position_map, has_structure),
         "</body></html>",
     ]
     Path(output_html).write_text("\n".join(parts))
@@ -535,9 +701,9 @@ def main():
     args = parse_args()
     if args.seed_mode == "single" and args.seed is None:
         raise ValueError("--seed is required when --seed_mode single.")
-    result_root = Path(args.result_root).expanduser().resolve()
     pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
-    manifest_path = resolve_manifest_arg(result_root, args.manifest_tsv)
+    result_root = resolve_result_root_arg(args.result_root, pipeline_dir)
+    manifest_path = resolve_manifest_arg(result_root, pipeline_dir, args.manifest_tsv)
     if not manifest_path.exists():
         raise FileNotFoundError(f"Missing manifest: {manifest_path}")
 
@@ -564,15 +730,24 @@ def main():
     else:
         global_zmax = np.nan
 
+    test_csv_path = resolve_test_csv_arg(result_root, pipeline_dir, args.test_csv)
+    neq_map, neq_summary = load_real_neq_map(test_csv_path)
     position_maps, mapping_summary = load_position_map(args.position_map_csv)
-    structure_dir = Path(args.structure_dir).expanduser() if args.structure_dir else output_dir / "pdb_cache"
+    if args.structure_dir:
+        structure_dir = Path(args.structure_dir).expanduser()
+    else:
+        result_pdb_cache = result_root / "pdb_cache"
+        structure_dir = result_pdb_cache if result_pdb_cache.exists() else output_dir / "pdb_cache"
     structure_dir.mkdir(parents=True, exist_ok=True)
     protein_pages = []
     structure_notes = []
     map_notes = []
+    neq_notes = []
 
     for protein in proteins:
-        fig, sequence, protein_zmax = figure_for_protein(protein, grouped, args.scale_scope, global_zmax, args)
+        _, sequence0, _ = averaged_matrix(grouped, required_conditions[0], protein)
+        real_neq = neq_for_protein(protein, sequence0, neq_map)
+        fig, sequence, protein_zmax = figure_for_protein(protein, grouped, args.scale_scope, global_zmax, real_neq, args)
         zmax = global_zmax if args.scale_scope == "global" else protein_zmax
         pos_map, map_source = position_map_for_protein(protein, sequence, position_maps)
         pdb_path, candidates, structure_source = find_or_download_structure(
@@ -580,13 +755,14 @@ def main():
         )
         pdb_text = pdb_path.read_text() if pdb_path else ""
         page = output_dir / f"{safe_name(protein)}_attention_structure_grid.html"
-        write_protein_page(fig, protein, page, pdb_path, pdb_text, pos_map, map_source, zmax, args)
+        write_protein_page(fig, protein, sequence, page, pdb_path, pdb_text, pos_map, map_source, zmax, args)
         protein_pages.append((protein, page, pdb_path, structure_source))
         structure_notes.append(
             f"  {protein}: {pdb_path if pdb_path else 'missing'}; {structure_source} "
             f"(tried: {', '.join(str(c) for c in candidates)})"
         )
         map_notes.append(f"  {protein}: {map_source}")
+        neq_notes.append(f"  {protein}: {'real Neq loaded' if real_neq is not None else 'real Neq unavailable or sequence mismatch'}")
 
     display_zmax = global_zmax if args.scale_scope == "global" else "per-protein"
     summary = [
@@ -600,6 +776,7 @@ def main():
         f"Structure pattern: {args.structure_pattern}",
         f"PDB download mode: {args.download_pdb}",
         f"PDB download URL template: {args.pdb_download_url}",
+        f"Real Neq: {neq_summary}",
         f"Position mapping: {mapping_summary}",
         "Default mapping assumption: without --position_map_csv, protein IDs are assumed to look like 3d7a_B; "
         "the chain is the suffix after the final underscore and seq_pos maps directly to pdb_resi.",
@@ -609,6 +786,8 @@ def main():
         *structure_notes,
         "Residue mapping sources:",
         *map_notes,
+        "Real Neq sources:",
+        *neq_notes,
         f"Seed mode: {args.seed_mode}",
         f"Scale scope: {args.scale_scope}",
         f"zmax: {display_zmax}",
