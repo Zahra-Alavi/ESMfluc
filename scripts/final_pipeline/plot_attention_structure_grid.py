@@ -26,7 +26,6 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from plotly.utils import PlotlyJSONEncoder
 
-from analyze_attention_row_modes import resolve_manifest_path
 from plot_attention_source_grid import (
     GRID,
     averaged_matrix,
@@ -35,7 +34,6 @@ from plot_attention_source_grid import (
     compute_zmax,
     condition_names,
     hover_text,
-    load_condition_records,
     safe_name,
     ticks,
 )
@@ -103,6 +101,83 @@ def parse_args():
         help="Optional CSV with columns: protein,seq_pos,pdb_chain,pdb_resi.",
     )
     return p.parse_args()
+
+
+def resolve_manifest_arg(result_root, manifest_tsv):
+    if manifest_tsv is None:
+        return (result_root / "manifest_attention_sources.tsv").resolve()
+    raw = Path(manifest_tsv).expanduser()
+    candidates = []
+    if raw.is_absolute():
+        candidates.append(raw)
+    else:
+        candidates.extend([
+            Path.cwd() / raw,
+            result_root / raw,
+            result_root.parent / raw,
+            raw,
+        ])
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0].resolve()
+
+
+def resolve_attention_path(path_value, result_root, pipeline_dir):
+    path = Path(str(path_value))
+    candidates = []
+    if path.is_absolute():
+        candidates.append(path)
+    else:
+        candidates.extend([
+            result_root / path,
+            result_root.parent / path,
+            pipeline_dir / path,
+            Path.cwd() / path,
+            path,
+        ])
+    parts = path.parts
+    if "runs" in parts:
+        suffix = Path(*parts[parts.index("runs"):])
+        candidates.extend([result_root / suffix, result_root.parent / suffix])
+    if len(parts) >= 3:
+        candidates.append(result_root / Path(*parts[-3:]))
+        candidates.append(result_root.parent / Path(*parts[-3:]))
+    seen = set()
+    for candidate in candidates:
+        candidate = candidate.expanduser()
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0].expanduser()
+
+
+def load_condition_records_robust(manifest, result_root, pipeline_dir, required_conditions, seed_mode, seed):
+    grouped = {}
+    for condition in required_conditions:
+        sub = manifest[manifest["condition"] == condition].copy()
+        if seed_mode == "single":
+            sub = sub[sub["seed"].astype(int) == int(seed)]
+        if sub.empty:
+            raise ValueError(f"No manifest rows found for condition={condition!r}.")
+        grouped[condition] = []
+        for run in sub.itertuples(index=False):
+            path = resolve_attention_path(run.attention_json, result_root, pipeline_dir)
+            if not path.exists():
+                raise FileNotFoundError(f"Missing attention JSON for {condition}: {path}")
+            grouped[condition].append({
+                "seed": int(run.seed),
+                "path": path,
+                "records": json.loads(path.read_text()),
+            })
+            grouped[condition][-1]["records"] = {
+                str(record["name"]): record
+                for record in grouped[condition][-1]["records"]
+                if "name" in record and "attention_weights" in record
+            }
+    return grouped
 
 
 def sequence_position_customdata(n):
@@ -462,8 +537,7 @@ def main():
         raise ValueError("--seed is required when --seed_mode single.")
     result_root = Path(args.result_root).expanduser().resolve()
     pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
-    manifest_default = result_root / "manifest_attention_sources.tsv"
-    manifest_path = resolve_manifest_path(result_root, args.manifest_tsv or manifest_default)
+    manifest_path = resolve_manifest_arg(result_root, args.manifest_tsv)
     if not manifest_path.exists():
         raise FileNotFoundError(f"Missing manifest: {manifest_path}")
 
@@ -475,7 +549,7 @@ def main():
 
     manifest = pd.read_csv(manifest_path, sep="\t")
     required_conditions = condition_names()
-    grouped = load_condition_records(manifest, result_root, pipeline_dir, required_conditions, args.seed_mode, args.seed)
+    grouped = load_condition_records_robust(manifest, result_root, pipeline_dir, required_conditions, args.seed_mode, args.seed)
     available = common_proteins(grouped)
     proteins = choose_proteins(available, args.proteins, args.n_proteins, args.random_seed)
     selected_path.write_text("\n".join(proteins) + "\n")
