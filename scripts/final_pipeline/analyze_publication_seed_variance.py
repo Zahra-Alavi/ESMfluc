@@ -181,10 +181,18 @@ def protein_performance(record, labels_by_sequence):
     if sequence not in labels_by_sequence:
         return None
 
+    if "flexible_scores" not in record:
+        raise ValueError(
+            f"{record.get('name', '<unknown>')}: attention record is missing "
+            "flexible_scores. Re-extract attention with the corrected "
+            "Attention/get_attn.py; hard class predictions cannot be used for "
+            "AUROC, AUPRC, or Neq-score correlation."
+        )
+
     y_true = labels_by_sequence[sequence]["class"]
     neq = labels_by_sequence[sequence]["neq"]
     y_pred = np.asarray(record["neq_preds"], dtype=int)
-    scores = np.asarray(record.get("flexible_scores", record["neq_preds"]), dtype=float)
+    scores = np.asarray(record["flexible_scores"], dtype=float)
 
     n = min(len(y_true), len(y_pred), len(scores))
     y_true = y_true[:n]
