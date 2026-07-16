@@ -466,11 +466,9 @@ def main():
         rows.append(row_dict)
 
         
-    columns = ["name", "sequence", "attention_weights", "neq_preds"]
-    if ss_available:
-        columns.append("ss_pred")
-
-    final_df = pd.DataFrame(rows, columns=columns)
+    # Preserve every output placed in row_dict. Restricting the DataFrame to a
+    # legacy column list silently discarded flexible_scores and class_probs.
+    final_df = pd.DataFrame(rows)
     print(f"Constructed final DF with {len(final_df)} rows")
 
     final_df.to_json(args.output, orient="records", indent=2)
