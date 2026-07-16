@@ -7,6 +7,7 @@ import os
 import datetime
 import time, json
 import re
+import random
 try:
     import psutil
 except ImportError:
@@ -89,6 +90,39 @@ from models import (
     ESMLinearTokenClassifier,
     ESM3Wrapper,
 )
+
+
+def set_global_seed(seed):
+    """Configure reproducible training for a fixed software/hardware stack.
+
+    Call this before constructing models or DataLoaders so the seed controls
+    task-layer initialization, dropout, shuffling, sampling, and CUDA kernels.
+    Deterministic algorithms fail loudly instead of silently using a known
+    nondeterministic operation.
+    """
+    seed = int(seed)
+
+    # cuBLAS requires this setting before CUDA context initialization for
+    # deterministic matrix multiplication on CUDA 10.2 and newer.
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    # The publication runner also exports this before Python starts. Setting it
+    # here records the intended value for direct main.py/train.py use.
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True)
+
+    print(
+        f"Reproducibility configured: seed={seed}, "
+        "deterministic_algorithms=True, cudnn_benchmark=False"
+    )
 
 
 def load_esm_tokenizer(model_name):
@@ -346,7 +380,8 @@ def set_up_classification_model(args):
     
     
 def train(args):
-    
+    set_global_seed(args.seed)
+
     run_folder = create_run_folder(args.result_foldername)
         
     model = set_up_classification_model(args)
@@ -875,6 +910,7 @@ def train_regression(args):
     Training loop for regression tasks.
     This is a NEW function - does not modify the existing train() function.
     """
+    set_global_seed(args.seed)
     run_folder = create_run_folder(args.result_foldername)
     
     # Set up model, optimizer, scheduler
@@ -1238,6 +1274,7 @@ def evaluate_ordinal(model, data_loader, criterion, args):
 
 def train_ordinal(args):
     """Training loop for ordinal tasks."""
+    set_global_seed(args.seed)
     run_folder = create_run_folder(args.result_foldername)
 
     model = set_up_ordinal_model(args)
