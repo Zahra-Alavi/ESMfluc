@@ -26,6 +26,7 @@
 #   GPU_ESM3=1
 #   MIXED_PRECISION=1
 #   EXTRACT_ESM2_BACKBONE_ATTN=1
+#   REEXTRACT_ATTENTION=0
 # =============================================================================
 
 set -euo pipefail
@@ -58,6 +59,7 @@ GPU_ESM3="${GPU_ESM3:-1}"
 MIXED_PRECISION="${MIXED_PRECISION:-1}"
 AMP_DTYPE="${AMP_DTYPE:-fp16}"
 SKIP_EXISTING="${SKIP_EXISTING:-1}"
+REEXTRACT_ATTENTION="${REEXTRACT_ATTENTION:-0}"
 EXTRACT_ESM2_BACKBONE_ATTN="${EXTRACT_ESM2_BACKBONE_ATTN:-1}"
 BACKBONE_OUTPUT_NAME="${BACKBONE_OUTPUT_NAME:-backbone_attention.json}"
 
@@ -84,6 +86,7 @@ echo "ESM3 top-4 freeze range: ${ESM3_TOP4_FREEZE}"
 echo "ESM2 top-28 freeze range: ${ESM2_TOP28_FREEZE}"
 echo "ESM3 top-28 freeze range: ${ESM3_TOP28_FREEZE}"
 echo "Extract ESM2 backbone attention: ${EXTRACT_ESM2_BACKBONE_ATTN}"
+echo "Re-extract model predictions/attention: ${REEXTRACT_ATTENTION}"
 echo ""
 
 echo "condition	seed	architecture	esm_model	is_esm3	freeze_mode	freeze_layers	run_dir	attention_json	backbone_attention_json	checkpoint" > "$MANIFEST"
@@ -183,7 +186,7 @@ run_one() {
                 ;;
         esac
 
-        CUDA_VISIBLE_DEVICES="$gpu_id" python main.py "${train_args[@]}" \
+        PYTHONHASHSEED="$seed" CUDA_VISIBLE_DEVICES="$gpu_id" python main.py "${train_args[@]}" \
             2>&1 | tee "${run_dir}/train.log"
     else
         echo "Checkpoint exists and SKIP_EXISTING=${SKIP_EXISTING}; skipping training."
@@ -197,7 +200,8 @@ run_one() {
         exit 1
     fi
 
-    if [[ ! -f "$attention_json" || "$SKIP_EXISTING" == "0" ]]; then
+    if [[ ! -f "$attention_json" || "$SKIP_EXISTING" == "0" ]] \
+        || enabled "$REEXTRACT_ATTENTION"; then
         attn_args=(
             --checkpoint "$checkpoint"
             --fasta_file "$FASTA"
@@ -247,7 +251,7 @@ attention = json.loads(attention_path.read_text())
 by_name = {record["name"]: record for record in attention}
 for record in backbone:
     src = by_name.get(record["name"], {})
-    for key in ("neq_preds", "flexible_scores", "ss_pred"):
+    for key in ("neq_preds", "flexible_scores", "class_probs", "ss_pred"):
         if key in src:
             record[key] = src[key]
 backbone_path.write_text(json.dumps(backbone, indent=2) + "\n")
