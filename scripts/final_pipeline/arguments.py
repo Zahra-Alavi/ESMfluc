@@ -19,6 +19,10 @@ def parse_arguments():
     parser.add_argument("--train_data_file", type=str, default="../../data/train_data.csv",
                         help="Path to the training data CSV file.default=../../data/train_data.csv")
 
+    parser.add_argument("--validation_data_file", type=str, default=None,
+                        help=("Path to a fixed validation CSV. Required whenever early stopping "
+                              "or ReduceLROnPlateau is enabled; it is never derived from --seed."))
+
     parser.add_argument("--test_data_file", type=str, default="../data/test_data.csv",
                         help="Path to the test data CSV file.default=../data/test_data.csv")
 

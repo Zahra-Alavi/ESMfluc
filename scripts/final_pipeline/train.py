@@ -17,7 +17,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from sklearn.model_selection import train_test_split
 import torch 
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
@@ -33,6 +32,24 @@ from sklearn.metrics import classification_report, confusion_matrix, ConfusionMa
 from data_utils import create_classification_func, load_and_preprocess_data, SequenceClassificationDataset, collate_fn_sequence, compute_sampling_weights
 
 from transformers import EsmModel, EsmTokenizer
+
+
+def assert_exact_sequence_disjoint(**datasets):
+    """Fail fast if any exact sequence occurs in more than one named split."""
+    sequence_sets = {
+        name: set(frame["sequence"].astype(str))
+        for name, frame in datasets.items()
+        if frame is not None
+    }
+    names = list(sequence_sets)
+    for left_index, left in enumerate(names):
+        for right in names[left_index + 1:]:
+            overlap = sequence_sets[left] & sequence_sets[right]
+            if overlap:
+                raise ValueError(
+                    f"Data leakage: {len(overlap)} exact sequence(s) occur in both "
+                    f"{left} and {right}. Use the fixed grouped split files."
+                )
 
 try:
     from esm.pretrained import ESM3_sm_open_v0
@@ -400,6 +417,11 @@ def train(args):
     labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
     train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
     test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
+    val_data = (
+        load_and_preprocess_data(args.validation_data_file, labeled_neq)
+        if args.validation_data_file else None
+    )
+    assert_exact_sequence_disjoint(train=train_data, validation=val_data, test=test_data)
 
     # Preprocessing data
     tokenizer = load_esm_tokenizer(args.esm_model)
@@ -414,7 +436,13 @@ def train(args):
     need_val = (args.lr_scheduler == "reduce_on_plateau") or (args.patience and args.patience > 0)
 
     if need_val:
-        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, stratify=None, random_state=args.seed)
+        if not args.validation_data_file:
+            raise ValueError(
+                "--validation_data_file is required when validation is used. "
+                "Validation membership must not be derived from the training seed."
+            )
+        X_val = tokenize(val_data['sequence'], tokenizer)
+        y_val = val_data['neq_class'].tolist()
         val_dataset = SequenceClassificationDataset(X_val, y_val)
         val_loader = DataLoader(
             val_dataset,
@@ -930,6 +958,8 @@ def train_regression(args):
     print(f"Loading regression data from {args.train_data_file}")
     train_data = load_regression_data(args.train_data_file)
     test_data = load_regression_data(args.test_data_file)
+    val_data = load_regression_data(args.validation_data_file) if args.validation_data_file else None
+    assert_exact_sequence_disjoint(train=train_data, validation=val_data, test=test_data)
     
     # Tokenize
     tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
@@ -949,12 +979,16 @@ def train_regression(args):
     print(f"Original test size: {len(X_test)} sequences")
     
     if need_val:
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_train, y_train, test_size=0.2, random_state=args.seed
-        )
-        print(f"After split:")
-        print(f"  - Train: {len(X_train)} sequences ({len(X_train)/(len(X_train)+len(X_val))*100:.1f}%)")
-        print(f"  - Val: {len(X_val)} sequences ({len(X_val)/(len(X_train)+len(X_val))*100:.1f}%)")
+        if not args.validation_data_file:
+            raise ValueError(
+                "--validation_data_file is required when validation is used. "
+                "Validation membership must not be derived from the training seed."
+            )
+        X_val = tokenize(val_data['sequence'], tokenizer)
+        y_val = val_data['neq'].tolist()
+        print(f"Fixed split sizes:")
+        print(f"  - Train: {len(X_train)} sequences")
+        print(f"  - Val: {len(X_val)} sequences")
         print(f"  - Test: {len(X_test)} sequences (held out)")
         val_dataset = SequenceRegressionDataset(X_val, y_val)
         val_loader = DataLoader(
@@ -1292,6 +1326,11 @@ def train_ordinal(args):
     labeled_neq = create_classification_func(args.num_classes, args.neq_thresholds)
     train_data = load_and_preprocess_data(args.train_data_file, labeled_neq)
     test_data = load_and_preprocess_data(args.test_data_file, labeled_neq)
+    val_data = (
+        load_and_preprocess_data(args.validation_data_file, labeled_neq)
+        if args.validation_data_file else None
+    )
+    assert_exact_sequence_disjoint(train=train_data, validation=val_data, test=test_data)
 
     tokenizer = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
     X_train = tokenize(train_data['sequence'], tokenizer)
@@ -1302,7 +1341,13 @@ def train_ordinal(args):
     val_loader = None
     need_val = (args.lr_scheduler == "reduce_on_plateau") or (args.patience and args.patience > 0)
     if need_val:
-        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, stratify=None, random_state=args.seed)
+        if not args.validation_data_file:
+            raise ValueError(
+                "--validation_data_file is required when validation is used. "
+                "Validation membership must not be derived from the training seed."
+            )
+        X_val = tokenize(val_data['sequence'], tokenizer)
+        y_val = val_data['neq_class'].tolist()
         val_dataset = SequenceClassificationDataset(X_val, y_val)
         val_loader = DataLoader(
             val_dataset,

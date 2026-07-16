@@ -19,7 +19,7 @@
 #
 # Useful overrides:
 #   RESULT_SET=publication_comparable_v1
-#   SEEDS="42 123 2025"
+#   SEEDS="1 2 3"
 #   BATCH=1
 #   EPOCHS=80
 #   GPU_ESM2=0
@@ -42,12 +42,17 @@ MANIFEST="${RESULT_ROOT}/manifest.tsv"
 mkdir -p "$LOG_DIR"
 exec > >(tee -a "${LOG_DIR}/train_and_extract.log") 2>&1
 
-TRAIN_CSV="${TRAIN_CSV:-../../data/train_data.csv}"
-TEST_CSV="${TEST_CSV:-../../data/test_data.csv}"
-TEST_CSV_WITH_NAMES="${TEST_CSV_WITH_NAMES:-../../data/test_data_with_names.csv}"
-FASTA="${FASTA:-../../data/test_data_sequences.fasta}"
+SPLIT_DIR="${SPLIT_DIR:-data_splits/atlas_grouped_v1}"
+TRAIN_CSV="${TRAIN_CSV:-${SPLIT_DIR}/train_grouped_v1.csv}"
+VAL_CSV="${VAL_CSV:-${SPLIT_DIR}/validation_grouped_v1.csv}"
+TEST_CSV="${TEST_CSV:-${SPLIT_DIR}/test_grouped_v1.csv}"
+TEST_CSV_WITH_NAMES="${TEST_CSV_WITH_NAMES:-${TEST_CSV}}"
+FASTA="${FASTA:-${SPLIT_DIR}/test_grouped_v1.fasta}"
+SPLIT_MANIFEST="${SPLIT_MANIFEST:-${SPLIT_DIR}/split_manifest_grouped_v1.csv}"
+GROUP_MANIFEST="${GROUP_MANIFEST:-${SPLIT_DIR}/group_manifest_grouped_v1.csv}"
+SPLIT_SUMMARY="${SPLIT_SUMMARY:-${SPLIT_DIR}/split_summary_grouped_v1.json}"
 
-SEEDS="${SEEDS:-42 123 2025}"
+SEEDS="${SEEDS:-1 2 3}"
 EPOCHS="${EPOCHS:-80}"
 BATCH="${BATCH:-1}"
 PATIENCE="${PATIENCE:-5}"
@@ -80,6 +85,7 @@ enabled() {
 echo "Result set: ${RESULT_SET}"
 echo "Result root: ${SCRIPT_DIR}/${RESULT_ROOT}"
 echo "Seeds: ${SEEDS}"
+echo "Fixed validation CSV: ${VAL_CSV}"
 echo "Batch size used for every run: ${BATCH}"
 echo "ESM2 top-4 freeze range: ${ESM2_TOP4_FREEZE}"
 echo "ESM3 top-4 freeze range: ${ESM3_TOP4_FREEZE}"
@@ -88,6 +94,14 @@ echo "ESM3 top-28 freeze range: ${ESM3_TOP28_FREEZE}"
 echo "Extract ESM2 backbone attention: ${EXTRACT_ESM2_BACKBONE_ATTN}"
 echo "Re-extract model predictions/attention: ${REEXTRACT_ATTENTION}"
 echo ""
+
+for required_file in "$TRAIN_CSV" "$VAL_CSV" "$TEST_CSV" "$FASTA" \
+                     "$SPLIT_MANIFEST" "$GROUP_MANIFEST" "$SPLIT_SUMMARY"; do
+    if [[ ! -f "$required_file" ]]; then
+        echo "ERROR: required fixed-split file not found: ${required_file}" >&2
+        exit 1
+    fi
+done
 
 echo "condition	seed	architecture	esm_model	is_esm3	freeze_mode	freeze_layers	run_dir	attention_json	backbone_attention_json	checkpoint" > "$MANIFEST"
 
@@ -110,6 +124,7 @@ PY
 
 common_train_args=(
     --train_data_file "$TRAIN_CSV"
+    --validation_data_file "$VAL_CSV"
     --test_data_file "$TEST_CSV"
     --hidden_size 512
     --num_layers 3
@@ -277,8 +292,13 @@ for seed in $SEEDS; do
     run_one "esm2_frozen_linear" "$seed" "esm_linear" "$ESM2_MODEL" "false" "frozen" "" "$GPU_ESM2"
 done
 
+cp "$TRAIN_CSV" "${RESULT_ROOT}/train_data.csv"
+cp "$VAL_CSV" "${RESULT_ROOT}/validation_data.csv"
 cp "$TEST_CSV" "${RESULT_ROOT}/test_data.csv"
 cp "$FASTA" "${RESULT_ROOT}/test_data_sequences.fasta"
+cp "$SPLIT_MANIFEST" "${RESULT_ROOT}/split_manifest.csv"
+cp "$GROUP_MANIFEST" "${RESULT_ROOT}/group_manifest.csv"
+cp "$SPLIT_SUMMARY" "${RESULT_ROOT}/split_summary.json"
 if [[ -f "$TEST_CSV_WITH_NAMES" ]]; then
     cp "$TEST_CSV_WITH_NAMES" "${RESULT_ROOT}/test_data_with_names.csv"
 fi

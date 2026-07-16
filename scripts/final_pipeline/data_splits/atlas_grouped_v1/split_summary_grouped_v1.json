@@ -1,0 +1,113 @@
+{
+  "balance_score": 8.033642334316971e-05,
+  "counts": {
+    "test": 208,
+    "train": 967,
+    "validation": 208
+  },
+  "dataset_version": "atlas_grouped_v1",
+  "ecod": {
+    "sha256": "73da73a314e59fda27f734909f30f3df6d852751358047cd74231a4d56512299",
+    "source_url": "http://prodata.swmed.edu/ecod/distributions/ecod.develop285.domains.txt",
+    "version": "develop285"
+  },
+  "ecod_coverage": "1383/1383",
+  "excluded_count": 7,
+  "fractions_requested": {
+    "test": 0.15,
+    "train": 0.7,
+    "validation": 0.15
+  },
+  "inputs": {
+    "atlas_csv": {
+      "path": "../../data/atlas.csv",
+      "sha256": "50ee4ba089719bed326da34f285e699f82d81358ab60397f411c02118a20b187"
+    },
+    "duplicate_neq_tables": {
+      "1b2s_E_Neq.tsv": "2b400e79a266ab3fffee0e828cc8305903488dd2e47613cf2315b2d7b04d4dd3",
+      "1b2s_F_Neq.tsv": "e427da868da2abaed0cb73114de3b95efc25959dc358218646887bfd51067d40",
+      "1vlb_A_Neq.tsv": "72ee361a12373ef1f97e0e0370761f5e760052b08464fbefa81185b2938c047e",
+      "1x6i_A_Neq.tsv": "d00a2d71ac79bcc7163cd434e97d5ce3f02f1f79e5b669da1c57444ced669722",
+      "1x6j_A_Neq.tsv": "40843cf5da4f188fefa034e7a478cca02a3c6096aaeb221003fbb99e84f8fb1d",
+      "1y6i_A_Neq.tsv": "811ea3815cf92addaed35959cbcf8854ed4975b70d85acf140a74b8a0f98888c",
+      "3f0o_B_Neq.tsv": "b5186890ed1cde58a3fa99f5fce654170425ced0d972fe9a316ba4feb4e76d28",
+      "3f0p_A_Neq.tsv": "6b7be89c81a6b43f6e657a20491d2f778509e033a7b1817362cad999123f866c",
+      "3l4p_A_Neq.tsv": "3d240d73b9adfe26b8c75781d47d0f975dc8de6de9a0c6a6bec2423c5d0d7a6e",
+      "3m6z_A_Neq.tsv": "e79e85a067671576b006524836ec923e919f73baf4eea767fd98b0f13f9e45f0",
+      "3m7d_A_Neq.tsv": "6bf2564b4fbb230ae104dff7b2950dbd5731fcf6debb0321073ec267fdc5002e",
+      "3ot9_B_Neq.tsv": "daa2eaf813d719d9d6584da4aeb71bf77f1a973228c0a3f72ab6a2c44a1bd8f7",
+      "3se9_G_Neq.tsv": "782fa24f5b3d4dc6d7481280f283916a4ed2d1833793dc7f91bd9bb4f9dc9de5",
+      "3tgt_A_Neq.tsv": "e190cc6b826f4c4cb295fe799937276e51caccde05381bc2b13241c442d3c249",
+      "3twz_A_Neq.tsv": "81967aa82c24a340466bd8e14a143458d0db061c8a9787a8e701e361e3190e6f",
+      "5a5y_A_Neq.tsv": "ae54a4d9c7ea2e0dfc3383b953c9632e0331b72ff99c3ac86e87ff41e3ba2e43",
+      "5a67_A_Neq.tsv": "727bb110a1debef1363d073dad4cc0dc0091f77a0df9e6bc89e83ca0ab49a37c",
+      "5erq_A_Neq.tsv": "3ba5408dd24bbf86ad1b7af83772a23fc41f22d7830a90a1a8afe52beebb7aa5",
+      "5ert_A_Neq.tsv": "7e510989d0e9664ebbbdf141f4a8794dee29cb0bbbf06b9b1b34adcc8dc9e37f",
+      "5ori_A_Neq.tsv": "f847dbd336c37bb110b55dbd62a8a0d97451e96ce3a0b2497fbdec95ea06db37",
+      "5osw_A_Neq.tsv": "3c7b260769b95f52df23816c616765d35855266049bfeb818fdd4368e50e96d3",
+      "7e2s_A_Neq.tsv": "a14644ad9b8fe53dd8de7df65f75f80189f4119932fc38c2b17c50d3be0ee547"
+    },
+    "neq_csv": {
+      "path": "../../data/neq_original_data.csv",
+      "sha256": "b632dacbaca1ba01d45f6ca3ce87021448004fb1e13a7c37cae6832d2a5411ac"
+    }
+  },
+  "largest_union_group": 386,
+  "leakage_failures": {
+    "ecod_x_group": 0,
+    "exact_sequence": 0,
+    "mmseqs_cluster": 0,
+    "mmseqs_cross_split_edges": 0,
+    "union_group": 0
+  },
+  "mmseqs": {
+    "command": [
+      "mmseqs",
+      "easy-search",
+      "<output_dir>/mmseqs/atlas.fasta",
+      "<output_dir>/mmseqs/atlas.fasta",
+      "<output_dir>/mmseqs/all_vs_all.tsv",
+      "<output_dir>/mmseqs/tmp",
+      "--min-seq-id",
+      "0.3",
+      "-c",
+      "0.8",
+      "--cov-mode",
+      "0",
+      "--alignment-mode",
+      "3",
+      "-s",
+      "7.5",
+      "--max-seqs",
+      "10000",
+      "--threads",
+      "1",
+      "--format-output",
+      "query,target,fident,qcov,tcov,evalue"
+    ],
+    "min_sequence_identity": 0.3,
+    "minimum_coverage_of_both_sequences": 0.8,
+    "sensitivity": 7.5,
+    "version": "5d152c612b6ad2a56f657b7a02c127eceaea2a75"
+  },
+  "n_ecod_x_groups": 1142,
+  "n_mmseqs_qualifying_directed_hits": 1540,
+  "n_union_groups": 700,
+  "output_sha256": {
+    "ecod_v285_annotations.csv": "47067f7892bfa1fa63b0e983dbcf428a8e5676a4f64d88a5099c7a2fb7fedd7f",
+    "excluded_entries.csv": "0ddb24a77e3c8abd4f9a4f9acecf0488c3ae6599de80fb1cd570d8cacff3db45",
+    "group_manifest_grouped_v1.csv": "4bc040921def9e6d236c708742e02e5609b816620dcb254488d1d16f443a7857",
+    "mmseqs/all_vs_all.tsv": "99eaae7d950a137ff6c1f9fa788ce370302430a7a5348e277df630a182d8a0c6",
+    "split_manifest_grouped_v1.csv": "9520ed6d74c05ffe735cf102dc36f0a9cc2acc1eaec5335ca9a9e663b7733806",
+    "test_grouped_v1.csv": "6d9b67ab98c51ac9f72d57e23465a327ca7b13f63e74da77cae1ab182543655c",
+    "train_grouped_v1.csv": "6d97b013429d2c712bff741a60250b4239f10bd9cadedb3625f0c9a189df8dff",
+    "validation_grouped_v1.csv": "40b73c31d30a1d97e2e4b2f6d1fbfeeefaa7cfeea9daf1cd48f590bb07b3b3c2"
+  },
+  "residue_counts": {
+    "test": 47751,
+    "train": 223573,
+    "validation": 47875
+  },
+  "split_seed": 42,
+  "split_seed_role": "split construction only; training seeds do not affect membership"
+}
