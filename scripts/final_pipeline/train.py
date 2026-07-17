@@ -297,6 +297,13 @@ def apply_partial_backbone_freeze(embedding_model, layer_range, is_esm3):
 
     model_label = "ESM3" if is_esm3 else "ESM2"
     if matched_layers:
+        unmatched_requested = sorted(freeze_list - matched_layers)
+        if unmatched_requested:
+            raise ValueError(
+                f"--freeze_layers {layer_range} requested nonexistent {model_label} "
+                f"layers {unmatched_requested}; matched range is "
+                f"{min(matched_layers)}-{max(matched_layers)}."
+            )
         frozen_matched = sorted(matched_layers & freeze_list)
         trainable_matched = sorted(matched_layers - freeze_list)
         print(f"Freezing {model_label} layers {layer_range}")
