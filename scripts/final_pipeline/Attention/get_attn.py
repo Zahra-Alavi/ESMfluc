@@ -15,6 +15,7 @@ import pandas as pd
 import argparse
 import sys
 import os
+import numpy as np
 import torch
 from transformers import EsmModel, EsmTokenizer
 
@@ -189,6 +190,14 @@ def parse_args():
                         help="(Optional) Path to the CSV file containing ss predictions (NetSurfP output).")
     parser.add_argument("--output", type=str, required=True,
                         help="Path to the output JSON file.")
+    parser.add_argument(
+        "--logit_contributions_output",
+        type=str,
+        default=None,
+        help=("Optional compressed NPZ sidecar for exact flexible-minus-rigid "
+              "logit-contribution matrices. Supported only for binary "
+              "bilstm_attention classification."),
+    )
     parser.add_argument("--is_esm3", action="store_true", default=False,
                         help="Use ESM3 backbone (esm3_sm_open_v0) instead of ESM2 (HuggingFace).")
     return parser.parse_args()
@@ -216,7 +225,42 @@ def parse_fasta_file(fasta_path):
             yield seq_id, "".join(seq_lines)
 
 
-def run_model_bilstm_attn(model, tokenizer, sequence, device, task_type="classification"):
+def exact_binary_margin_contributions(model, attention, value_vectors, logits):
+    """Decompose the binary class-1 minus class-0 logit margin exactly.
+
+    For query i and key/value j, the returned matrix is
+    A_ij * V_j dot (w_1 - w_0). Its row sum plus the classifier bias
+    difference reconstructs logits[..., 1] - logits[..., 0].
+    """
+    if model.fc.out_features != 2:
+        raise ValueError(
+            "Exact flexible-minus-rigid contributions require num_classes=2; "
+            f"found {model.fc.out_features}."
+        )
+    weight_delta = model.fc.weight[1] - model.fc.weight[0]
+    value_margin = torch.matmul(value_vectors, weight_delta)  # [B, key]
+    contributions = attention * value_margin.unsqueeze(1)     # [B, query, key]
+    bias_delta = model.fc.bias[1] - model.fc.bias[0]
+    reconstructed = contributions.sum(dim=-1) + bias_delta
+    expected = logits[..., 1] - logits[..., 0]
+    max_abs_error = torch.max(torch.abs(reconstructed - expected)).item()
+    torch.testing.assert_close(reconstructed, expected, rtol=1e-5, atol=1e-5)
+    return {
+        "matrix": contributions[0].detach().float().cpu().numpy(),
+        "margin": expected[0].detach().float().cpu().numpy(),
+        "bias": float(bias_delta.detach().float().cpu()),
+        "max_abs_error": float(max_abs_error),
+    }
+
+
+def run_model_bilstm_attn(
+    model,
+    tokenizer,
+    sequence,
+    device,
+    task_type="classification",
+    return_logit_contributions=False,
+):
     """Extract attention from BiLSTMWithSelfAttentionModel (custom attention layer)."""
     enc = tokenizer(sequence, return_tensors="pt", padding=False, add_special_tokens=False)
     # ESM3's EsmSequenceTokenizer returns 'sequence_tokens'; ESM2 HF returns 'input_ids'
@@ -227,9 +271,21 @@ def run_model_bilstm_attn(model, tokenizer, sequence, device, task_type="classif
         input_ids = enc["sequence_tokens"].to(device)
         attn_mask  = torch.ones(input_ids.shape, dtype=torch.long, device=device)
     
+    captured = {}
+    hook = None
+    if return_logit_contributions:
+        if task_type != "classification":
+            raise ValueError("Logit contribution export is supported only for classification.")
+        hook = model.attention.value.register_forward_hook(
+            lambda _module, _inputs, output: captured.__setitem__("value", output)
+        )
     model.eval()
-    with torch.no_grad():
-        logits, feats, attn_weights_torch = model(input_ids, attn_mask, return_attention=True)
+    try:
+        with torch.no_grad():
+            logits, feats, attn_weights_torch = model(input_ids, attn_mask, return_attention=True)
+    finally:
+        if hook is not None:
+            hook.remove()
       
     attn_weights = attn_weights_torch[0].cpu().numpy()  # shape=(L,L)
     
@@ -255,7 +311,15 @@ def run_model_bilstm_attn(model, tokenizer, sequence, device, task_type="classif
         class_probs = None
         flexible_scores = y_preds.detach().cpu()
     
-    return attn_weights, tokens, y_preds, flexible_scores, class_probs
+    contribution_payload = None
+    if return_logit_contributions:
+        if "value" not in captured:
+            raise RuntimeError("Failed to capture the self-attention value projection.")
+        contribution_payload = exact_binary_margin_contributions(
+            model, attn_weights_torch, captured["value"], logits
+        )
+
+    return attn_weights, tokens, y_preds, flexible_scores, class_probs, contribution_payload
 
 
 def run_model_esm_linear(model, tokenizer, sequence, device, layer_idx=-1, task_type="classification"):
@@ -291,7 +355,7 @@ def run_model_esm_linear(model, tokenizer, sequence, device, layer_idx=-1, task_
         class_probs = None
         flexible_scores = y_preds.detach().cpu()
     
-    return attn_weights, tokens, y_preds, flexible_scores, class_probs
+    return attn_weights, tokens, y_preds, flexible_scores, class_probs, None
 
 def infer_bilstm_params(checkpoint):
     """Infer hidden_size and num_layers for a BiLSTM model from its checkpoint keys."""
@@ -331,6 +395,19 @@ def parse_nsp3_csv(df):
 def main():
     
     args = parse_args()
+
+    if args.logit_contributions_output:
+        if args.architecture != "bilstm_attention":
+            raise ValueError(
+                "--logit_contributions_output is only valid for bilstm_attention. "
+                "A selected ESM backbone attention layer is not an exact additive "
+                "decomposition of the final classifier logit."
+            )
+        if args.task_type != "classification" or args.num_classes != 2:
+            raise ValueError(
+                "--logit_contributions_output requires binary classification "
+                "(--task_type classification --num_classes 2)."
+            )
 
     # Load ESM model and tokenizer — ESM3 uses a different API from ESM2
     if args.is_esm3:
@@ -386,7 +463,11 @@ def main():
                 dropout=args.dropout,
                 bidirectional=args.bidirectional
             )
-            run_fn = lambda m, t, s, d: run_model_bilstm_attn(m, t, s, d, task_type="classification")
+            run_fn = lambda m, t, s, d: run_model_bilstm_attn(
+                m, t, s, d,
+                task_type="classification",
+                return_logit_contributions=bool(args.logit_contributions_output),
+            )
         elif args.architecture == "esm_linear":
             model = ESMLinearTokenClassifier(
                 embedding_model=embedding_model,
@@ -406,7 +487,9 @@ def main():
                 dropout=args.dropout,
                 bidirectional=args.bidirectional
             )
-            run_fn = lambda m, t, s, d: run_model_bilstm_attn(m, t, s, d, task_type="regression")
+            run_fn = lambda m, t, s, d: run_model_bilstm_attn(
+                m, t, s, d, task_type="regression"
+            )
         elif args.architecture == "esm_linear":
             model = ESMLinearTokenRegressor(
                 embedding_model=embedding_model,
@@ -434,7 +517,9 @@ def main():
         print(f"Parsed NetSurfP CSV: found SS for {len(ss_map)} sequences")
     
     rows = []
-    for seq_id, seq_str in parse_fasta_file(args.fasta_file):
+    contribution_arrays = {}
+    contribution_index = []
+    for sequence_index, (seq_id, seq_str) in enumerate(parse_fasta_file(args.fasta_file)):
         ss_list = ss_map.get(seq_id, None) if ss_available else None
         if ss_available and ss_list is None:
             print(f"Warning: no SS predictions for {seq_id}")
@@ -442,7 +527,26 @@ def main():
             print(f"Warning: length mismatch for {seq_id}, skipping.")
             continue
 
-        attention_weights, tokens, neq_preds, flexible_scores, class_probs = run_fn(model, tokenizer, seq_str, device)
+        attention_weights, tokens, neq_preds, flexible_scores, class_probs, contribution_payload = run_fn(
+            model, tokenizer, seq_str, device
+        )
+        if attention_weights.shape != (len(seq_str), len(seq_str)):
+            raise ValueError(
+                f"{seq_id}: attention shape {attention_weights.shape} does not match "
+                f"sequence length {len(seq_str)}."
+            )
+        if len(neq_preds) != len(seq_str) or len(flexible_scores) != len(seq_str):
+            raise ValueError(
+                f"{seq_id}: prediction length mismatch: sequence={len(seq_str)}, "
+                f"predictions={len(neq_preds)}, scores={len(flexible_scores)}."
+            )
+        if class_probs is not None and tuple(class_probs.shape) != (
+            len(seq_str), args.num_classes
+        ):
+            raise ValueError(
+                f"{seq_id}: class probability shape {tuple(class_probs.shape)} does not "
+                f"match ({len(seq_str)}, {args.num_classes})."
+            )
         print(f"{seq_id:15s}  "
               f"seq_len = {len(seq_str):3d}  "
               f"tokens = {len(tokens):3d}  "
@@ -459,6 +563,38 @@ def main():
         }
         if class_probs is not None:
             row_dict["class_probs"] = class_probs.numpy().tolist()
+            row_dict["class_index_definition"] = {
+                "0": "rigid (Neq <= 1.0)",
+                "1": "flexible (Neq > 1.0)",
+            }
+            row_dict["flexible_score_definition"] = "P(class 1: Neq > 1.0)"
+
+        if contribution_payload is not None:
+            key = f"protein_{sequence_index:04d}"
+            matrix = contribution_payload["matrix"]
+            if matrix.shape != (len(seq_str), len(seq_str)):
+                raise ValueError(
+                    f"{seq_id}: contribution shape {matrix.shape} does not match "
+                    f"sequence length {len(seq_str)}."
+                )
+            contribution_arrays[key] = matrix
+            contribution_index.append((key, seq_id))
+            row_dict.update({
+                "flex_minus_rigid_logit_contribution_file": os.path.basename(
+                    args.logit_contributions_output
+                ),
+                "flex_minus_rigid_logit_contribution_key": key,
+                "flex_minus_rigid_logit_margin": contribution_payload["margin"].tolist(),
+                "flex_minus_rigid_logit_margin_bias": contribution_payload["bias"],
+                "flex_minus_rigid_logit_reconstruction_max_abs_error": (
+                    contribution_payload["max_abs_error"]
+                ),
+                "flex_minus_rigid_logit_contribution_definition": (
+                    "A[query,key] * dot(V[key], fc.weight[1] - fc.weight[0]); "
+                    "row_sum + (fc.bias[1] - fc.bias[0]) equals "
+                    "logit_flexible - logit_rigid"
+                ),
+            })
 
         if ss_available and ss_list is not None:
             row_dict["ss_pred"] = ss_list
@@ -473,6 +609,31 @@ def main():
 
     final_df.to_json(args.output, orient="records", indent=2)
     print(f"Saved final JSON to {args.output}")
+
+    if args.logit_contributions_output:
+        if len(contribution_arrays) != len(rows):
+            raise RuntimeError(
+                f"Expected one contribution matrix per sequence; got "
+                f"{len(contribution_arrays)} for {len(rows)} sequences."
+            )
+        contribution_path = os.path.abspath(args.logit_contributions_output)
+        os.makedirs(os.path.dirname(contribution_path), exist_ok=True)
+        names = np.asarray([name for _, name in contribution_index], dtype=str)
+        keys = np.asarray([key for key, _ in contribution_index], dtype=str)
+        np.savez_compressed(
+            contribution_path,
+            **contribution_arrays,
+            __protein_names__=names,
+            __matrix_keys__=keys,
+            __definition__=np.asarray(
+                "class 1 (flexible) minus class 0 (rigid) exact final-head logit contribution",
+                dtype=str,
+            ),
+        )
+        print(
+            f"Saved {len(contribution_arrays)} exact flex-minus-rigid contribution "
+            f"matrices to {contribution_path}"
+        )
         
 
 if __name__ == "__main__":
