@@ -539,28 +539,13 @@ function residueSelection(seqPos) {{
 }}
 
 function baseStyle() {{
-  viewer.setStyle({{}}, {{cartoon: {{color: "lightgray", opacity: 0.82}}}});
+  viewer.setStyle({{}}, {{cartoon: {{color: "green", opacity: 0.82}}}});
 }}
 
-function addResidueStyle(selection, color, sphereRadius, stickRadius) {{
+function addResidueStyle(selection, color) {{
   if (!selection) return false;
-  viewer.addStyle(selection, {{cartoon: {{color: color, opacity: 1.0}}}});
-  viewer.addStyle(selection, {{stick: {{color: color, radius: stickRadius}}}});
-  viewer.addStyle(selection, {{sphere: {{color: color, radius: sphereRadius, opacity: 0.95}}}});
+  viewer.setStyle(selection, {{cartoon: {{color: color, opacity: 1.0}}}});
   return true;
-}}
-
-function renderSequenceStrip() {{
-  const strip = document.getElementById("sequence-strip");
-  if (!strip || strip.children.length) return;
-  for (let i = 0; i < SEQUENCE.length; i++) {{
-    const span = document.createElement("span");
-    span.className = "seq-residue";
-    span.dataset.pos = String(i + 1);
-    span.title = String(i + 1) + "-" + SEQUENCE[i];
-    span.textContent = SEQUENCE[i];
-    strip.appendChild(span);
-  }}
 }}
 
 function highlightSequence(queryPos, keyPos) {{
@@ -578,13 +563,17 @@ function highlightSequenceGroup(keyPos, attendingPositions, clickedQueryPos) {{
     el.classList.remove("query-highlight", "key-highlight", "attending-highlight");
   }});
   attendingPositions.forEach(function(pos) {{
+    if (Number(pos) === Number(keyPos)) return;
     const el = document.querySelector('.seq-residue[data-pos="' + pos + '"]');
     if (el) el.classList.add("attending-highlight");
   }});
   const queryEl = document.querySelector('.seq-residue[data-pos="' + clickedQueryPos + '"]');
   const keyEl = document.querySelector('.seq-residue[data-pos="' + keyPos + '"]');
   if (queryEl) queryEl.classList.add("query-highlight");
-  if (keyEl) keyEl.classList.add("key-highlight");
+  if (keyEl) {{
+    keyEl.classList.remove("query-highlight", "attending-highlight");
+    keyEl.classList.add("key-highlight");
+  }}
 }}
 
 function highlightResidues(queryPos, keyPos) {{
@@ -592,8 +581,8 @@ function highlightResidues(queryPos, keyPos) {{
     baseStyle();
     const querySelection = residueSelection(queryPos);
     const keySelection = residueSelection(keyPos);
-    addResidueStyle(querySelection, "orange", 0.42, 0.16);
-    addResidueStyle(keySelection, "cyan", 0.72, 0.32);
+    addResidueStyle(querySelection, "orange");
+    addResidueStyle(keySelection, "cyan");
     viewer.render();
   }}
   highlightSequence(queryPos, keyPos);
@@ -643,11 +632,11 @@ function highlightKeyColumn(point) {{
     baseStyle();
     attendingPositions.forEach(function(pos) {{
       if (pos !== keyPos) {{
-        addResidueStyle(residueSelection(pos), "#ffd94a", 0.30, 0.12);
+        addResidueStyle(residueSelection(pos), "#ffd94a");
       }}
     }});
-    addResidueStyle(residueSelection(queryPos), "orange", 0.44, 0.17);
-    addResidueStyle(residueSelection(keyPos), "cyan", 0.82, 0.36);
+    addResidueStyle(residueSelection(queryPos), "orange");
+    addResidueStyle(residueSelection(keyPos), "cyan");
     viewer.render();
   }}
   highlightSequenceGroup(keyPos, attendingPositions, queryPos);
@@ -700,7 +689,6 @@ function initHoverBridge() {{
 }}
 
 document.addEventListener("DOMContentLoaded", function() {{
-  renderSequenceStrip();
   initStructureViewer();
   initHoverBridge();
 }});
@@ -717,6 +705,10 @@ def sequence_strip_html(sequence):
             f"data-pos='{i}' title='{html.escape(label)}'>{html.escape(aa)}</span>"
         )
     return "".join(spans)
+
+
+def sequence_plain_html(sequence):
+    return html.escape(sequence)
 
 
 def write_protein_page(fig, protein, sequence, output_html, pdb_path, pdb_text, position_map, map_source, zmax, args):
@@ -743,12 +735,14 @@ def write_protein_page(fig, protein, sequence, output_html, pdb_path, pdb_text, 
         "header{padding:18px 24px 12px;border-bottom:1px solid #ddd;}",
         "h1{font-size:22px;margin:0 0 8px;}",
         ".meta{color:#444;font-size:13px;line-height:1.45;}",
+        ".sequence-panel{position:sticky;top:0;z-index:1000;background:#fff;border-bottom:1px solid #ccc;padding:10px 24px 12px;box-shadow:0 2px 8px rgba(0,0,0,0.08);}",
         ".layout{display:flex;align-items:flex-start;gap:18px;padding:18px 24px 28px;}",
-        ".plot-panel{min-width:0;overflow:auto;}",
-        ".structure-panel{width:420px;min-width:360px;position:sticky;top:16px;}",
+        ".plot-panel{min-width:0;overflow:auto;position:relative;z-index:1;}",
+        ".structure-panel{width:420px;min-width:360px;position:sticky;top:16px;z-index:5;background:#fff;}",
         ".sequence-label{font-weight:bold;margin:0 0 6px;}",
-        "#sequence-strip{font-family:Consolas,Menlo,monospace;font-size:12px;line-height:1.75;word-break:break-all;border:1px solid #ccc;border-bottom:0;padding:8px;background:#fafafa;max-height:132px;overflow:auto;}",
-        ".seq-residue{display:inline-block;min-width:1ch;padding:0 2px;border-radius:3px;color:#333;}",
+        ".sequence-plain{font-family:Consolas,Menlo,monospace;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-all;color:#111!important;border:1px solid #ccc;border-bottom:0;padding:8px;background:#fff;max-height:80px;overflow:auto;margin:0;}",
+        "#sequence-strip{font-family:Consolas,Menlo,monospace;font-size:12px;line-height:1.75;word-break:break-all;border:1px solid #ccc;padding:8px;background:#fafafa;max-height:96px;min-height:28px;overflow:auto;color:#111!important;}",
+        ".seq-residue{display:inline-block;min-width:1ch;padding:0 2px;border-radius:3px;color:#111!important;}",
         ".seq-residue.query-highlight{background:orange;color:#111;}",
         ".seq-residue.key-highlight{background:cyan;color:#111;}",
         ".seq-residue.attending-highlight{background:#ffe66b;color:#111;}",
@@ -769,11 +763,14 @@ def write_protein_page(fig, protein, sequence, output_html, pdb_path, pdb_text, 
         f"Residue mapping: {html.escape(map_source)}<br>",
         f"Click threshold: {html.escape(click_threshold_text)}",
         "</div></header>",
+        "<section class='sequence-panel'>",
+        "<div class='sequence-label'>Sequence</div>",
+        f"<pre class='sequence-plain'>{sequence_plain_html(sequence)}</pre>",
+        f"<div id='sequence-strip'>{sequence_strip_html(sequence)}</div>",
+        "</section>",
         "<main class='layout'>",
         "<section class='plot-panel'><div id='attention-plot'></div></section>",
         "<aside class='structure-panel'>",
-        "<div class='sequence-label'>Sequence</div>",
-        f"<div id='sequence-strip'>{sequence_strip_html(sequence)}</div>",
         "<div class='viewer-title'>3D structure</div>",
         "<div id='structure-viewer'></div>",
         missing_message,
