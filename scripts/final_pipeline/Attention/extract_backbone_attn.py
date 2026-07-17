@@ -139,12 +139,18 @@ def build_esm2_from_checkpoint(checkpoint, esm_model_name, device):
     model = EsmModel.from_pretrained(f"facebook/{esm_model_name}")
     if bb_state:
         missing, unexpected = model.load_state_dict(bb_state, strict=False)
-        if missing:
-            print(f"  [backbone] {len(missing)} keys missing from checkpoint "
-                  f"(pretrained weights kept for those).")
+        if missing or unexpected:
+            raise RuntimeError(
+                "Backbone checkpoint does not exactly match the requested ESM2 model: "
+                f"missing={missing[:10]}, unexpected={unexpected[:10]}. "
+                "Refusing to mix checkpointed and pretrained backbone weights."
+            )
         print(f"  [backbone] Loaded {len(bb_state)} ESM2 keys from checkpoint.")
     else:
-        print("  [backbone] No embedding_model keys in checkpoint; using pretrained ESM2.")
+        raise RuntimeError(
+            "Checkpoint contains no embedding_model.* keys; refusing to substitute a "
+            "fresh pretrained ESM2 backbone."
+        )
     model.to(device).eval()
     return model
 
@@ -153,11 +159,13 @@ def extract_esm2_attn(esm2_model, tokenizer, seq, device):
     """
     Run one sequence through ESM2 with output_attentions=True.
     Returns a [L, L] numpy array (last layer, averaged over heads).
-    L is the sequence length (special tokens removed).
+    L is the sequence length; special tokens are never added.
     """
-    enc = tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=True)
-    input_ids      = enc["input_ids"].to(device)          # [1, L+2]  (CLS + seq + EOS)
-    attention_mask = enc["attention_mask"].to(device)     # [1, L+2]
+    # Match the training/get_attn.py input convention exactly. The model was
+    # trained on residue tokens only, without CLS/EOS special tokens.
+    enc = tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False)
+    input_ids      = enc["input_ids"].to(device)          # [1, L]
+    attention_mask = enc["attention_mask"].to(device)     # [1, L]
 
     with torch.no_grad():
         out = esm2_model(
@@ -165,17 +173,14 @@ def extract_esm2_attn(esm2_model, tokenizer, seq, device):
             attention_mask=attention_mask,
             output_attentions=True,
         )
-    # out.attentions: tuple of (num_layers,) × [1, num_heads, L+2, L+2]
-    last_layer = out.attentions[-1][0]          # [H, L+2, L+2]
-    avg_heads  = last_layer.mean(dim=0)          # [L+2, L+2]
-
-    # Strip CLS and EOS tokens (first and last position)
+    # out.attentions: tuple of (num_layers,) × [1, num_heads, L, L]
+    last_layer = out.attentions[-1][0]          # [H, L, L]
+    core = last_layer.mean(dim=0)                # [L, L]
     L = len(seq)
-    core = avg_heads[1:L+1, 1:L+1]              # [L, L]
-
-    # Row-normalise so each row sums to 1 (CLS removal breaks softmax sum)
-    row_sums = core.sum(dim=-1, keepdim=True).clamp(min=1e-12)
-    core = core / row_sums
+    if core.shape != (L, L):
+        raise RuntimeError(
+            f"ESM2 attention shape {tuple(core.shape)} does not match sequence length {L}."
+        )
 
     return core.cpu().numpy()
 
@@ -311,6 +316,7 @@ def main():
                 "attention_weights": attn_to_list(attn),
                 "backbone_type":     "esm2",
                 "attention_source":  "last_layer_avg_heads",
+                "tokenization":      "residue_tokens_only_no_special_tokens",
             })
 
     else:
