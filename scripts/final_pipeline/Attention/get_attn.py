@@ -240,6 +240,8 @@ def exact_binary_margin_contributions(model, attention, value_vectors, logits):
     weight_delta = model.fc.weight[1] - model.fc.weight[0]
     value_margin = torch.matmul(value_vectors, weight_delta)  # [B, key]
     contributions = attention * value_margin.unsqueeze(1)     # [B, query, key]
+    attention_column_mean = attention.mean(dim=1)              # [B, key]
+    signed_column_influence = contributions.mean(dim=1)        # [B, key]
     bias_delta = model.fc.bias[1] - model.fc.bias[0]
     reconstructed = contributions.sum(dim=-1) + bias_delta
     expected = logits[..., 1] - logits[..., 0]
@@ -247,6 +249,9 @@ def exact_binary_margin_contributions(model, attention, value_vectors, logits):
     torch.testing.assert_close(reconstructed, expected, rtol=1e-5, atol=1e-5)
     return {
         "matrix": contributions[0].detach().float().cpu().numpy(),
+        "intrinsic_signed_evidence": value_margin[0].detach().float().cpu().numpy(),
+        "signed_column_influence": signed_column_influence[0].detach().float().cpu().numpy(),
+        "attention_column_mean": attention_column_mean[0].detach().float().cpu().numpy(),
         "margin": expected[0].detach().float().cpu().numpy(),
         "bias": float(bias_delta.detach().float().cpu()),
         "max_abs_error": float(max_abs_error),
