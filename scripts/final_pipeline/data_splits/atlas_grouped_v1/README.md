@@ -1,7 +1,7 @@
 # ATLAS grouped split v1
 
 These files do not replace the legacy `../../data/train_data.csv` or test files.
-They are a separately named, fixed 70/15/15 split for new publication runs.
+They are a separately named, fixed 70/15/15 split for publication experiments.
 
 ## Membership rule
 
@@ -11,8 +11,8 @@ ECOD develop285 X-groups. Components were assigned with split-construction seed
 42. Model seeds 1/2/3 never participate in split construction.
 
 ECOD X-groups are broad (possible homology), and transitive unioning produces a
-largest component of 386 proteins. It is kept intact; this is the
-cost of the requested no-shared-X-domain condition.
+largest component of 386 proteins. It remains intact to prevent ECOD X-groups
+from crossing split boundaries.
 
 ## Training files
 
