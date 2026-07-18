@@ -485,7 +485,7 @@ def main():
             bands, _, _, _ = detect_bands(
                 received,
                 quantile=args.band_quantile,
-                z=args.band_z,
+                z_thresh=args.band_z,
                 min_width=args.min_band_width,
                 smooth_window=args.smooth_window,
             )
