@@ -329,7 +329,7 @@ def empirical_pvalues(observed, null):
 def main():
     args = parse_args()
     result_root = Path(args.result_root).expanduser().resolve()
-    pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
+    pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parents[2]
     contact_json = Path(args.contact_json).expanduser().resolve() if args.contact_json else result_root / "contact_maps_ca8.json"
     manifest_path = resolve_manifest_path(result_root, args.manifest_tsv)
     if not manifest_path.exists():

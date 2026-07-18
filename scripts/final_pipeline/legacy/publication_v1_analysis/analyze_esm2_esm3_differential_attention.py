@@ -370,7 +370,7 @@ def main():
     if args.seed_mode == "single" and args.seed is None:
         raise ValueError("--seed is required with --seed_mode single.")
     result_root = Path(args.result_root).expanduser().resolve()
-    pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
+    pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parents[2]
     manifest_path = resolve_manifest_arg(result_root, args.manifest_tsv)
     output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else result_root / "analysis_esm2_esm3_differential_attention"
     output_dir.mkdir(parents=True, exist_ok=True)

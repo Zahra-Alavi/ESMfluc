@@ -23,7 +23,10 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from analyze_attention_row_modes import resolve_existing_path, resolve_manifest_path
+from legacy.publication_v1_analysis.analyze_attention_row_modes import (
+    resolve_existing_path,
+    resolve_manifest_path,
+)
 
 
 GRID = [

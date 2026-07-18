@@ -26,7 +26,7 @@ Training:
 
 Inference and Analysis:
 
-- `get_attn.py`: Main inference scripts, takes a fasta file and the best model check point, returns a JSON file with sequences, their attention weights and predicted neq class.
+- `Attention/get_attn.py`: Canonical inference script; takes a FASTA file and checkpoint and returns residue predictions, probabilities, attention, and optional exact logit contributions.
 - `pheatmap_functions.py`: Contains functions to plot attention heat maps and perform PCA. It can also analyze variant effect for an input file including a WT and mutants.  
 
 # Training Instructions
@@ -61,7 +61,7 @@ python main.py \
 Once the model is trained and saved, you can apply it to sequences from a FASTA file to get predicted neq class and attention weights. The results will be saved in your desired path as a JSON file.
 
 ```bash 
-python get_attn.py --checkpoint best_model.pth --fasta_file your_sequences.fasta your_ss.csv --ouput path_to_the_final_output
+python Attention/get_attn.py --checkpoint best_model.pth --fasta_file your_sequences.fasta --output path_to_the_final_output
 ```
 
 **Note**: You can optionally provide a secondary structure prediction CSV file from **NetSurfP** using the `--ss_csv` argument to include secondary structure annotations in your output.

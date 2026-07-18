@@ -31,7 +31,8 @@ On remote machine:
 │       └── ... (other temperatures)  ✓
 └── scripts/
     ├── train_unified.py              ← Copy this
-    ├── get_attn.py                   ✓
+    ├── Attention/
+    │   └── get_attn.py               ✓
     ├── models.py                     ✓
     ├── data_utils.py                 ✓
     ├── arguments.py                  ✓

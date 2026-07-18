@@ -166,7 +166,7 @@ def extract_attention(checkpoint, fasta_file, output_dir, task_type):
     output_base = output_dir / "attention_weights"
     
     cmd = [
-        "python", str(SCRIPTS_DIR / "get_attn.py"),
+        "python", str(SCRIPTS_DIR / "Attention" / "get_attn.py"),
         "--checkpoint", str(checkpoint),
         "--fasta_file", str(fasta_file),
         "--output", str(output_base),

@@ -378,7 +378,7 @@ def run_condition_analysis(df, condition, args, rng):
 def main():
     args = parse_args()
     result_root = Path(args.result_root).expanduser().resolve()
-    pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
+    pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parents[2]
     manifest_path = resolve_manifest_path(result_root, args.manifest_tsv)
     if not manifest_path.exists():
         raise FileNotFoundError(f"Missing manifest TSV: {manifest_path}")

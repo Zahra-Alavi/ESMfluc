@@ -23,8 +23,9 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+LEGACY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PIPELINE_DIR="$(cd "${LEGACY_DIR}/../.." && pwd)"
+cd "$PIPELINE_DIR"
 
 PYTHON="${PYTHON:-python}"
 RESULT_SET="${RESULT_SET:-publication_comparable_v1}"
@@ -179,7 +180,7 @@ if [[ "$RUN_ANALYSIS" == "1" ]]; then
     echo "Running attention/contact analysis"
     # shellcheck disable=SC2206
     sources=( $ATTENTION_SOURCES )
-    "$PYTHON" analyze_attention_contacts.py \
+    "$PYTHON" "${LEGACY_DIR}/analyze_attention_contacts.py" \
         --result_root "$RESULT_ROOT" \
         --contact_json "$CONTACT_JSON" \
         --attention_sources "${sources[@]}" \

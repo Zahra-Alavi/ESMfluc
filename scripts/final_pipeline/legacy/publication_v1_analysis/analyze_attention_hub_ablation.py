@@ -30,6 +30,11 @@ import pandas as pd
 import torch
 from sklearn.metrics import accuracy_score, f1_score
 
+# Import training modules from the pipeline root after relocation.
+PIPELINE_DIR = Path(__file__).resolve().parents[2]
+if str(PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_DIR))
+
 from analyze_attention_row_modes import (
     analyze_attention_modes,
     default_analysis_dir,
@@ -429,7 +434,7 @@ def compare_residual_manifest(original_selections, residual_manifest, result_roo
 def main():
     args = parse_args()
     result_root = Path(args.result_root).expanduser().resolve()
-    pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parent
+    pipeline_dir = Path(args.pipeline_dir).expanduser().resolve() if args.pipeline_dir else Path(__file__).resolve().parents[2]
     manifest_path = resolve_manifest_arg(result_root, args.manifest_tsv)
     output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else default_analysis_dir(result_root, "analysis_attention_hub_ablation", manifest_path)
     output_dir.mkdir(parents=True, exist_ok=True)
