@@ -10,10 +10,11 @@ models are calculated.
 from __future__ import annotations
 
 import argparse
-import csv
-import gzip
+import fcntl
+import hashlib
 import json
 import math
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Iterator
@@ -152,6 +153,31 @@ MECHANISM_INTERACTION_QUERY_FEATURES = (
 
 DISTANCE_BINS = (-1, 0, 5, 20, 50, np.inf)
 DISTANCE_LABELS = ("inside", "adjacent_1_5", "local_6_20", "distal_21_50", "distal_gt50")
+AGGREGATE_CHECKPOINT_SCHEMA = "esmfluc.receiver.aggregate_checkpoint.v1"
+RECEIVER_COMPLETION_SCHEMA = "esmfluc.receiver.analysis_complete.v1"
+AGGREGATE_CHECKPOINT_DIR = "receiver_aggregate_checkpoints"
+PAIR_MANIFEST_NAME = "band_query_pair_manifest.csv"
+
+PROTEIN_EFFECT_COLUMNS = (
+    "condition", "split", "protein", "sign", "mechanism_class",
+    "receiver_scope", "feature", "n_bands", "high_minus_low",
+)
+PROTEIN_LONG_RANGE_COLUMNS = (
+    "condition", "split", "protein", "sign", "mechanism_class", "n_bands",
+    "fraction_high_receivers_long_range",
+    "fraction_positive_directional_mass_long_range",
+    "fraction_attention_mass_long_range",
+)
+
+FINAL_RECEIVER_OUTPUTS = (
+    PAIR_MANIFEST_NAME,
+    "receiver_feature_effects_by_protein.csv.gz",
+    "receiver_feature_summary.csv",
+    "receiver_model_performance.csv",
+    "receiver_feature_ablation_performance.csv",
+    "receiver_structural_water_ablation_performance.csv",
+    "long_range_receiver_summary.csv",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -190,11 +216,151 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_model_rows_per_class_per_protein", type=int, default=50)
     parser.add_argument("--random_seed", type=int, default=123)
     parser.add_argument("--max_iter", type=int, default=500)
+    parser.add_argument(
+        "--progress_every",
+        type=int,
+        default=25,
+        help="Report checkpoint progress after this many protein profiles.",
+    )
     parser.add_argument("--max_proteins_per_file", type=int, default=0)
     parser.add_argument("--extract_only", action="store_true")
     parser.add_argument("--aggregate_only", action="store_true")
     parser.add_argument("--overwrite_cache", action="store_true")
     return parser.parse_args()
+
+
+def file_identity(value: str | None) -> dict | None:
+    if not value:
+        return None
+    path = Path(value).expanduser().resolve()
+    identity = {"path": str(path), "exists": path.exists()}
+    if path.is_file():
+        stat = path.stat()
+        identity.update({"size": stat.st_size, "mtime_ns": stat.st_mtime_ns})
+    elif path.is_dir():
+        identity["markers"] = {}
+        for name in ("parameters.json", "pair_feature_manifest.csv"):
+            marker = path / name
+            if marker.is_file():
+                stat = marker.stat()
+                identity["markers"][name] = {
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                }
+    return identity
+
+
+def receiver_analysis_signature(args: argparse.Namespace) -> tuple[str, dict]:
+    payload = {
+        "schema": AGGREGATE_CHECKPOINT_SCHEMA,
+        "implementation": file_identity(__file__),
+        "inputs": {
+            name: file_identity(getattr(args, name, None))
+            for name in (
+                "manifest_tsv",
+                "bands_csv",
+                "protein_summary_csv",
+                "residue_annotations_csv",
+                "mechanism_csv",
+                "pairwise_structure_csv",
+                "pairwise_structure_dir",
+                "receiver_cache_source_dir",
+            )
+        },
+        "settings": {
+            "conditions": sorted(args.conditions or []),
+            "splits": sorted(args.splits or []),
+            "seeds": sorted(set(map(int, args.seeds))),
+            "receiver_quantile": float(args.receiver_quantile),
+            "low_receiver_quantile": float(args.low_receiver_quantile),
+            "long_range_min_separation": int(args.long_range_min_separation),
+            "minimum_inference_proteins": int(args.minimum_inference_proteins),
+            "max_model_rows_per_class_per_protein": int(
+                args.max_model_rows_per_class_per_protein
+            ),
+            "random_seed": int(args.random_seed),
+            "max_iter": int(args.max_iter),
+        },
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest(), payload
+
+
+def atomic_write_json(value: dict | list, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    try:
+        temporary.write_text(json.dumps(value, indent=2) + "\n")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def atomic_write_csv(
+    frame: pd.DataFrame, path: Path, compression: str | None = None
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    try:
+        frame.to_csv(temporary, index=False, compression=compression)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def acquire_output_lock(output: Path):
+    path = output / ".receiver_run.lock"
+    handle = path.open("a+")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.seek(0)
+        owner = handle.read().strip() or "unknown process"
+        handle.close()
+        raise RuntimeError(
+            f"Another receiver run holds {path} ({owner})"
+        )
+    handle.seek(0)
+    handle.truncate()
+    handle.write(f"pid={os.getpid()}\n")
+    handle.flush()
+    return handle
+
+
+def completion_is_reusable(
+    output: Path, analysis_signature: str
+) -> dict | None:
+    path = output / "receiver_complete.json"
+    if not path.is_file():
+        return None
+    try:
+        marker = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (
+        marker.get("schema") != RECEIVER_COMPLETION_SCHEMA
+        or marker.get("analysis_signature") != analysis_signature
+    ):
+        return None
+    required = (*FINAL_RECEIVER_OUTPUTS, "parameters.json", "extraction_audit.json")
+    if not all((output / name).is_file() for name in required):
+        return None
+    return marker
+
+
+def context_seed(
+    random_seed: int, condition: str, split: str, protein: str
+) -> int:
+    encoded = (
+        f"{int(random_seed)}\0{condition}\0{split}\0{protein}".encode()
+    )
+    return int.from_bytes(hashlib.sha256(encoded).digest()[:8], "little")
+
+
+def safe_context_component(value: str) -> str:
+    if value in {"", ".", ".."} or "/" in value or "\0" in value:
+        raise ValueError(f"Unsafe checkpoint path component {value!r}")
+    return value
 
 
 def read_matrix(scanner: MarkerScanner, length: int) -> np.ndarray:
@@ -642,14 +808,21 @@ def receiver_rows_for_profile(
     return pd.concat(pair_frames, ignore_index=True), effect_rows, long_rows
 
 
-def summarize_effects(band_effects: pd.DataFrame, minimum_proteins: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-    protein = band_effects.groupby(
+def aggregate_effects_by_protein(band_effects: pd.DataFrame) -> pd.DataFrame:
+    if band_effects.empty:
+        return pd.DataFrame(columns=PROTEIN_EFFECT_COLUMNS)
+    return band_effects.groupby(
         [
             "condition", "split", "protein", "sign", "mechanism_class",
             "receiver_scope", "feature",
         ],
         as_index=False,
     ).agg(n_bands=("band_id", "nunique"), high_minus_low=("high_minus_low", "mean"))
+
+
+def summarize_protein_effects(
+    protein: pd.DataFrame, minimum_proteins: int
+) -> pd.DataFrame:
     rows = []
     keys = [
         "condition", "split", "sign", "mechanism_class",
@@ -676,11 +849,20 @@ def summarize_effects(band_effects: pd.DataFrame, minimum_proteins: int) -> tupl
     summary = pd.DataFrame(rows)
     if not summary.empty:
         summary["protein_sign_q_bh"] = bh(summary.protein_sign_p_two_sided)
-    return protein, summary
+    return summary
 
 
-def summarize_long_range(band_rows: pd.DataFrame) -> pd.DataFrame:
-    protein = band_rows.groupby(
+def summarize_effects(
+    band_effects: pd.DataFrame, minimum_proteins: int
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    protein = aggregate_effects_by_protein(band_effects)
+    return protein, summarize_protein_effects(protein, minimum_proteins)
+
+
+def aggregate_long_range_by_protein(band_rows: pd.DataFrame) -> pd.DataFrame:
+    if band_rows.empty:
+        return pd.DataFrame(columns=PROTEIN_LONG_RANGE_COLUMNS)
+    return band_rows.groupby(
         ["condition", "split", "protein", "sign", "mechanism_class"], as_index=False
     ).agg(
         n_bands=("band_id", "nunique"),
@@ -688,6 +870,11 @@ def summarize_long_range(band_rows: pd.DataFrame) -> pd.DataFrame:
         fraction_positive_directional_mass_long_range=("fraction_positive_directional_mass_long_range", "mean"),
         fraction_attention_mass_long_range=("fraction_attention_mass_long_range", "mean"),
     )
+
+
+def summarize_protein_long_range(protein: pd.DataFrame) -> pd.DataFrame:
+    if protein.empty:
+        return pd.DataFrame()
     return protein.groupby(
         ["condition", "split", "sign", "mechanism_class"], as_index=False
     ).agg(
@@ -695,6 +882,12 @@ def summarize_long_range(band_rows: pd.DataFrame) -> pd.DataFrame:
         fraction_high_receivers_long_range_macro_mean=("fraction_high_receivers_long_range", "mean"),
         fraction_positive_directional_mass_long_range_macro_mean=("fraction_positive_directional_mass_long_range", "mean"),
         fraction_attention_mass_long_range_macro_mean=("fraction_attention_mass_long_range", "mean"),
+    )
+
+
+def summarize_long_range(band_rows: pd.DataFrame) -> pd.DataFrame:
+    return summarize_protein_long_range(
+        aggregate_long_range_by_protein(band_rows)
     )
 
 
@@ -1214,8 +1407,142 @@ def receiver_structural_water_ablation(
     return pd.DataFrame(rows)
 
 
-def aggregate(args: argparse.Namespace, manifest: pd.DataFrame, bands: pd.DataFrame,
-              summary: pd.DataFrame, residue: pd.DataFrame, output: Path) -> dict:
+def checkpoint_directory(
+    root: Path, condition: str, split: str, protein: str
+) -> Path:
+    return (
+        root
+        / safe_context_component(condition)
+        / safe_context_component(split)
+        / safe_context_component(protein)
+    )
+
+
+def reusable_context_checkpoint(
+    directory: Path, analysis_signature: str,
+    context: tuple[str, str, str],
+    source_identity: dict | None = None,
+) -> dict | None:
+    marker_path = directory / "complete.json"
+    if not marker_path.is_file():
+        return None
+    try:
+        marker = json.loads(marker_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (
+        marker.get("schema") != AGGREGATE_CHECKPOINT_SCHEMA
+        or marker.get("analysis_signature") != analysis_signature
+        or tuple(marker.get("context", [])) != context
+        or (
+            source_identity is not None
+            and marker.get("source_identity") != source_identity
+        )
+    ):
+        return None
+    files = marker.get("files", {})
+    required = ("pairs", "protein_effects", "protein_long_range", "model_rows")
+    if not all(
+        name in files
+        and (directory / files[name]).is_file()
+        and (directory / files[name]).stat().st_size > 0
+        for name in required
+    ):
+        return None
+    return marker
+
+
+def write_context_checkpoint(
+    directory: Path, analysis_signature: str,
+    context: tuple[str, str, str], pairs: pd.DataFrame,
+    effects: list[dict], long_rows: list[dict], args: argparse.Namespace,
+    source_identity: dict | None = None,
+) -> dict:
+    condition, split, protein = context
+    directory.mkdir(parents=True, exist_ok=True)
+    for stale_temporary in directory.glob(".*.tmp-*"):
+        if stale_temporary.is_file():
+            stale_temporary.unlink()
+    protein_effects = aggregate_effects_by_protein(pd.DataFrame(effects))
+    protein_long = aggregate_long_range_by_protein(pd.DataFrame(long_rows))
+    rng = np.random.default_rng(
+        context_seed(args.random_seed, condition, split, protein)
+    )
+    model_rows = sample_model_rows(
+        pairs, args.max_model_rows_per_class_per_protein, rng
+    )
+    if model_rows.empty:
+        model_rows = pairs.head(0).copy()
+
+    files = {
+        "pairs": "pairs.csv.gz",
+        "protein_effects": "protein_effects.csv.gz",
+        "protein_long_range": "protein_long_range.csv.gz",
+        "model_rows": "model_rows.csv.gz",
+    }
+    atomic_write_csv(pairs, directory / files["pairs"], compression="gzip")
+    atomic_write_csv(
+        protein_effects,
+        directory / files["protein_effects"],
+        compression="gzip",
+    )
+    atomic_write_csv(
+        protein_long,
+        directory / files["protein_long_range"],
+        compression="gzip",
+    )
+    atomic_write_csv(
+        model_rows, directory / files["model_rows"], compression="gzip"
+    )
+    marker = {
+        "schema": AGGREGATE_CHECKPOINT_SCHEMA,
+        "analysis_signature": analysis_signature,
+        "context": list(context),
+        "source_identity": source_identity,
+        "files": files,
+        "rows": {
+            "pairs": len(pairs),
+            "protein_effects": len(protein_effects),
+            "protein_long_range": len(protein_long),
+            "model_rows": len(model_rows),
+        },
+    }
+    atomic_write_json(marker, directory / "complete.json")
+    return marker
+
+
+def archive_legacy_pair_table(output: Path) -> None:
+    legacy = output / "band_query_pairs.csv.gz"
+    if not legacy.exists():
+        return
+    candidate = output / "band_query_pairs.legacy_monolithic.csv.gz"
+    suffix = 1
+    while candidate.exists():
+        candidate = output / (
+            f"band_query_pairs.legacy_monolithic.{suffix}.csv.gz"
+        )
+        suffix += 1
+    os.replace(legacy, candidate)
+    print(json.dumps({
+        "event": "legacy_pair_table_archived",
+        "source": str(legacy),
+        "destination": str(candidate),
+    }), flush=True)
+
+
+def checkpoint_frame(
+    directory: Path, marker: dict, name: str
+) -> pd.DataFrame:
+    if int(marker["rows"][name]) == 0:
+        return pd.DataFrame()
+    return pd.read_csv(directory / marker["files"][name])
+
+
+def aggregate(
+    args: argparse.Namespace, manifest: pd.DataFrame, bands: pd.DataFrame,
+    summary: pd.DataFrame, residue: pd.DataFrame, output: Path,
+    analysis_signature: str,
+) -> dict:
     cache_source = (
         Path(args.receiver_cache_source_dir).expanduser().resolve()
         if args.receiver_cache_source_dir else output
@@ -1259,36 +1586,75 @@ def aggregate(args: argparse.Namespace, manifest: pd.DataFrame, bands: pd.DataFr
         if args.pairwise_structure_dir else None
     )
 
-    pair_output = output / "band_query_pairs.csv.gz"
-    pair_output.parent.mkdir(parents=True, exist_ok=True)
-    pair_handle = gzip.open(pair_output, "wt", newline="")
-    writer = None
-    effect_rows: list[dict] = []
-    long_rows: list[dict] = []
-    model_rows: list[pd.DataFrame] = []
-    rng = np.random.default_rng(args.random_seed)
-    profiles_written = pairs_written = 0
-    try:
-        for context, paths in sorted(cache_groups.items()):
-            condition, split, protein = context
-            if context not in bands_lookup or (split, protein) not in residue_lookup:
-                continue
-            final_path = final_profile_path(
-                source_profile_root, condition, split, protein
-            )
-            final_is_current = False
-            if final_path.exists() and not args.overwrite_cache:
-                existing = load_seed_profile(final_path)
-                final_is_current = (
+    archive_legacy_pair_table(output)
+    checkpoint_root = output / AGGREGATE_CHECKPOINT_DIR
+    checkpoints: list[tuple[Path, dict]] = []
+    profiles_written = pairs_written = checkpoints_written = checkpoints_reused = 0
+    eligible_contexts = [
+        (context, paths)
+        for context, paths in sorted(cache_groups.items())
+        if context in bands_lookup
+        and (context[1], context[2]) in residue_lookup
+    ]
+    total_contexts = len(eligible_contexts)
+    print(json.dumps({
+        "event": "aggregate_start",
+        "protein_profiles": total_contexts,
+        "checkpoint_root": str(checkpoint_root),
+        "analysis_signature": analysis_signature,
+    }), flush=True)
+    for profile_number, (context, paths) in enumerate(eligible_contexts, start=1):
+        condition, split, protein = context
+        directory = checkpoint_directory(
+            checkpoint_root, condition, split, protein
+        )
+        source_final_path = final_profile_path(
+            source_profile_root, condition, split, protein
+        )
+        generated_final_path = final_profile_path(
+            generated_profile_root, condition, split, protein
+        )
+        final_path = source_final_path
+        final_is_current = False
+        if not args.overwrite_cache:
+            for candidate in (source_final_path, generated_final_path):
+                if not candidate.exists():
+                    continue
+                existing = load_seed_profile(candidate)
+                if (
                     "source_seeds" in existing
-                    and set(map(int, existing["source_seeds"])) == expected_seeds
+                    and set(map(int, existing["source_seeds"]))
+                    == expected_seeds
                     and all(metric in existing for metric in PROFILE_METRICS)
-                )
+                ):
+                    final_path = candidate
+                    final_is_current = True
+                    break
+        structure_partition = (
+            structure_root / "pair_features" / condition / split
+            / f"{protein}.npz"
+            if structure_root is not None else None
+        )
+        source_identity = {
+            "receiver_profile": file_identity(str(final_path)),
+            "structure_partition": (
+                file_identity(str(structure_partition))
+                if structure_partition is not None else None
+            ),
+        }
+        marker = (
+            reusable_context_checkpoint(
+                directory, analysis_signature, context, source_identity
+            )
+            if final_is_current else None
+        )
+        if marker is None:
             if not final_is_current:
-                final_path = final_profile_path(
-                    generated_profile_root, condition, split, protein
-                )
+                final_path = generated_final_path
                 average_seed_profiles(paths, final_path, expected_seeds)
+                source_identity["receiver_profile"] = file_identity(
+                    str(final_path)
+                )
             profile = load_seed_profile(final_path)
             expected_ids = bands_lookup[context].sort_values("band_id").band_id.astype(str).to_numpy()
             if not np.array_equal(profile["band_id"].astype(str), expected_ids):
@@ -1310,44 +1676,117 @@ def aggregate(args: argparse.Namespace, manifest: pd.DataFrame, bands: pd.DataFr
                 for feature in PAIR_UPGRADED_FEATURES:
                     if feature not in pairs:
                         pairs[feature] = np.nan
-            if writer is None:
-                writer = csv.DictWriter(pair_handle, fieldnames=pairs.columns.tolist())
-                writer.writeheader()
-            writer.writerows(pairs.to_dict("records"))
-            pairs_written += len(pairs)
-            effect_rows.extend(effects)
-            long_rows.extend(long)
-            sampled = sample_model_rows(
-                pairs, args.max_model_rows_per_class_per_protein, rng
+            marker = write_context_checkpoint(
+                directory, analysis_signature, context,
+                pairs, effects, long, args, source_identity,
             )
-            if not sampled.empty:
-                model_rows.append(sampled)
-            profiles_written += 1
-    finally:
-        pair_handle.close()
+            checkpoints_written += 1
+            status = "written"
+        else:
+            checkpoints_reused += 1
+            status = "reused"
+        checkpoints.append((directory, marker))
+        profiles_written += 1
+        pairs_written += int(marker["rows"]["pairs"])
+        if (
+            profile_number == 1
+            or profile_number == total_contexts
+            or profile_number % args.progress_every == 0
+        ):
+            print(json.dumps({
+                "event": "aggregate_progress",
+                "completed": profile_number,
+                "total": total_contexts,
+                "last_context": list(context),
+                "last_status": status,
+                "checkpoints_written": checkpoints_written,
+                "checkpoints_reused": checkpoints_reused,
+                "pair_rows": pairs_written,
+            }), flush=True)
 
-    band_effects = pd.DataFrame(effect_rows)
-    per_protein, effect_summary = summarize_effects(
-        band_effects, args.minimum_inference_proteins
-    ) if not band_effects.empty else (pd.DataFrame(), pd.DataFrame())
-    long_summary = summarize_long_range(pd.DataFrame(long_rows)) if long_rows else pd.DataFrame()
-    model_data = pd.concat(model_rows, ignore_index=True) if model_rows else pd.DataFrame()
+    manifest_rows = []
+    protein_effect_parts = []
+    protein_long_parts = []
+    model_parts = []
+    for directory, marker in checkpoints:
+        condition, split, protein = marker["context"]
+        relative = directory.relative_to(output)
+        manifest_rows.append({
+            "condition": condition,
+            "split": split,
+            "protein": protein,
+            "pair_file": str(relative / marker["files"]["pairs"]),
+            "checkpoint_marker": str(relative / "complete.json"),
+            "n_pair_rows": int(marker["rows"]["pairs"]),
+            "n_model_rows": int(marker["rows"]["model_rows"]),
+            "analysis_signature": analysis_signature,
+        })
+        for name, destination in (
+            ("protein_effects", protein_effect_parts),
+            ("protein_long_range", protein_long_parts),
+            ("model_rows", model_parts),
+        ):
+            frame = checkpoint_frame(directory, marker, name)
+            if not frame.empty:
+                destination.append(frame)
+
+    pair_manifest = pd.DataFrame(manifest_rows).sort_values(
+        ["condition", "split", "protein"]
+    )
+    atomic_write_csv(pair_manifest, output / PAIR_MANIFEST_NAME)
+    per_protein = (
+        pd.concat(protein_effect_parts, ignore_index=True)
+        if protein_effect_parts else pd.DataFrame(columns=PROTEIN_EFFECT_COLUMNS)
+    )
+    protein_long = (
+        pd.concat(protein_long_parts, ignore_index=True)
+        if protein_long_parts else pd.DataFrame(columns=PROTEIN_LONG_RANGE_COLUMNS)
+    )
+    model_data = (
+        pd.concat(model_parts, ignore_index=True)
+        if model_parts else pd.DataFrame()
+    )
+    effect_summary = summarize_protein_effects(
+        per_protein, args.minimum_inference_proteins
+    )
+    long_summary = summarize_protein_long_range(protein_long)
+    print(json.dumps({
+        "event": "aggregate_finalize_models",
+        "protein_effect_rows": len(per_protein),
+        "model_rows": len(model_data),
+    }), flush=True)
     performance = receiver_models(model_data, args)
     feature_ablation = receiver_feature_ablation(model_data, args)
     structural_water_ablation = receiver_structural_water_ablation(model_data, args)
-    per_protein.to_csv(output / "receiver_feature_effects_by_protein.csv.gz", index=False, compression="gzip")
-    effect_summary.to_csv(output / "receiver_feature_summary.csv", index=False)
-    performance.to_csv(output / "receiver_model_performance.csv", index=False)
-    feature_ablation.to_csv(
-        output / "receiver_feature_ablation_performance.csv", index=False
+    atomic_write_csv(
+        per_protein,
+        output / "receiver_feature_effects_by_protein.csv.gz",
+        compression="gzip",
     )
-    structural_water_ablation.to_csv(
-        output / "receiver_structural_water_ablation_performance.csv", index=False
+    atomic_write_csv(
+        effect_summary, output / "receiver_feature_summary.csv"
     )
-    long_summary.to_csv(output / "long_range_receiver_summary.csv", index=False)
+    atomic_write_csv(
+        performance, output / "receiver_model_performance.csv"
+    )
+    atomic_write_csv(
+        feature_ablation,
+        output / "receiver_feature_ablation_performance.csv",
+    )
+    atomic_write_csv(
+        structural_water_ablation,
+        output / "receiver_structural_water_ablation_performance.csv",
+    )
+    atomic_write_csv(
+        long_summary, output / "long_range_receiver_summary.csv"
+    )
     return {
         "averaged_protein_profiles": profiles_written,
         "band_query_pairs": pairs_written,
+        "pair_table_format": "partitioned_csv_gzip",
+        "pair_manifest": str(output / PAIR_MANIFEST_NAME),
+        "checkpoints_written": checkpoints_written,
+        "checkpoints_reused": checkpoints_reused,
         "protein_feature_effect_rows": len(per_protein),
         "model_performance_rows": len(performance),
         "feature_ablation_rows": len(feature_ablation),
@@ -1373,8 +1812,24 @@ def main() -> None:
         raise ValueError("--low_receiver_quantile must be in (0, 0.5]")
     if args.minimum_inference_proteins < 2:
         raise ValueError("--minimum_inference_proteins must be at least 2")
+    if args.progress_every < 1:
+        raise ValueError("--progress_every must be at least 1")
     output = Path(args.output_dir).expanduser().resolve()
     output.mkdir(parents=True, exist_ok=True)
+    _run_lock = acquire_output_lock(output)
+    analysis_signature, signature_payload = receiver_analysis_signature(args)
+    completed = (
+        completion_is_reusable(output, analysis_signature)
+        if not args.extract_only else None
+    )
+    if completed is not None:
+        print(json.dumps({
+            "event": "receiver_condition_reused",
+            "output_dir": str(output),
+            "analysis_signature": analysis_signature,
+            "aggregate": completed.get("aggregate"),
+        }, indent=2), flush=True)
+        return
     manifest = pd.read_csv(args.manifest_tsv, sep="\t")
     bands = pd.read_csv(args.bands_csv)
     summary = pd.read_csv(args.protein_summary_csv)
@@ -1410,7 +1865,10 @@ def main() -> None:
             ))
     aggregate_report = None
     if not args.extract_only:
-        aggregate_report = aggregate(args, manifest, bands, summary, residue, output)
+        aggregate_report = aggregate(
+            args, manifest, bands, summary, residue, output,
+            analysis_signature,
+        )
     parameters = {
         "receiver_definition": "sign_b * sum_j_in_band C_ij",
         "seed_handling": "compute within seed, then arithmetic mean across seeds",
@@ -1459,13 +1917,36 @@ def main() -> None:
             ),
         },
         "random_seed": args.random_seed,
+        "sampling_randomization": (
+            "A deterministic SHA-256-derived seed is assigned to each "
+            "condition/split/protein context, so checkpoint reuse cannot "
+            "change the sampled modeling cohort."
+        ),
+        "analysis_signature": analysis_signature,
+        "analysis_signature_payload": signature_payload,
+        "pair_table": {
+            "format": "partitioned_csv_gzip",
+            "manifest": PAIR_MANIFEST_NAME,
+            "checkpoint_root": AGGREGATE_CHECKPOINT_DIR,
+            "note": (
+                "Each manifest row identifies one atomic per-protein pair "
+                "partition. The legacy monolithic pair table is not authoritative."
+            ),
+        },
     }
-    (output / "parameters.json").write_text(json.dumps(parameters, indent=2) + "\n")
-    (output / "extraction_audit.json").write_text(json.dumps(extraction_reports, indent=2) + "\n")
+    atomic_write_json(parameters, output / "parameters.json")
+    atomic_write_json(extraction_reports, output / "extraction_audit.json")
+    if not args.extract_only:
+        atomic_write_json({
+            "schema": RECEIVER_COMPLETION_SCHEMA,
+            "analysis_signature": analysis_signature,
+            "aggregate": aggregate_report,
+            "outputs": list(FINAL_RECEIVER_OUTPUTS),
+        }, output / "receiver_complete.json")
     print(json.dumps({
         "extraction": extraction_reports, "aggregate": aggregate_report,
         "output_dir": str(output),
-    }, indent=2))
+    }, indent=2), flush=True)
 
 
 if __name__ == "__main__":

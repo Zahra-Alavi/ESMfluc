@@ -267,10 +267,12 @@ def audit_feature_partition(
 def audit_receiver_output(path: Path, audit: Audit) -> None:
     context = str(path)
     required = {
+        "band_query_pair_manifest.csv",
         "receiver_model_performance.csv",
         "receiver_feature_summary.csv",
         "receiver_structural_water_ablation_performance.csv",
         "parameters.json",
+        "receiver_complete.json",
     }
     for name in required:
         audit.check((path / name).exists(), "receiver_output_exists", f"{context}:{name}")
@@ -327,6 +329,114 @@ def audit_receiver_output(path: Path, audit: Audit) -> None:
         "receiver_parameters_record_feature_source",
         context,
     )
+    pair_manifest_path = path / "band_query_pair_manifest.csv"
+    completion_path = path / "receiver_complete.json"
+    if pair_manifest_path.exists():
+        pair_manifest = pd.read_csv(pair_manifest_path)
+        expected_pair_columns = {
+            "condition", "split", "protein", "pair_file",
+            "checkpoint_marker", "n_pair_rows", "analysis_signature",
+        }
+        audit.check(
+            expected_pair_columns <= set(pair_manifest),
+            "receiver_pair_manifest_schema",
+            context,
+            f"missing={sorted(expected_pair_columns - set(pair_manifest))}",
+        )
+        if expected_pair_columns <= set(pair_manifest):
+            duplicate = pair_manifest.duplicated(
+                ["condition", "split", "protein"]
+            )
+            audit.check(
+                not bool(duplicate.any()),
+                "receiver_pair_manifest_unique_contexts",
+                context,
+            )
+            audit.check(
+                bool((pair_manifest.n_pair_rows.astype(int) > 0).all()),
+                "receiver_pair_manifest_positive_rows",
+                context,
+            )
+            expected_signature = str(parameters.get("analysis_signature", ""))
+            audit.check(
+                bool(expected_signature)
+                and set(pair_manifest.analysis_signature.astype(str))
+                == {expected_signature},
+                "receiver_pair_manifest_signature",
+                context,
+            )
+            output_root = path.resolve()
+            for row in pair_manifest.itertuples(index=False):
+                pair_file = (path / str(row.pair_file)).resolve()
+                marker_file = (path / str(row.checkpoint_marker)).resolve()
+                try:
+                    pair_file.relative_to(output_root)
+                    marker_file.relative_to(output_root)
+                    inside = True
+                except ValueError:
+                    inside = False
+                audit.check(
+                    inside,
+                    "receiver_checkpoint_paths_within_output",
+                    f"{context}:{row.split}/{row.protein}",
+                )
+                audit.check(
+                    inside
+                    and pair_file.is_file()
+                    and marker_file.is_file()
+                    and pair_file.stat().st_size > 0
+                    and marker_file.stat().st_size > 0,
+                    "receiver_checkpoint_files_exist",
+                    f"{context}:{row.split}/{row.protein}",
+                )
+                if inside and marker_file.is_file():
+                    try:
+                        marker = json.loads(marker_file.read_text())
+                    except (OSError, json.JSONDecodeError):
+                        marker = {}
+                    try:
+                        marker_pair_rows = int(
+                            marker.get("rows", {}).get("pairs", -1)
+                        )
+                    except (TypeError, ValueError):
+                        marker_pair_rows = -1
+                    expected_context = [
+                        str(row.condition), str(row.split), str(row.protein)
+                    ]
+                    audit.check(
+                        marker.get("schema")
+                        == "esmfluc.receiver.aggregate_checkpoint.v1"
+                        and marker.get("analysis_signature")
+                        == expected_signature
+                        and marker.get("context") == expected_context
+                        and marker_pair_rows == int(row.n_pair_rows),
+                        "receiver_checkpoint_marker_consistent",
+                        f"{context}:{row.split}/{row.protein}",
+                    )
+    if completion_path.exists():
+        completion = json.loads(completion_path.read_text())
+        audit.check(
+            completion.get("schema")
+            == "esmfluc.receiver.analysis_complete.v1",
+            "receiver_completion_schema",
+            context,
+        )
+        audit.check(
+            completion.get("analysis_signature")
+            == parameters.get("analysis_signature"),
+            "receiver_completion_signature",
+            context,
+        )
+        if pair_manifest_path.exists() and expected_pair_columns <= set(pair_manifest):
+            aggregate = completion.get("aggregate") or {}
+            audit.check(
+                int(aggregate.get("averaged_protein_profiles", -1))
+                == len(pair_manifest)
+                and int(aggregate.get("band_query_pairs", -1))
+                == int(pair_manifest.n_pair_rows.astype(int).sum()),
+                "receiver_completion_counts_match_manifest",
+                context,
+            )
 
 
 def main() -> None:

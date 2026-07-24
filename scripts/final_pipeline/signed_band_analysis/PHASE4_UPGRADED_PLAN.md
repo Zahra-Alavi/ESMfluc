@@ -228,7 +228,9 @@ Per-condition upgraded receiver root:
 
 `.../analysis_seed_averaged_band_query_receivers_upgraded/primary/<condition>/`
 
-- `band_query_pairs.csv.gz`
+- `band_query_pair_manifest.csv`
+- `receiver_aggregate_checkpoints/<condition>/<split>/<protein>/pairs.csv.gz`
+- `receiver_aggregate_checkpoints/<condition>/<split>/<protein>/complete.json`
 - `receiver_feature_effects_by_protein.csv.gz`
 - `receiver_feature_summary.csv`
 - `receiver_model_performance.csv`
@@ -237,6 +239,15 @@ Per-condition upgraded receiver root:
 - `long_range_receiver_summary.csv`
 - `parameters.json`
 - `extraction_audit.json`
+- `receiver_complete.json`
+
+The per-protein pair partitions and compact effect/model checkpoints are
+written atomically. A rerun with identical inputs and analysis parameters
+reuses every completed protein checkpoint, and a completed condition is
+skipped using `receiver_complete.json`. The partition manifest is the
+authoritative pair-table index; a legacy monolithic `band_query_pairs.csv.gz`
+is not required for analysis or audit. A per-output advisory lock prevents
+two concurrent receiver processes from corrupting the same checkpoint set.
 
 Top-level audits:
 

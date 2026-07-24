@@ -90,6 +90,7 @@ build_and_analyze() {
       --long_range_min_separation 21 \
       --minimum_inference_proteins 10 \
       --max_model_rows_per_class_per_protein 50 \
+      --progress_every 25 \
       --random_seed 123
   done
 
