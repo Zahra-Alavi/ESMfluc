@@ -559,7 +559,12 @@ def receiver_rows_for_profile(
                     continue
                 values = structure[name]
                 if values.ndim == 2:
-                    base[name] = values[band_number]
+                    if values.shape[1] != length:
+                        raise ValueError(
+                            f"{condition}/{split}/{protein}: {name} has "
+                            f"{values.shape[1]} query positions, expected {length}"
+                        )
+                    base[name] = values[band_number, eligible]
                 elif values.ndim == 1:
                     base[name] = float(values[band_number])
                 else:

@@ -5,6 +5,7 @@ package_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd "${package_dir}/.." && pwd)"
 cd "$project_root"
 python_bin="${PYTHON_BIN:-python3}"
+receivers_only="${RUN_PHASE4_RECEIVERS_ONLY:-0}"
 
 result_root="results/publication_comparable_v2"
 bands_csv="$result_root/analysis_seed_averaged_signed_bands/signed_bands.csv"
@@ -34,20 +35,40 @@ build_and_analyze() {
   local feature_audit="$upgrade_root/audit_${analysis_label}_features.json"
   local final_audit="$upgrade_root/audit_${analysis_label}_complete.json"
 
-  "$python_bin" -m signed_band_analysis build-query-structure \
-    --bands_csv "$bands_csv" \
-    --contact_json \
-      "$contact_root/train_contacts_ca8.json.gz" \
-      "$contact_root/validation_contacts_ca8.json.gz" \
-      "$contact_root/test_contacts_ca8.json.gz" \
-    --ecod_csv "$ecod_csv" \
-    --output_dir "$feature_root" \
-    "$@"
+  if [[ "$receivers_only" == "1" ]]; then
+    if [[ ! -d "$feature_root/pair_features" ]]; then
+      echo "Missing completed feature partitions: $feature_root/pair_features" >&2
+      exit 1
+    fi
+    if [[ ! -f "$feature_root/parameters.json" ]]; then
+      echo "Missing feature parameters: $feature_root/parameters.json" >&2
+      exit 1
+    fi
+    if [[ ! -f "$feature_audit" ]]; then
+      echo "Missing feature audit: $feature_audit" >&2
+      exit 1
+    fi
+    if ! grep -q '"passed": true' "$feature_audit"; then
+      echo "Feature audit did not pass: $feature_audit" >&2
+      exit 1
+    fi
+    echo "Reusing audited feature store: $feature_root"
+  else
+    "$python_bin" -m signed_band_analysis build-query-structure \
+      --bands_csv "$bands_csv" \
+      --contact_json \
+        "$contact_root/train_contacts_ca8.json.gz" \
+        "$contact_root/validation_contacts_ca8.json.gz" \
+        "$contact_root/test_contacts_ca8.json.gz" \
+      --ecod_csv "$ecod_csv" \
+      --output_dir "$feature_root" \
+      "$@"
 
-  "$python_bin" -m signed_band_analysis audit-phase4-upgraded \
-    --bands_csv "$bands_csv" \
-    --feature_dir "$feature_root" \
-    --output_json "$feature_audit"
+    "$python_bin" -m signed_band_analysis audit-phase4-upgraded \
+      --bands_csv "$bands_csv" \
+      --feature_dir "$feature_root" \
+      --output_json "$feature_audit"
+  fi
 
   local receiver_dirs=()
   for condition in "${conditions[@]}"; do

@@ -2,7 +2,12 @@ import types
 import unittest
 
 import numpy as np
+import pandas as pd
 
+from signed_band_analysis.analyze_signed_band_query_receivers import (
+    PROFILE_METRICS,
+    receiver_rows_for_profile,
+)
 from signed_band_analysis.build_band_query_structural_water_features import (
     Atom,
     adjacency_lists,
@@ -114,6 +119,71 @@ class Phase4StructuralWaterHelperTests(unittest.TestCase):
         )
         self.assertEqual(result["retained_water_count"], 1)
         self.assertEqual(result["residue_to_waters"], [{0}])
+
+    def test_pair_features_follow_receiver_eligibility_mask(self):
+        length = 5
+        profile = {
+            "protein_length": np.asarray([length]),
+            "band_id": np.asarray(["band_1"]),
+            "sign": np.asarray([1]),
+            "apex_index_0based": np.asarray([2]),
+            "start_index_0based": np.asarray([2]),
+            "end_index_0based_inclusive": np.asarray([2]),
+        }
+        for offset, metric in enumerate(PROFILE_METRICS):
+            profile[metric] = np.asarray(
+                [[0.1, 0.2, 0.3, 0.4, 0.5 + offset]]
+            )
+        residue = pd.DataFrame({
+            "residue_index_0based": np.arange(length),
+            "amino_acid": list("ACDEF"),
+            "q8": ["H"] * length,
+            "neq": np.arange(length, dtype=float),
+            "rsa": np.arange(length, dtype=float),
+            "disorder": np.arange(length, dtype=float),
+            "torsion_change_from_previous": np.arange(length, dtype=float),
+        })
+        bands = pd.DataFrame({
+            "band_id": ["band_1"],
+            "start_index_0based": [2],
+            "end_index_0based_inclusive": [2],
+        })
+        summary = pd.Series({
+            "eligible_start_index_0based": 1,
+            "eligible_end_index_0based_exclusive": 4,
+        })
+        structure = {
+            "pair_feature_names": np.asarray(
+                ["minimum_ca_distance_angstrom"]
+            ),
+            "band_feature_names": np.asarray([], dtype=str),
+            "minimum_ca_distance_angstrom": np.asarray(
+                [[100.0, 101.0, 102.0, 103.0, 104.0]]
+            ),
+        }
+
+        pairs, _, _ = receiver_rows_for_profile(
+            profile,
+            "condition",
+            "test",
+            "protein",
+            residue,
+            bands,
+            summary,
+            {},
+            receiver_quantile=0.90,
+            low_quantile=0.50,
+            long_range_min=21,
+            structure=structure,
+        )
+
+        np.testing.assert_array_equal(
+            pairs["query_index_0based"].to_numpy(), [1, 2, 3]
+        )
+        np.testing.assert_allclose(
+            pairs["minimum_ca_distance_angstrom"].to_numpy(),
+            [101.0, 102.0, 103.0],
+        )
 
 
 if __name__ == "__main__":
