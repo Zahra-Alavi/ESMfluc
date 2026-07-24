@@ -1,0 +1,71 @@
+{
+  "score": "mean_seed_I_j = (I_j_seed1 + I_j_seed2 + I_j_seed3) / 3",
+  "influence_field": "seed_averaged_signed_column_influence",
+  "component_profile_note": "Apex intrinsic evidence and attention breadth are blank for the seed-averaged profile because mean(s_j * B_j) is not generally mean(s_j) * mean(B_j).",
+  "sign_labels": {
+    "+1": "flexibility_supporting",
+    "-1": "rigidity_supporting"
+  },
+  "coordinate_convention": {
+    "*_index_0based": "Python indexing",
+    "*_residue_1based": "biological residue numbering relative to the input sequence",
+    "end_index_0based_inclusive": "inclusive band end"
+  },
+  "smooth_windows": [
+    1,
+    3,
+    5
+  ],
+  "min_scales": 2,
+  "scale_tolerance": 2,
+  "prominence_mad": 2.5,
+  "min_peak_distance": 3,
+  "terminal_exclusion": 0,
+  "terminal_exclusion_fraction": 0.0,
+  "eligible_apex_interval": "terminal-excluded search interval minus its two endpoints, which scipy.signal.find_peaks cannot select",
+  "band_boundary": "median half-prominence limits across persistent scales",
+  "n_protein_profiles": 8298,
+  "n_bands": 97198,
+  "outputs": {
+    "bands": "seed_averaged_signed_bands.csv.gz",
+    "protein_summary": "seed_averaged_signed_band_protein_summary.csv",
+    "consensus_reproducibility": "consensus_reproducibility_summary.csv",
+    "seed_pair_reproducibility": "seed_pair_reproducibility_summary.csv"
+  },
+  "source": {
+    "profile": "signed column influence I_j averaged across seeds 1, 2, and 3 before band detection",
+    "source_seeds": [
+      1,
+      2,
+      3
+    ],
+    "conditions": [
+      "esm2_frozen_bilstm_attn",
+      "esm2_top4_bilstm_attn",
+      "esm2_top28_bilstm_attn",
+      "esm3_frozen_bilstm_attn",
+      "esm3_top4_bilstm_attn",
+      "esm3_top28_bilstm_attn"
+    ],
+    "splits": [
+      "train",
+      "validation",
+      "test"
+    ]
+  },
+  "portable_export": {
+    "removed_band_columns": [
+      "apex_attention_column_mean",
+      "apex_intrinsic_signed_evidence",
+      "influence_field",
+      "json_path",
+      "seed"
+    ],
+    "removed_protein_summary_columns": [
+      "influence_field",
+      "json_path",
+      "seed"
+    ],
+    "note": "Absolute input paths, constant row metadata, and empty seed-specific component columns were removed."
+  }
+}
