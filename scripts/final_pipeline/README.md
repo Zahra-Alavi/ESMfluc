@@ -119,3 +119,56 @@ Here is the full list of available command-line arguments:
 | `--amp_dtype`                      | str         | `fp16`                      | Autocast dtype for mixed precision.                           |
 | `--seed`                           | int         | `42`                        | Global random seed for reproducibility.                       |
 | `--result_foldername`              | str         | `timestamp`                 | Name for the result folder.                                   |
+
+
+Fixed train / validation / test datasets
+│
+├── 1. Train comparable models
+│   ├── ESM2 → BiLSTM → self-attention → classifier
+│   │   ├── frozen
+│   │   ├── top-4 fine-tuned
+│   │   └── top-28 fine-tuned
+│   ├── ESM3 → BiLSTM → self-attention → classifier
+│   │   ├── frozen
+│   │   ├── top-4 fine-tuned
+│   │   └── top-28 fine-tuned
+│   └── frozen ESM2 linear baseline
+│
+│   Each condition is trained with seeds 1, 2, and 3
+│   → 7 conditions × 3 seeds = 21 runs
+│
+├── 2. Evaluate and extract model outputs
+│   ├── checkpoint and test metrics
+│   ├── hard residue predictions
+│   ├── flexible-class probabilities
+│   ├── complete class probabilities
+│   ├── BiLSTM self-attention A
+│   ├── exact signed contributions C
+│   └── ESM2 backbone attention where applicable
+│
+├── 3. Test reproducibility across seeds
+│   ├── predictive stability
+│   ├── attention stability
+│   ├── signed-contribution stability
+│   └── ESM2 backbone-attention stability
+│
+├── 4. Extract signed contributions for all splits
+│   ├── train
+│   ├── validation
+│   └── test
+│
+│   Produces, for every protein:
+│   ├── attention routing A_ij
+│   ├── intrinsic signed evidence s_j
+│   ├── exact contribution C_ij = A_ij × s_j
+│   ├── signed column influence I_j
+│   └── attention-column mean B_j
+│
+└── 5. Signed-band analysis
+    ├── Phase 1: detect bands and test seed reproducibility
+    ├── Phase 2: annotate and analyze biophysical enrichment
+    ├── Phase 3A: explain Q8-segment selection
+    ├── Phase 3B: relate bands to experimental structure
+    ├── Phase 3C: separate evidence from consultation
+    ├── Phase 4: identify query residues receiving band contributions
+    └── Phase 5: test sequence PWMs and motifs
