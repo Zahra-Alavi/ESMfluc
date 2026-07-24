@@ -1,0 +1,239 @@
+{
+  "analysis": "Phase 4 non-structural signed-band query-receiver analysis",
+  "scope": "Completed original receiver analysis using sequence and residue-level biophysical query features; no pairwise experimental-structure or water features.",
+  "conditions": [
+    "esm2_frozen_bilstm_attn",
+    "esm2_top28_bilstm_attn",
+    "esm2_top4_bilstm_attn",
+    "esm3_frozen_bilstm_attn",
+    "esm3_top28_bilstm_attn",
+    "esm3_top4_bilstm_attn"
+  ],
+  "parameters_by_condition": {
+    "esm2_frozen_bilstm_attn": {
+      "receiver_definition": "sign_b * sum_j_in_band C_ij",
+      "seed_handling": "compute within seed, then arithmetic mean across seeds",
+      "receiver_quantile": 0.9,
+      "low_receiver_quantile": 0.5,
+      "matching": "same protein, band, exact query Q8, and sequence-distance bin",
+      "distance_bins": {
+        "inside": "0",
+        "adjacent_1_5": "1-5",
+        "local_6_20": "6-20",
+        "distal_21_50": "21-50",
+        "distal_gt50": ">50"
+      },
+      "long_range_min_separation": 21,
+      "minimum_inference_proteins": 10,
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "pairwise_structure_source": null,
+      "feature_ablation": {
+        "features": [
+          "neq",
+          "rsa",
+          "disorder",
+          "torsion_change_from_previous",
+          "query_amino_acid_class",
+          "normalized_query_position",
+          "query_in_any_band"
+        ],
+        "single_feature_estimand": "AUROC of baseline plus one feature minus baseline AUROC",
+        "leave_one_out_estimand": "full query-feature AUROC minus AUROC after removing one feature"
+      },
+      "random_seed": 123
+    },
+    "esm2_top28_bilstm_attn": {
+      "receiver_definition": "sign_b * sum_j_in_band C_ij",
+      "seed_handling": "compute within seed, then arithmetic mean across seeds",
+      "receiver_quantile": 0.9,
+      "low_receiver_quantile": 0.5,
+      "matching": "same protein, band, exact query Q8, and sequence-distance bin",
+      "distance_bins": {
+        "inside": "0",
+        "adjacent_1_5": "1-5",
+        "local_6_20": "6-20",
+        "distal_21_50": "21-50",
+        "distal_gt50": ">50"
+      },
+      "long_range_min_separation": 21,
+      "minimum_inference_proteins": 10,
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "pairwise_structure_source": null,
+      "feature_ablation": {
+        "features": [
+          "neq",
+          "rsa",
+          "disorder",
+          "torsion_change_from_previous",
+          "query_amino_acid_class",
+          "normalized_query_position",
+          "query_in_any_band"
+        ],
+        "single_feature_estimand": "AUROC of baseline plus one feature minus baseline AUROC",
+        "leave_one_out_estimand": "full query-feature AUROC minus AUROC after removing one feature"
+      },
+      "random_seed": 123
+    },
+    "esm2_top4_bilstm_attn": {
+      "receiver_definition": "sign_b * sum_j_in_band C_ij",
+      "seed_handling": "compute within seed, then arithmetic mean across seeds",
+      "receiver_quantile": 0.9,
+      "low_receiver_quantile": 0.5,
+      "matching": "same protein, band, exact query Q8, and sequence-distance bin",
+      "distance_bins": {
+        "inside": "0",
+        "adjacent_1_5": "1-5",
+        "local_6_20": "6-20",
+        "distal_21_50": "21-50",
+        "distal_gt50": ">50"
+      },
+      "long_range_min_separation": 21,
+      "minimum_inference_proteins": 10,
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "pairwise_structure_source": null,
+      "feature_ablation": {
+        "features": [
+          "neq",
+          "rsa",
+          "disorder",
+          "torsion_change_from_previous",
+          "query_amino_acid_class",
+          "normalized_query_position",
+          "query_in_any_band"
+        ],
+        "single_feature_estimand": "AUROC of baseline plus one feature minus baseline AUROC",
+        "leave_one_out_estimand": "full query-feature AUROC minus AUROC after removing one feature"
+      },
+      "random_seed": 123
+    },
+    "esm3_frozen_bilstm_attn": {
+      "receiver_definition": "sign_b * sum_j_in_band C_ij",
+      "seed_handling": "compute within seed, then arithmetic mean across seeds",
+      "receiver_quantile": 0.9,
+      "low_receiver_quantile": 0.5,
+      "matching": "same protein, band, exact query Q8, and sequence-distance bin",
+      "distance_bins": {
+        "inside": "0",
+        "adjacent_1_5": "1-5",
+        "local_6_20": "6-20",
+        "distal_21_50": "21-50",
+        "distal_gt50": ">50"
+      },
+      "long_range_min_separation": 21,
+      "minimum_inference_proteins": 10,
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "pairwise_structure_source": null,
+      "feature_ablation": {
+        "features": [
+          "neq",
+          "rsa",
+          "disorder",
+          "torsion_change_from_previous",
+          "query_amino_acid_class",
+          "normalized_query_position",
+          "query_in_any_band"
+        ],
+        "single_feature_estimand": "AUROC of baseline plus one feature minus baseline AUROC",
+        "leave_one_out_estimand": "full query-feature AUROC minus AUROC after removing one feature"
+      },
+      "random_seed": 123
+    },
+    "esm3_top28_bilstm_attn": {
+      "receiver_definition": "sign_b * sum_j_in_band C_ij",
+      "seed_handling": "compute within seed, then arithmetic mean across seeds",
+      "receiver_quantile": 0.9,
+      "low_receiver_quantile": 0.5,
+      "matching": "same protein, band, exact query Q8, and sequence-distance bin",
+      "distance_bins": {
+        "inside": "0",
+        "adjacent_1_5": "1-5",
+        "local_6_20": "6-20",
+        "distal_21_50": "21-50",
+        "distal_gt50": ">50"
+      },
+      "long_range_min_separation": 21,
+      "minimum_inference_proteins": 10,
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "pairwise_structure_source": null,
+      "feature_ablation": {
+        "features": [
+          "neq",
+          "rsa",
+          "disorder",
+          "torsion_change_from_previous",
+          "query_amino_acid_class",
+          "normalized_query_position",
+          "query_in_any_band"
+        ],
+        "single_feature_estimand": "AUROC of baseline plus one feature minus baseline AUROC",
+        "leave_one_out_estimand": "full query-feature AUROC minus AUROC after removing one feature"
+      },
+      "random_seed": 123
+    },
+    "esm3_top4_bilstm_attn": {
+      "receiver_definition": "sign_b * sum_j_in_band C_ij",
+      "seed_handling": "compute within seed, then arithmetic mean across seeds",
+      "receiver_quantile": 0.9,
+      "low_receiver_quantile": 0.5,
+      "matching": "same protein, band, exact query Q8, and sequence-distance bin",
+      "distance_bins": {
+        "inside": "0",
+        "adjacent_1_5": "1-5",
+        "local_6_20": "6-20",
+        "distal_21_50": "21-50",
+        "distal_gt50": ">50"
+      },
+      "long_range_min_separation": 21,
+      "minimum_inference_proteins": 10,
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "pairwise_structure_source": null,
+      "feature_ablation": {
+        "features": [
+          "neq",
+          "rsa",
+          "disorder",
+          "torsion_change_from_previous",
+          "query_amino_acid_class",
+          "normalized_query_position",
+          "query_in_any_band"
+        ],
+        "single_feature_estimand": "AUROC of baseline plus one feature minus baseline AUROC",
+        "leave_one_out_estimand": "full query-feature AUROC minus AUROC after removing one feature"
+      },
+      "random_seed": 123
+    }
+  },
+  "portable_export": {
+    "note": "Equivalent condition-specific tables were combined. Absolute source paths were removed from the extraction audit.",
+    "upgraded_structural_analysis_included": false,
+    "excluded_intermediates": [
+      "band_query_pairs.csv.gz",
+      "per_seed_query_profile_cache/",
+      "run logs"
+    ]
+  }
+}

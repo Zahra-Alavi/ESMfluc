@@ -1,0 +1,512 @@
+{
+  "analysis": "Phase 4 non-structural extraction audit",
+  "note": "An empty condition audit means aggregation reused an existing receiver cache without re-extracting source archives in that invocation.",
+  "records_by_condition": {
+    "esm2_frozen_bilstm_attn": [
+      {
+        "condition": "esm2_frozen_bilstm_attn",
+        "seed": 1,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 966,
+        "protein_caches_reused": 0,
+        "bands_encountered": 12151,
+        "maximum_contribution_reconstruction_error": 5.851892126429448e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_frozen_bilstm_attn",
+        "seed": 1,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 208,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2576,
+        "maximum_contribution_reconstruction_error": 5.717447493225336e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_frozen_bilstm_attn",
+        "seed": 1,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 208,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2583,
+        "maximum_contribution_reconstruction_error": 4.9718323680281173e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_frozen_bilstm_attn",
+        "seed": 2,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 966,
+        "protein_caches_reused": 0,
+        "bands_encountered": 12151,
+        "maximum_contribution_reconstruction_error": 2.9738600915152347e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_frozen_bilstm_attn",
+        "seed": 2,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 208,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2576,
+        "maximum_contribution_reconstruction_error": 2.9792630584779545e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_frozen_bilstm_attn",
+        "seed": 2,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 208,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2583,
+        "maximum_contribution_reconstruction_error": 2.8821702358072798e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_frozen_bilstm_attn",
+        "seed": 3,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 966,
+        "protein_caches_reused": 0,
+        "bands_encountered": 12151,
+        "maximum_contribution_reconstruction_error": 7.106362431841262e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_frozen_bilstm_attn",
+        "seed": 3,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 208,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2576,
+        "maximum_contribution_reconstruction_error": 5.785113899037242e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_frozen_bilstm_attn",
+        "seed": 3,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 208,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2583,
+        "maximum_contribution_reconstruction_error": 5.8826067572681495e-08,
+        "source_kind": "all_split_signed_contributions"
+      }
+    ],
+    "esm2_top28_bilstm_attn": [
+      {
+        "condition": "esm2_top28_bilstm_attn",
+        "seed": 1,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 959,
+        "bands_encountered": 10435,
+        "maximum_contribution_reconstruction_error": 1.485150846747274e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top28_bilstm_attn",
+        "seed": 1,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2331,
+        "maximum_contribution_reconstruction_error": 1.3485490057973948e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top28_bilstm_attn",
+        "seed": 1,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 206,
+        "bands_encountered": 2340,
+        "maximum_contribution_reconstruction_error": 1.4698375849775402e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top28_bilstm_attn",
+        "seed": 2,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 959,
+        "bands_encountered": 10435,
+        "maximum_contribution_reconstruction_error": 1.4873887010935505e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top28_bilstm_attn",
+        "seed": 2,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2331,
+        "maximum_contribution_reconstruction_error": 1.4757127075881726e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top28_bilstm_attn",
+        "seed": 2,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 206,
+        "bands_encountered": 2340,
+        "maximum_contribution_reconstruction_error": 1.3857626157687264e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top28_bilstm_attn",
+        "seed": 3,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 959,
+        "bands_encountered": 10435,
+        "maximum_contribution_reconstruction_error": 1.4887204358160488e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top28_bilstm_attn",
+        "seed": 3,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2331,
+        "maximum_contribution_reconstruction_error": 1.46574521409093e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top28_bilstm_attn",
+        "seed": 3,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 206,
+        "bands_encountered": 2340,
+        "maximum_contribution_reconstruction_error": 1.4605241460685647e-08,
+        "source_kind": "all_split_signed_contributions"
+      }
+    ],
+    "esm2_top4_bilstm_attn": [
+      {
+        "condition": "esm2_top4_bilstm_attn",
+        "seed": 1,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 965,
+        "protein_caches_reused": 0,
+        "bands_encountered": 11114,
+        "maximum_contribution_reconstruction_error": 1.798353110871176e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top4_bilstm_attn",
+        "seed": 1,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 208,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2381,
+        "maximum_contribution_reconstruction_error": 1.4772734147072697e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top4_bilstm_attn",
+        "seed": 1,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 206,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2354,
+        "maximum_contribution_reconstruction_error": 1.4862255426351112e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top4_bilstm_attn",
+        "seed": 2,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 965,
+        "protein_caches_reused": 0,
+        "bands_encountered": 11114,
+        "maximum_contribution_reconstruction_error": 2.927873765656841e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top4_bilstm_attn",
+        "seed": 2,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 208,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2381,
+        "maximum_contribution_reconstruction_error": 2.8803647467157134e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top4_bilstm_attn",
+        "seed": 2,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 206,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2354,
+        "maximum_contribution_reconstruction_error": 1.4852677310273066e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top4_bilstm_attn",
+        "seed": 3,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 965,
+        "protein_caches_reused": 0,
+        "bands_encountered": 11114,
+        "maximum_contribution_reconstruction_error": 2.9623272723711125e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top4_bilstm_attn",
+        "seed": 3,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 208,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2381,
+        "maximum_contribution_reconstruction_error": 2.811574617567203e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm2_top4_bilstm_attn",
+        "seed": 3,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 206,
+        "protein_caches_reused": 0,
+        "bands_encountered": 2354,
+        "maximum_contribution_reconstruction_error": 2.348563299392481e-08,
+        "source_kind": "all_split_signed_contributions"
+      }
+    ],
+    "esm3_frozen_bilstm_attn": [
+      {
+        "condition": "esm3_frozen_bilstm_attn",
+        "seed": 1,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 964,
+        "bands_encountered": 11603,
+        "maximum_contribution_reconstruction_error": 5.884606935069314e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_frozen_bilstm_attn",
+        "seed": 1,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2456,
+        "maximum_contribution_reconstruction_error": 3.0423649377553375e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_frozen_bilstm_attn",
+        "seed": 1,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2500,
+        "maximum_contribution_reconstruction_error": 2.9721221039835655e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_frozen_bilstm_attn",
+        "seed": 2,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 964,
+        "bands_encountered": 11603,
+        "maximum_contribution_reconstruction_error": 5.660763235937338e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_frozen_bilstm_attn",
+        "seed": 2,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2456,
+        "maximum_contribution_reconstruction_error": 4.69933070235129e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_frozen_bilstm_attn",
+        "seed": 2,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2500,
+        "maximum_contribution_reconstruction_error": 5.870398922525055e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_frozen_bilstm_attn",
+        "seed": 3,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 964,
+        "bands_encountered": 11603,
+        "maximum_contribution_reconstruction_error": 5.8768279131982126e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_frozen_bilstm_attn",
+        "seed": 3,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2456,
+        "maximum_contribution_reconstruction_error": 5.662286639562808e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_frozen_bilstm_attn",
+        "seed": 3,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2500,
+        "maximum_contribution_reconstruction_error": 5.73946579152107e-08,
+        "source_kind": "all_split_signed_contributions"
+      }
+    ],
+    "esm3_top28_bilstm_attn": [],
+    "esm3_top4_bilstm_attn": [
+      {
+        "condition": "esm3_top4_bilstm_attn",
+        "seed": 1,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 963,
+        "bands_encountered": 11145,
+        "maximum_contribution_reconstruction_error": 5.8572894090502814e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_top4_bilstm_attn",
+        "seed": 1,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2412,
+        "maximum_contribution_reconstruction_error": 5.806808189845469e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_top4_bilstm_attn",
+        "seed": 1,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2350,
+        "maximum_contribution_reconstruction_error": 5.621434695513017e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_top4_bilstm_attn",
+        "seed": 2,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 963,
+        "bands_encountered": 11145,
+        "maximum_contribution_reconstruction_error": 5.542926828638883e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_top4_bilstm_attn",
+        "seed": 2,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2412,
+        "maximum_contribution_reconstruction_error": 2.9572646553788218e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_top4_bilstm_attn",
+        "seed": 2,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2350,
+        "maximum_contribution_reconstruction_error": 2.9676726853722357e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_top4_bilstm_attn",
+        "seed": 3,
+        "split": "train",
+        "proteins_seen": 967,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 963,
+        "bands_encountered": 11145,
+        "maximum_contribution_reconstruction_error": 5.9103854255226906e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_top4_bilstm_attn",
+        "seed": 3,
+        "split": "validation",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2412,
+        "maximum_contribution_reconstruction_error": 5.807104486166281e-08,
+        "source_kind": "all_split_signed_contributions"
+      },
+      {
+        "condition": "esm3_top4_bilstm_attn",
+        "seed": 3,
+        "split": "test",
+        "proteins_seen": 208,
+        "protein_caches_written": 0,
+        "protein_caches_reused": 208,
+        "bands_encountered": 2350,
+        "maximum_contribution_reconstruction_error": 5.81928816245636e-08,
+        "source_kind": "all_split_signed_contributions"
+      }
+    ]
+  }
+}
