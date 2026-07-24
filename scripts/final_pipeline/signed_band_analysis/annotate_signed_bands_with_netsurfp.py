@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Join averaged signed bands to Neq and NetSurfP residue annotations.
+"""Join seed-averaged signed bands to Neq and NetSurfP annotations.
 
 The script performs strict name/sequence/length/coordinate validation, builds a
 single residue-level annotation table, and adds apex, local-window, and complete

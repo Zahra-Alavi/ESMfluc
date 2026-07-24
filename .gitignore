@@ -50,11 +50,9 @@ result/
 *.pdf
 *.json
 *.pth
+*.log
 scripts/final_pipeline/test_esm3.log
 scripts/final_pipeline/bip.fasta
 scripts/final_pipeline/1cuo_A.fasta
 scripts/final_pipeline/SESSION_CAPSULE.md
-scripts/final_pipeline/tests/test_build_contact_maps_from_pdb.py
-scripts/final_pipeline/tests/test_analyze_signed_band_external_structure.py
-scripts/final_pipeline/tests/test_analyze_signed_band_biophysical_enrichment.py
 scripts/final_pipeline/gk_mutants/WEINREB_MUTATION_NETWORK_README.md

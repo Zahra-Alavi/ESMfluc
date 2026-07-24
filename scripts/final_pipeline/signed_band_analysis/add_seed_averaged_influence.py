@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from extract_signed_contribution_bands import iter_profiles
+from .extract_signed_contribution_bands import iter_profiles
 
 
 AVERAGED_FIELD = "seed_averaged_signed_column_influence"

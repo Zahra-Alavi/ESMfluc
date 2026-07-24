@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Call positive and negative multiscale bands from signed column influence I_j.
+"""Call positive and negative multiscale signed-influence bands.
 
 The publication contribution files are very large because they contain two LxL
 matrices.  This script scans their compact JSON representation and materializes

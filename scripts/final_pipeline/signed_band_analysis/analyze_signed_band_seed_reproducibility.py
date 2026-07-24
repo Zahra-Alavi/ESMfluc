@@ -2,7 +2,8 @@
 """Build same-sign seed-consensus bands and block-shift reproducibility nulls.
 
 Inputs are ``signed_bands.csv`` and ``signed_band_protein_summary.csv`` from
-extract_signed_contribution_bands.py.  Bands are matched only within the same
+``signed_band_analysis.extract_signed_contribution_bands``. Bands are matched
+only within the same
 condition, split, protein, and sign.  Circular block shifts operate within each
 protein's eligible residue interval and preserve a seed's band count, relative
 spacing, widths, signs, and magnitudes.
