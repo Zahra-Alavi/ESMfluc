@@ -2,6 +2,33 @@
 
 This folder provides comprehensive pipeline for predicting the flexibility of amino acids in a protein sequence. The core of the system leverages state-of-the-art protein language models (PLMs) form the ESM family to generate rich, contextual embeddings, which are then used to train various downstream classification architectures.
 
+## Publication-comparable study
+
+The publication analysis predicts residue flexibility from ATLAS molecular-dynamics data and investigates whether model attention and decision contributions reveal reproducible residue communication or control patterns. Residues are classified as rigid when `Neq <= 1` and flexible when `Neq > 1`.
+
+The main architecture is ESM2 or ESM3 followed by a BiLSTM, custom self-attention, and a residue classifier. The seven model conditions are:
+
+- `esm2_frozen_linear`
+- `esm2_frozen_bilstm_attn`
+- `esm2_top4_bilstm_attn`
+- `esm2_top28_bilstm_attn`
+- `esm3_frozen_bilstm_attn`
+- `esm3_top4_bilstm_attn`
+- `esm3_top28_bilstm_attn`
+
+Each condition is trained with seeds 1, 2, and 3. All runs use the same fixed grouped split in `data_splits/atlas_grouped_v1/`: 967 training proteins, 208 validation proteins, 208 test proteins, and 7 excluded proteins longer than 1024 residues. Groups combine exact sequence identity, MMseqs sequence clusters, and shared ECOD X-class domains where available.
+
+For the BiLSTM-attention models, the exact signed contribution from key residue `j` to query residue `i` is:
+
+```text
+C_ij = A_ij × s_j
+s_j = V_j · (w_flexible - w_rigid)
+```
+
+Positive contributions support the flexible class, negative contributions support the rigid class, and their magnitude measures how strongly a key affects the query decision. This is an exact model decomposition, not proof of causality or a biological communication network.
+
+The publication results and pipeline map are documented in `results/publication_comparable_v2/README.md`. The complete signed-band methods and results reference is in `signed_band_analysis/ANALYSIS_REFERENCE.md`.
+
 - **Modular Architecture**: Support for different model architectures (bilstm, bilstm_attention, transformer, esm_linear)
 - **Advanced Loss Functions**: Implementation of focal and crossentropy loss, including support for balanced class weights. The NC (Normalized Centroid) loss is also included for enhanced training.
 - **Handling Data Imbalance**: Built-in support for oversampling and undersampling to manage imbalanced datasets.
