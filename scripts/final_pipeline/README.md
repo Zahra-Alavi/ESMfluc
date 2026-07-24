@@ -121,6 +121,8 @@ Here is the full list of available command-line arguments:
 | `--result_foldername`              | str         | `timestamp`                 | Name for the result folder.                                   |
 
 
+# Pipeline Logistic Tree
+```text
 Fixed train / validation / test datasets
 │
 ├── 1. Train comparable models
@@ -172,3 +174,5 @@ Fixed train / validation / test datasets
     ├── Phase 3C: separate evidence from consultation
     ├── Phase 4: identify query residues receiving band contributions
     └── Phase 5: test sequence PWMs and motifs
+
+```
