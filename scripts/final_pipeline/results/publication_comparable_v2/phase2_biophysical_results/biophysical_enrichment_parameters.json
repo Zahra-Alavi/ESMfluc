@@ -1,0 +1,289 @@
+{
+  "metrics": {
+    "neq": [
+      "continuous",
+      "flexibility-supporting higher"
+    ],
+    "flexible_neq_gt1": [
+      "binary",
+      "flexibility-supporting higher"
+    ],
+    "neq_top10_within_protein": [
+      "binary",
+      "flexibility-supporting higher"
+    ],
+    "neq_peak": [
+      "binary",
+      "flexibility-supporting higher"
+    ],
+    "distance_to_neq_peak": [
+      "distance",
+      "flexibility-supporting lower"
+    ],
+    "distance_to_neq_top10": [
+      "distance",
+      "flexibility-supporting lower"
+    ],
+    "q3_is_H": [
+      "binary",
+      "two-sided"
+    ],
+    "q3_is_E": [
+      "binary",
+      "two-sided"
+    ],
+    "q3_is_C": [
+      "binary",
+      "two-sided"
+    ],
+    "q8_is_T": [
+      "binary",
+      "upper"
+    ],
+    "q8_is_S": [
+      "binary",
+      "upper"
+    ],
+    "q8_turn_or_bend_TS": [
+      "binary",
+      "upper"
+    ],
+    "q8_loop_turn_bend_CTS": [
+      "binary",
+      "upper"
+    ],
+    "structured_linker_loop": [
+      "binary",
+      "upper"
+    ],
+    "q3_boundary_within2": [
+      "binary",
+      "upper"
+    ],
+    "q8_boundary_within2": [
+      "binary",
+      "upper"
+    ],
+    "distance_to_q3_boundary": [
+      "distance",
+      "lower"
+    ],
+    "distance_to_q8_boundary": [
+      "distance",
+      "lower"
+    ],
+    "rsa": [
+      "continuous",
+      "two-sided"
+    ],
+    "exposed_rsa_ge025": [
+      "binary",
+      "two-sided"
+    ],
+    "disorder": [
+      "continuous",
+      "upper"
+    ],
+    "disorder_ge05": [
+      "binary",
+      "upper"
+    ],
+    "interface": [
+      "binary",
+      "two-sided"
+    ],
+    "torsion_change_from_previous": [
+      "continuous",
+      "upper"
+    ]
+  },
+  "primary_estimand": "Mean of within-protein mean apex feature values; proteins receive equal weight.",
+  "block_shift_null": "One circular offset per protein/condition/sign/permutation, applied to the complete apex pattern within its eligible interval.",
+  "paired_sign_estimand": "Within-protein mean(flexibility-supporting apices) minus mean(rigidity-supporting apices), tested by protein-level sign flips.",
+  "n_block_shifts": 1000,
+  "n_sign_flips": 10000,
+  "random_seed": 123,
+  "phase1_coverage_identifier": {
+    "estimand": "Annotation-to-band coverage and fixed band-mask identifier metrics; macro estimates average proteins equally and micro estimates pool counts.",
+    "targets": [
+      "q8_loop_turn_bend_CTS",
+      "neq_peak"
+    ],
+    "eligible_interval_note": "Residue and segment denominators are restricted to positions eligible to be band apices. Band intervals are truncated to the same support.",
+    "n_bootstrap": 2000
+  },
+  "phase2_within_q3_matching": {
+    "estimand": "Within-protein mean band-apex minus mean matched non-band control outcome, followed by equal-protein aggregation.",
+    "exact_match": "Q3",
+    "nested_match_schemes": {
+      "q3_only": [
+        "Q3"
+      ],
+      "q3_neq": [
+        "Q3",
+        "Neq"
+      ],
+      "q3_neq_rsa": [
+        "Q3",
+        "Neq",
+        "RSA"
+      ],
+      "q3_neq_rsa_position": [
+        "Q3",
+        "Neq",
+        "RSA",
+        "normalized sequence position"
+      ]
+    },
+    "selected_match_schemes": [
+      "q3_only",
+      "q3_neq",
+      "q3_neq_rsa",
+      "q3_neq_rsa_position"
+    ],
+    "q3_only_control_selection": "Every eligible same-protein, same-Q3 residue outside all band intervals (plus the configured buffer).",
+    "caliper_scheme_control_selection": "Up to controls_per_apex_maximum nearest eligible controls.",
+    "control_storage": "q3_only is stored one row per matched apex in within_q3_matched_cases.csv.gz with the complete control count and control means; capped schemes also store individual controls in within_q3_matched_controls.csv.gz.",
+    "controls_per_apex_maximum": 5,
+    "non_band_buffer_residues": 0,
+    "calipers": {
+      "neq": 0.25,
+      "rsa": 0.15,
+      "normalized_sequence_position": 0.25
+    },
+    "control_reuse": "Allowed across apex matched sets, not within a set.",
+    "outcomes": {
+      "q8_is_G": [
+        "binary",
+        "Q8 G"
+      ],
+      "q8_is_H": [
+        "binary",
+        "Q8 H"
+      ],
+      "q8_is_I": [
+        "binary",
+        "Q8 I"
+      ],
+      "q8_is_B": [
+        "binary",
+        "Q8 B"
+      ],
+      "q8_is_E": [
+        "binary",
+        "Q8 E"
+      ],
+      "q8_is_S": [
+        "binary",
+        "Q8 S"
+      ],
+      "q8_is_T": [
+        "binary",
+        "Q8 T"
+      ],
+      "q8_is_C": [
+        "binary",
+        "Q8 C"
+      ],
+      "q8_turn_or_bend_TS": [
+        "binary",
+        "Q8 turn or bend (T/S)"
+      ],
+      "q8_loop_turn_bend_CTS": [
+        "binary",
+        "Q8 loop/turn/bend (C/T/S)"
+      ],
+      "structured_linker_loop": [
+        "binary",
+        "structured linker/loop"
+      ],
+      "neq": [
+        "continuous",
+        "Neq"
+      ],
+      "rsa": [
+        "continuous",
+        "relative solvent accessibility"
+      ],
+      "neq_peak": [
+        "binary",
+        "Neq peak"
+      ],
+      "distance_to_neq_peak": [
+        "distance",
+        "distance to Neq peak"
+      ],
+      "q3_boundary_within2": [
+        "binary",
+        "within two residues of Q3 boundary"
+      ],
+      "q8_boundary_within2": [
+        "binary",
+        "within two residues of Q8 boundary"
+      ],
+      "distance_to_q3_boundary": [
+        "distance",
+        "distance to Q3 boundary"
+      ],
+      "distance_to_q8_boundary": [
+        "distance",
+        "distance to Q8 boundary"
+      ],
+      "torsion_change_from_previous": [
+        "continuous",
+        "backbone torsion change"
+      ],
+      "disorder": [
+        "continuous",
+        "disorder score"
+      ],
+      "disorder_ge05": [
+        "binary",
+        "disorder score >= 0.5"
+      ],
+      "normalized_position": [
+        "continuous",
+        "normalized sequence position"
+      ]
+    },
+    "inference": "Protein-level sign flips and protein bootstrap confidence intervals."
+  },
+  "outputs": {
+    "block_shift_summary": "apex_circular_shift_enrichment_summary.csv",
+    "paired_sign_summary": "paired_flex_vs_rigid_summary.csv",
+    "annotation_coverage_summary": "annotation_band_coverage_identifier_summary.csv",
+    "within_q3_matched_summary": "within_q3_matched_enrichment_summary.csv",
+    "within_q3_match_coverage": "within_q3_match_coverage_summary.csv",
+    "within_q3_match_balance": "within_q3_match_balance.csv",
+    "audit": "phase2_pipeline_audit.json"
+  },
+  "source": {
+    "bands": "positive and negative bands detected from signed column influence I_j averaged across seeds 1, 2, and 3",
+    "annotations": "ATLAS Neq plus NetSurfP Q3, Q8, RSA, disorder, interface, and torsion-derived residue annotations",
+    "conditions": [
+      "esm2_frozen_bilstm_attn",
+      "esm2_top4_bilstm_attn",
+      "esm2_top28_bilstm_attn",
+      "esm3_frozen_bilstm_attn",
+      "esm3_top4_bilstm_attn",
+      "esm3_top28_bilstm_attn"
+    ],
+    "splits": [
+      "train",
+      "validation",
+      "test"
+    ],
+    "strain_included": false
+  },
+  "portable_export": {
+    "note": "Absolute local input and output paths were replaced with portable descriptions and filenames.",
+    "excluded_intermediates": [
+      "apex_metrics_by_protein.csv.gz",
+      "apex_circular_shift_null.csv.gz",
+      "annotation_band_coverage_by_protein.csv.gz",
+      "within_q3_matched_controls.csv.gz",
+      "within_q3_matched_cases.csv.gz",
+      "within_q3_matched_effects_by_protein.csv.gz"
+    ]
+  }
+}
