@@ -1,0 +1,173 @@
+{
+  "phase": "3B",
+  "candidate_object": "complete contiguous Q8 segment inherited from Phase 3A",
+  "case": "segment contains one sign class of band apex",
+  "control": "same-protein identical-Q8 clean control inherited from Phase 3A",
+  "strain_policy": "test-only matched descriptive/confirmatory effects; excluded from trained models",
+  "feature_groups": {
+    "experimental_geometry": [
+      "mean_ca_curvature_degrees",
+      "max_ca_curvature_degrees",
+      "mean_abs_ca_virtual_torsion_degrees",
+      "max_abs_ca_virtual_torsion_degrees",
+      "ca_end_to_end_ratio"
+    ],
+    "contact_network": [
+      "mean_contact_degree",
+      "max_contact_degree",
+      "mean_inverse_distance_weighted_degree",
+      "max_inverse_distance_weighted_degree",
+      "mean_betweenness",
+      "max_betweenness",
+      "mean_closeness",
+      "mean_participation_coefficient",
+      "community_boundary_fraction"
+    ],
+    "inter_domain_geometry": [
+      "mean_distance_to_domain_boundary",
+      "near_domain_boundary_fraction",
+      "mean_cross_domain_contacts",
+      "mean_cross_domain_contact_fraction"
+    ],
+    "mechanical_strain_test_only": [
+      "mean_strain",
+      "max_strain",
+      "std_strain",
+      "mean_strain_spatial_gradient",
+      "max_strain_spatial_gradient"
+    ]
+  },
+  "model_stages": {
+    "00_q8_only": [],
+    "01_base_biophysics": [
+      "mean_neq",
+      "max_neq",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint"
+    ],
+    "02_add_experimental_geometry": [
+      "mean_neq",
+      "max_neq",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint",
+      "mean_torsion_change",
+      "max_torsion_change",
+      "q3_boundary_fraction",
+      "mean_distance_to_q3_boundary",
+      "structured_linker_fraction",
+      "mean_ca_curvature_degrees",
+      "max_ca_curvature_degrees",
+      "mean_abs_ca_virtual_torsion_degrees",
+      "max_abs_ca_virtual_torsion_degrees",
+      "ca_end_to_end_ratio"
+    ],
+    "03_add_contact_network": [
+      "mean_neq",
+      "max_neq",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint",
+      "mean_torsion_change",
+      "max_torsion_change",
+      "q3_boundary_fraction",
+      "mean_distance_to_q3_boundary",
+      "structured_linker_fraction",
+      "mean_ca_curvature_degrees",
+      "max_ca_curvature_degrees",
+      "mean_abs_ca_virtual_torsion_degrees",
+      "max_abs_ca_virtual_torsion_degrees",
+      "ca_end_to_end_ratio",
+      "mean_contact_degree",
+      "max_contact_degree",
+      "mean_inverse_distance_weighted_degree",
+      "max_inverse_distance_weighted_degree",
+      "mean_betweenness",
+      "max_betweenness",
+      "mean_closeness",
+      "mean_participation_coefficient",
+      "community_boundary_fraction"
+    ],
+    "04_add_inter_domain": [
+      "mean_neq",
+      "max_neq",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint",
+      "mean_torsion_change",
+      "max_torsion_change",
+      "q3_boundary_fraction",
+      "mean_distance_to_q3_boundary",
+      "structured_linker_fraction",
+      "mean_ca_curvature_degrees",
+      "max_ca_curvature_degrees",
+      "mean_abs_ca_virtual_torsion_degrees",
+      "max_abs_ca_virtual_torsion_degrees",
+      "ca_end_to_end_ratio",
+      "mean_contact_degree",
+      "max_contact_degree",
+      "mean_inverse_distance_weighted_degree",
+      "max_inverse_distance_weighted_degree",
+      "mean_betweenness",
+      "max_betweenness",
+      "mean_closeness",
+      "mean_participation_coefficient",
+      "community_boundary_fraction",
+      "mean_distance_to_domain_boundary",
+      "near_domain_boundary_fraction",
+      "mean_cross_domain_contacts",
+      "mean_cross_domain_contact_fraction"
+    ]
+  },
+  "model_training": "train only",
+  "model_evaluation": [
+    "validation",
+    "test"
+  ],
+  "structural_model_cohort": "alignment-accepted segments meeting resolved-fraction threshold",
+  "terminal_exclusion": 10,
+  "min_mapping_identity": 0.9,
+  "min_input_coverage": 0.8,
+  "min_segment_resolved_fraction": 0.8,
+  "min_contact_sequence_separation": 3,
+  "domain_boundary_window": 3,
+  "betweenness_samples": 64,
+  "minimum_inference_proteins": 10,
+  "random_seed": 123,
+  "unavailable_feature_groups": [
+    "hinge_axis proximity",
+    "curated active sites/interfaces/known hinges",
+    "ligand proximity"
+  ],
+  "sources": {
+    "structures": "PDB structures mapped to the fixed ATLAS grouped-split protein sequences",
+    "contact_networks": "C-alpha contact networks using an 8 angstrom cutoff",
+    "domains": "ECOD v285 annotations from the fixed atlas_grouped_v1 split metadata",
+    "strain": "MDStrainMapper residue strain for the test split only",
+    "mechanism": "Phase 3C seed-averaged per-band mechanism assignments"
+  },
+  "portable_export": {
+    "note": "Absolute local input paths were replaced with portable source descriptions.",
+    "removed_structure_audit_columns": [
+      "contact_source_json"
+    ],
+    "excluded_intermediates": [
+      "external_features_by_q8_segment.csv.gz",
+      "matched_external_effects_by_protein.csv.gz",
+      "mechanism_band_external_features.csv.gz",
+      "contact_networks/"
+    ]
+  },
+  "outputs": {
+    "matched_external_effect_summary": "matched_external_effect_summary.csv",
+    "sequential_external_model_performance": "sequential_external_model_performance.csv",
+    "mechanism_class_external_associations": "mechanism_class_external_associations.csv",
+    "external_feature_coverage_summary": "external_feature_coverage_summary.csv",
+    "structure_mapping_audit": "structure_mapping_audit.csv"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "phase": "3C",
+  "identity": "I_j = s_j * attention_column_mean_j",
+  "ensemble_rule": "compute within seed, then average three seed effects",
+  "control": "same protein, exact Q8, eligible, outside every band interval",
+  "matched_effect_support": "Case, control, and difference summaries all exclude bands with zero exact-Q8 controls; those bands remain unclassified per-band.",
+  "classification": {
+    "basis": "delta log|I| = delta log|s| + delta log(attention breadth)",
+    "dominance_cutoffs": [
+      0.3333333333333333,
+      0.6666666666666666
+    ]
+  },
+  "minimum_inference_proteins": 10,
+  "metrics": {
+    "directional_evidence": "sign * intrinsic signed evidence s_j",
+    "attention_breadth": "attention column mean B_j",
+    "directional_influence": "sign * I_j",
+    "log_abs_evidence": "log absolute intrinsic evidence",
+    "log_attention_breadth": "log attention column mean",
+    "log_abs_influence": "log absolute signed influence"
+  }
+}
