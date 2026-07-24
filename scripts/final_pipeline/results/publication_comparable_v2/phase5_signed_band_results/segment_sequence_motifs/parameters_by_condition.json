@@ -1,0 +1,275 @@
+{
+  "analysis": "complete-segment sequence motifs",
+  "conditions": [
+    "esm2_frozen_bilstm_attn",
+    "esm2_top28_bilstm_attn",
+    "esm2_top4_bilstm_attn",
+    "esm3_frozen_bilstm_attn",
+    "esm3_top28_bilstm_attn",
+    "esm3_top4_bilstm_attn"
+  ],
+  "parameters_by_condition": {
+    "esm2_frozen_bilstm_attn": {
+      "primary_background": "same-protein exact-Q8 unselected segments outside all bands",
+      "case_anchor": "band apex",
+      "control_anchor": "same relative position inside the control Q8 segment",
+      "control_sampling": "random without matching Neq, RSA, length, or position",
+      "discovery_split": "train",
+      "discovery_aggregation": "pooled conditions with protein-level matched effects",
+      "validation_and_test": "locked motif evaluation without rediscovery",
+      "model_family_consistency": "reported separately for ESM2 and ESM3",
+      "window_radii": [
+        3,
+        5,
+        10
+      ],
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "minimum_discovery_proteins": 10,
+      "minimum_kmer_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "inference": "two-sided exact protein sign randomization with global BH correction",
+      "lock_q_threshold": 0.05,
+      "lock_min_abs_log2_odds": 1.0,
+      "random_seed": 123,
+      "matching_audit": {
+        "matched_band_sets": 14452,
+        "rows": 65445,
+        "skipped_bands": {
+          "no_exact_q8_control": 2314,
+          "dual_sign_segment": 544
+        }
+      },
+      "candidate_sequence_audit": {
+        "unique_segments_checked": 80307,
+        "missing_proteins": 0,
+        "segment_mismatches": 0
+      },
+      "source": "Seed-averaged signed bands with ATLAS Neq and NetSurfP residue annotations."
+    },
+    "esm2_top28_bilstm_attn": {
+      "primary_background": "same-protein exact-Q8 unselected segments outside all bands",
+      "case_anchor": "band apex",
+      "control_anchor": "same relative position inside the control Q8 segment",
+      "control_sampling": "random without matching Neq, RSA, length, or position",
+      "discovery_split": "train",
+      "discovery_aggregation": "pooled conditions with protein-level matched effects",
+      "validation_and_test": "locked motif evaluation without rediscovery",
+      "model_family_consistency": "reported separately for ESM2 and ESM3",
+      "window_radii": [
+        3,
+        5,
+        10
+      ],
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "minimum_discovery_proteins": 10,
+      "minimum_kmer_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "inference": "two-sided exact protein sign randomization with global BH correction",
+      "lock_q_threshold": 0.05,
+      "lock_min_abs_log2_odds": 1.0,
+      "random_seed": 123,
+      "matching_audit": {
+        "matched_band_sets": 13040,
+        "rows": 58957,
+        "skipped_bands": {
+          "no_exact_q8_control": 1655,
+          "dual_sign_segment": 411
+        }
+      },
+      "candidate_sequence_audit": {
+        "unique_segments_checked": 80307,
+        "missing_proteins": 0,
+        "segment_mismatches": 0
+      },
+      "source": "Seed-averaged signed bands with ATLAS Neq and NetSurfP residue annotations."
+    },
+    "esm2_top4_bilstm_attn": {
+      "primary_background": "same-protein exact-Q8 unselected segments outside all bands",
+      "case_anchor": "band apex",
+      "control_anchor": "same relative position inside the control Q8 segment",
+      "control_sampling": "random without matching Neq, RSA, length, or position",
+      "discovery_split": "train",
+      "discovery_aggregation": "pooled conditions with protein-level matched effects",
+      "validation_and_test": "locked motif evaluation without rediscovery",
+      "model_family_consistency": "reported separately for ESM2 and ESM3",
+      "window_radii": [
+        3,
+        5,
+        10
+      ],
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "minimum_discovery_proteins": 10,
+      "minimum_kmer_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "inference": "two-sided exact protein sign randomization with global BH correction",
+      "lock_q_threshold": 0.05,
+      "lock_min_abs_log2_odds": 1.0,
+      "random_seed": 123,
+      "matching_audit": {
+        "matched_band_sets": 13706,
+        "rows": 61307,
+        "skipped_bands": {
+          "no_exact_q8_control": 1783,
+          "dual_sign_segment": 360
+        }
+      },
+      "candidate_sequence_audit": {
+        "unique_segments_checked": 80307,
+        "missing_proteins": 0,
+        "segment_mismatches": 0
+      },
+      "source": "Seed-averaged signed bands with ATLAS Neq and NetSurfP residue annotations."
+    },
+    "esm3_frozen_bilstm_attn": {
+      "primary_background": "same-protein exact-Q8 unselected segments outside all bands",
+      "case_anchor": "band apex",
+      "control_anchor": "same relative position inside the control Q8 segment",
+      "control_sampling": "random without matching Neq, RSA, length, or position",
+      "discovery_split": "train",
+      "discovery_aggregation": "pooled conditions with protein-level matched effects",
+      "validation_and_test": "locked motif evaluation without rediscovery",
+      "model_family_consistency": "reported separately for ESM2 and ESM3",
+      "window_radii": [
+        3,
+        5,
+        10
+      ],
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "minimum_discovery_proteins": 10,
+      "minimum_kmer_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "inference": "two-sided exact protein sign randomization with global BH correction",
+      "lock_q_threshold": 0.05,
+      "lock_min_abs_log2_odds": 1.0,
+      "random_seed": 123,
+      "matching_audit": {
+        "matched_band_sets": 13922,
+        "rows": 60114,
+        "skipped_bands": {
+          "dual_sign_segment": 425,
+          "no_exact_q8_control": 2212
+        }
+      },
+      "candidate_sequence_audit": {
+        "unique_segments_checked": 80307,
+        "missing_proteins": 0,
+        "segment_mismatches": 0
+      },
+      "source": "Seed-averaged signed bands with ATLAS Neq and NetSurfP residue annotations."
+    },
+    "esm3_top28_bilstm_attn": {
+      "primary_background": "same-protein exact-Q8 unselected segments outside all bands",
+      "case_anchor": "band apex",
+      "control_anchor": "same relative position inside the control Q8 segment",
+      "control_sampling": "random without matching Neq, RSA, length, or position",
+      "discovery_split": "train",
+      "discovery_aggregation": "pooled conditions with protein-level matched effects",
+      "validation_and_test": "locked motif evaluation without rediscovery",
+      "model_family_consistency": "reported separately for ESM2 and ESM3",
+      "window_radii": [
+        3,
+        5,
+        10
+      ],
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "minimum_discovery_proteins": 10,
+      "minimum_kmer_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "inference": "two-sided exact protein sign randomization with global BH correction",
+      "lock_q_threshold": 0.05,
+      "lock_min_abs_log2_odds": 1.0,
+      "random_seed": 123,
+      "matching_audit": {
+        "matched_band_sets": 13703,
+        "rows": 59178,
+        "skipped_bands": {
+          "no_exact_q8_control": 2280,
+          "dual_sign_segment": 484
+        }
+      },
+      "candidate_sequence_audit": {
+        "unique_segments_checked": 80307,
+        "missing_proteins": 0,
+        "segment_mismatches": 0
+      },
+      "source": "Seed-averaged signed bands with ATLAS Neq and NetSurfP residue annotations."
+    },
+    "esm3_top4_bilstm_attn": {
+      "primary_background": "same-protein exact-Q8 unselected segments outside all bands",
+      "case_anchor": "band apex",
+      "control_anchor": "same relative position inside the control Q8 segment",
+      "control_sampling": "random without matching Neq, RSA, length, or position",
+      "discovery_split": "train",
+      "discovery_aggregation": "pooled conditions with protein-level matched effects",
+      "validation_and_test": "locked motif evaluation without rediscovery",
+      "model_family_consistency": "reported separately for ESM2 and ESM3",
+      "window_radii": [
+        3,
+        5,
+        10
+      ],
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "minimum_discovery_proteins": 10,
+      "minimum_kmer_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "inference": "two-sided exact protein sign randomization with global BH correction",
+      "lock_q_threshold": 0.05,
+      "lock_min_abs_log2_odds": 1.0,
+      "random_seed": 123,
+      "matching_audit": {
+        "matched_band_sets": 13544,
+        "rows": 59736,
+        "skipped_bands": {
+          "no_exact_q8_control": 1925,
+          "dual_sign_segment": 438
+        }
+      },
+      "candidate_sequence_audit": {
+        "unique_segments_checked": 80307,
+        "missing_proteins": 0,
+        "segment_mismatches": 0
+      },
+      "source": "Seed-averaged signed bands with ATLAS Neq and NetSurfP residue annotations."
+    }
+  },
+  "portable_export": {
+    "note": "Absolute annotation paths were replaced with a portable source description; equivalent condition-specific result tables were combined.",
+    "excluded_intermediates": [
+      "matched_sequence_windows.csv.gz",
+      "position_specific_enrichment.csv",
+      "kmer_enrichment_train.csv",
+      "logo_tables/",
+      "run_stderr.log"
+    ]
+  }
+}

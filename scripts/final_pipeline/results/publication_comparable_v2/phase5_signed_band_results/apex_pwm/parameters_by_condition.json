@@ -1,0 +1,398 @@
+{
+  "analysis": "apex-centered amino-acid PWM and motif replication",
+  "conditions": [
+    "esm2_frozen_bilstm_attn",
+    "esm2_top28_bilstm_attn",
+    "esm2_top4_bilstm_attn",
+    "esm3_frozen_bilstm_attn",
+    "esm3_top28_bilstm_attn",
+    "esm3_top4_bilstm_attn"
+  ],
+  "parameters_by_condition": {
+    "esm2_frozen_bilstm_attn": {
+      "analysis": "apex-centered amino-acid PWM",
+      "conditions": [
+        "esm2_frozen_bilstm_attn"
+      ],
+      "splits": [
+        "test",
+        "train",
+        "validation"
+      ],
+      "band_types": {
+        "1": "flexibility_supporting",
+        "-1": "rigidity_supporting"
+      },
+      "window_radius": 10,
+      "background": "same-protein exact-apex-Q8 anchors with no band in the exclusion window",
+      "controls_per_band": 5,
+      "background_exclusion_radius": 10,
+      "control_weighting": "controls sum to weight one within each matched band",
+      "pseudocount_per_amino_acid": 0.5,
+      "q8_stratification_minimum_bands": 20,
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "kmer_definition": "exact sequence present anywhere in the apex-centered window",
+      "kmer_discovery_split": "train",
+      "kmer_replication_splits": [
+        "validation",
+        "test"
+      ],
+      "minimum_kmer_band_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "kmer_inference": "matched band-minus-mean-control effects averaged within protein; two-sided exact protein sign test; BH correction",
+      "discovery_q_threshold": 0.05,
+      "discovery_min_abs_log2_odds": 1.0,
+      "replication_q_threshold": 0.05,
+      "replication_definition": "same direction as train and held-out BH q at or below the replication threshold",
+      "reduced_alphabet": {
+        "positive": "KRH",
+        "negative": "DE",
+        "polar": "STNQC",
+        "hydrophobic": "AVILM",
+        "aromatic": "FWY",
+        "turn": "GP"
+      },
+      "reduced_motif_definition": "exact class sequence present anywhere in the apex-centered window",
+      "reduced_motif_multiple_testing": "BH correction is separate from exact amino-acid k-mers",
+      "random_seed": 123,
+      "audit": {
+        "input_bands": 17310,
+        "band_windows": 17310,
+        "control_windows": 50453,
+        "bands_with_background": 12102,
+        "bands_without_background": 5208,
+        "failures": {
+          "no_same_protein_exact_q8_background": 5208
+        }
+      }
+    },
+    "esm2_top28_bilstm_attn": {
+      "analysis": "apex-centered amino-acid PWM",
+      "conditions": [
+        "esm2_top28_bilstm_attn"
+      ],
+      "splits": [
+        "test",
+        "train",
+        "validation"
+      ],
+      "band_types": {
+        "1": "flexibility_supporting",
+        "-1": "rigidity_supporting"
+      },
+      "window_radius": 10,
+      "background": "same-protein exact-apex-Q8 anchors with no band in the exclusion window",
+      "controls_per_band": 5,
+      "background_exclusion_radius": 10,
+      "control_weighting": "controls sum to weight one within each matched band",
+      "pseudocount_per_amino_acid": 0.5,
+      "q8_stratification_minimum_bands": 20,
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "kmer_definition": "exact sequence present anywhere in the apex-centered window",
+      "kmer_discovery_split": "train",
+      "kmer_replication_splits": [
+        "validation",
+        "test"
+      ],
+      "minimum_kmer_band_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "kmer_inference": "matched band-minus-mean-control effects averaged within protein; two-sided exact protein sign test; BH correction",
+      "discovery_q_threshold": 0.05,
+      "discovery_min_abs_log2_odds": 1.0,
+      "replication_q_threshold": 0.05,
+      "replication_definition": "same direction as train and held-out BH q at or below the replication threshold",
+      "reduced_alphabet": {
+        "positive": "KRH",
+        "negative": "DE",
+        "polar": "STNQC",
+        "hydrophobic": "AVILM",
+        "aromatic": "FWY",
+        "turn": "GP"
+      },
+      "reduced_motif_definition": "exact class sequence present anywhere in the apex-centered window",
+      "reduced_motif_multiple_testing": "BH correction is separate from exact amino-acid k-mers",
+      "random_seed": 123,
+      "audit": {
+        "input_bands": 15106,
+        "band_windows": 15106,
+        "control_windows": 46751,
+        "bands_with_background": 10939,
+        "bands_without_background": 4167,
+        "failures": {
+          "no_same_protein_exact_q8_background": 4167
+        }
+      }
+    },
+    "esm2_top4_bilstm_attn": {
+      "analysis": "apex-centered amino-acid PWM",
+      "conditions": [
+        "esm2_top4_bilstm_attn"
+      ],
+      "splits": [
+        "test",
+        "train",
+        "validation"
+      ],
+      "band_types": {
+        "1": "flexibility_supporting",
+        "-1": "rigidity_supporting"
+      },
+      "window_radius": 10,
+      "background": "same-protein exact-apex-Q8 anchors with no band in the exclusion window",
+      "controls_per_band": 5,
+      "background_exclusion_radius": 10,
+      "control_weighting": "controls sum to weight one within each matched band",
+      "pseudocount_per_amino_acid": 0.5,
+      "q8_stratification_minimum_bands": 20,
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "kmer_definition": "exact sequence present anywhere in the apex-centered window",
+      "kmer_discovery_split": "train",
+      "kmer_replication_splits": [
+        "validation",
+        "test"
+      ],
+      "minimum_kmer_band_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "kmer_inference": "matched band-minus-mean-control effects averaged within protein; two-sided exact protein sign test; BH correction",
+      "discovery_q_threshold": 0.05,
+      "discovery_min_abs_log2_odds": 1.0,
+      "replication_q_threshold": 0.05,
+      "replication_definition": "same direction as train and held-out BH q at or below the replication threshold",
+      "reduced_alphabet": {
+        "positive": "KRH",
+        "negative": "DE",
+        "polar": "STNQC",
+        "hydrophobic": "AVILM",
+        "aromatic": "FWY",
+        "turn": "GP"
+      },
+      "reduced_motif_definition": "exact class sequence present anywhere in the apex-centered window",
+      "reduced_motif_multiple_testing": "BH correction is separate from exact amino-acid k-mers",
+      "random_seed": 123,
+      "audit": {
+        "input_bands": 15849,
+        "band_windows": 15849,
+        "control_windows": 47935,
+        "bands_with_background": 11412,
+        "bands_without_background": 4437,
+        "failures": {
+          "no_same_protein_exact_q8_background": 4437
+        }
+      }
+    },
+    "esm3_frozen_bilstm_attn": {
+      "analysis": "apex-centered amino-acid PWM",
+      "conditions": [
+        "esm3_frozen_bilstm_attn"
+      ],
+      "splits": [
+        "test",
+        "train",
+        "validation"
+      ],
+      "band_types": {
+        "1": "flexibility_supporting",
+        "-1": "rigidity_supporting"
+      },
+      "window_radius": 10,
+      "background": "same-protein exact-apex-Q8 anchors with no band in the exclusion window",
+      "controls_per_band": 5,
+      "background_exclusion_radius": 10,
+      "control_weighting": "controls sum to weight one within each matched band",
+      "pseudocount_per_amino_acid": 0.5,
+      "q8_stratification_minimum_bands": 20,
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "kmer_definition": "exact sequence present anywhere in the apex-centered window",
+      "kmer_discovery_split": "train",
+      "kmer_replication_splits": [
+        "validation",
+        "test"
+      ],
+      "minimum_kmer_band_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "kmer_inference": "matched band-minus-mean-control effects averaged within protein; two-sided exact protein sign test; BH correction",
+      "discovery_q_threshold": 0.05,
+      "discovery_min_abs_log2_odds": 1.0,
+      "replication_q_threshold": 0.05,
+      "replication_definition": "same direction as train and held-out BH q at or below the replication threshold",
+      "reduced_alphabet": {
+        "positive": "KRH",
+        "negative": "DE",
+        "polar": "STNQC",
+        "hydrophobic": "AVILM",
+        "aromatic": "FWY",
+        "turn": "GP"
+      },
+      "reduced_motif_definition": "exact class sequence present anywhere in the apex-centered window",
+      "reduced_motif_multiple_testing": "BH correction is separate from exact amino-acid k-mers",
+      "random_seed": 123,
+      "audit": {
+        "input_bands": 16559,
+        "band_windows": 16559,
+        "control_windows": 46768,
+        "bands_with_background": 11010,
+        "bands_without_background": 5549,
+        "failures": {
+          "no_same_protein_exact_q8_background": 5549
+        }
+      }
+    },
+    "esm3_top28_bilstm_attn": {
+      "analysis": "apex-centered amino-acid PWM",
+      "conditions": [
+        "esm3_top28_bilstm_attn"
+      ],
+      "splits": [
+        "test",
+        "train",
+        "validation"
+      ],
+      "band_types": {
+        "1": "flexibility_supporting",
+        "-1": "rigidity_supporting"
+      },
+      "window_radius": 10,
+      "background": "same-protein exact-apex-Q8 anchors with no band in the exclusion window",
+      "controls_per_band": 5,
+      "background_exclusion_radius": 10,
+      "control_weighting": "controls sum to weight one within each matched band",
+      "pseudocount_per_amino_acid": 0.5,
+      "q8_stratification_minimum_bands": 20,
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "kmer_definition": "exact sequence present anywhere in the apex-centered window",
+      "kmer_discovery_split": "train",
+      "kmer_replication_splits": [
+        "validation",
+        "test"
+      ],
+      "minimum_kmer_band_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "kmer_inference": "matched band-minus-mean-control effects averaged within protein; two-sided exact protein sign test; BH correction",
+      "discovery_q_threshold": 0.05,
+      "discovery_min_abs_log2_odds": 1.0,
+      "replication_q_threshold": 0.05,
+      "replication_definition": "same direction as train and held-out BH q at or below the replication threshold",
+      "reduced_alphabet": {
+        "positive": "KRH",
+        "negative": "DE",
+        "polar": "STNQC",
+        "hydrophobic": "AVILM",
+        "aromatic": "FWY",
+        "turn": "GP"
+      },
+      "reduced_motif_definition": "exact class sequence present anywhere in the apex-centered window",
+      "reduced_motif_multiple_testing": "BH correction is separate from exact amino-acid k-mers",
+      "random_seed": 123,
+      "audit": {
+        "input_bands": 16467,
+        "band_windows": 16467,
+        "control_windows": 46566,
+        "bands_with_background": 11014,
+        "bands_without_background": 5453,
+        "failures": {
+          "no_same_protein_exact_q8_background": 5453
+        }
+      }
+    },
+    "esm3_top4_bilstm_attn": {
+      "analysis": "apex-centered amino-acid PWM",
+      "conditions": [
+        "esm3_top4_bilstm_attn"
+      ],
+      "splits": [
+        "test",
+        "train",
+        "validation"
+      ],
+      "band_types": {
+        "1": "flexibility_supporting",
+        "-1": "rigidity_supporting"
+      },
+      "window_radius": 10,
+      "background": "same-protein exact-apex-Q8 anchors with no band in the exclusion window",
+      "controls_per_band": 5,
+      "background_exclusion_radius": 10,
+      "control_weighting": "controls sum to weight one within each matched band",
+      "pseudocount_per_amino_acid": 0.5,
+      "q8_stratification_minimum_bands": 20,
+      "kmer_lengths": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "kmer_definition": "exact sequence present anywhere in the apex-centered window",
+      "kmer_discovery_split": "train",
+      "kmer_replication_splits": [
+        "validation",
+        "test"
+      ],
+      "minimum_kmer_band_proteins": 5,
+      "minimum_inference_proteins": 10,
+      "kmer_inference": "matched band-minus-mean-control effects averaged within protein; two-sided exact protein sign test; BH correction",
+      "discovery_q_threshold": 0.05,
+      "discovery_min_abs_log2_odds": 1.0,
+      "replication_q_threshold": 0.05,
+      "replication_definition": "same direction as train and held-out BH q at or below the replication threshold",
+      "reduced_alphabet": {
+        "positive": "KRH",
+        "negative": "DE",
+        "polar": "STNQC",
+        "hydrophobic": "AVILM",
+        "aromatic": "FWY",
+        "turn": "GP"
+      },
+      "reduced_motif_definition": "exact class sequence present anywhere in the apex-centered window",
+      "reduced_motif_multiple_testing": "BH correction is separate from exact amino-acid k-mers",
+      "random_seed": 123,
+      "audit": {
+        "input_bands": 15907,
+        "band_windows": 15907,
+        "control_windows": 47942,
+        "bands_with_background": 11260,
+        "bands_without_background": 4647,
+        "failures": {
+          "no_same_protein_exact_q8_background": 4647
+        }
+      }
+    }
+  },
+  "portable_export": {
+    "note": "Equivalent condition-specific tables were combined; large matched-window and train-wide testing intermediates were excluded.",
+    "excluded_intermediates": [
+      "matched_apex_windows.csv.gz",
+      "kmer_enrichment_train.csv.gz",
+      "reduced_motif_enrichment_train.csv.gz",
+      "kmer_validation_test_replication.csv",
+      "reduced_motif_validation_test_replication.csv",
+      "train_discovered_kmers.csv",
+      "train_discovered_reduced_motifs.csv",
+      "logo_tables/"
+    ]
+  }
+}

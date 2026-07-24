@@ -1,0 +1,7 @@
+class_code,class_name,amino_acids
+B,positive,KRH
+N,negative,DE
+P,polar,STNQC
+H,hydrophobic,AVILM
+A,aromatic,FWY
+T,turn,GP
