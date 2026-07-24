@@ -1,0 +1,17 @@
+Result root: results/publication_comparable_v2
+Manifest runs: 21
+Loaded run/source combinations: 30
+Proteins with profiles: 208
+Pairwise profile comparisons: 109200
+Detected bands: 61913
+
+Agreement summaries use one mean per protein; 95% confidence intervals
+bootstrap whole proteins so all seed-pair observations stay together.
+
+Key files:
+  attention_bands_by_run.csv
+  per_run_attention_profile_metrics.csv
+  within_condition_agreement.csv
+  between_condition_agreement.csv
+  pooled_residue_performance_across_seeds.csv
+  protein_macro_performance_across_seeds.csv
