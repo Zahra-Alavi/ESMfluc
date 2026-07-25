@@ -1,13 +1,14 @@
-ESMfluc signed-contribution / I_j band analysis
+# ESMfluc signed-contribution / I_j band analysis
 
-REPOSITORY ROOT
+## REPOSITORY ROOT
+
+```text
 /home/zahralab/Desktop/ESMfluc/scripts/final_pipeline
+```
 
 All relative paths below are relative to this directory.
 
-========================================================================
-SCIENTIFIC OBJECTIVE
-========================================================================
+## SCIENTIFIC OBJECTIVE
 
 Identify protein residues or regions acting as influential attention keys in
 the BiLSTM-attention models, separate flexibility-supporting (+) from
@@ -21,14 +22,13 @@ reproducible and biologically nonrandom, and explain:
    consultation, or both.
 
 Important terminology:
+
 - “Positive” or “+” means flexibility-supporting.
 - “Negative” or “-” means rigidity-supporting.
 - These labels describe the model’s signed logit contribution, not necessarily
   the experimentally observed state of the band residue itself.
 
-========================================================================
-CORE DEFINITIONS
-========================================================================
+## CORE DEFINITIONS
 
 For query residue i and key residue j:
 
@@ -66,9 +66,7 @@ Interpretation:
 - The sign of I_j is determined by s_j because B_j is nonnegative.
 - B_j modulates the magnitude of the influence.
 
-========================================================================
-ENSEMBLE RULE
-========================================================================
+## ENSEMBLE RULE
 
 Final bands were detected from the three-seed arithmetic average:
 
@@ -78,9 +76,7 @@ Final bands were detected from the three-seed arithmetic average:
 Per-seed bands were analyzed first to verify reproducibility. The final
 biophysical analyses use bands detected from mean_seed(I_j).
 
-========================================================================
-DATASETS AND MODELS
-========================================================================
+## DATASETS AND MODELS
 
 Dataset splits:
 
@@ -112,38 +108,48 @@ Maximum audited reconstruction error for:
 
 was 1.91e-6.
 
-========================================================================
-PRIMARY DATA LOCATIONS
-========================================================================
+## PRIMARY DATA LOCATIONS
 
 Data splits and NetSurfP:
 
+```text
 data_splits/atlas_grouped_v1/
+```
 
 All contribution-file manifest:
 
+```text
 results/publication_comparable_v2/
   all_split_signed_contributions_manifest.tsv
+```
 
 Contribution audit:
 
+```text
 results/publication_comparable_v2/
   all_split_signed_contributions_audit.json
+```
 
 Three-seed averaged-profile manifest:
 
+```text
 results/publication_comparable_v2/
   seed_averaged_signed_contributions_manifest.tsv
+```
 
 Seed-average audit:
 
+```text
 results/publication_comparable_v2/
   seed_averaged_influence_audit.tsv
+```
 
 Each run’s contribution files are under:
 
+```text
 results/publication_comparable_v2/runs/<condition>/seed_<seed>/
   all_split_signed_contributions/
+```
 
 Each protein record contains:
 
@@ -165,31 +171,35 @@ Each protein record contains:
 - seed_averaged_signed_column_influence:
   mean_seed(I_j), shape L
 
-========================================================================
-DATA-GENERATION SCRIPTS
-========================================================================
+## DATA-GENERATION SCRIPTS
 
+```text
 Attention/extract_all_split_signed_contributions.py
+```
 
+```text
 Attention/audit_all_split_signed_contributions.py
+```
 
+```text
 signed_band_analysis/add_seed_averaged_influence.py
+```
 
 The extraction runner used both GPUs:
 
+```text
 run_all_split_signed_contributions_v2.sh
+```
 
-========================================================================
-PHASE 1: BAND DETECTION AND SEED REPRODUCIBILITY
-========================================================================
+## PHASE 1: BAND DETECTION AND SEED REPRODUCIBILITY
 
 Band detector:
 
+```text
 signed_band_analysis/extract_signed_contribution_bands.py
+```
 
-------------------------------------------------------------------------
-1A. Band-calling algorithm
-------------------------------------------------------------------------
+### 1A. Band-calling algorithm
 
 Positive and negative I_j profiles are analyzed separately.
 
@@ -217,16 +227,16 @@ Band width is determined by the half-prominence boundaries of the detected
 multi-scale peak. It is not a fixed window and should not be interpreted as a
 physical domain boundary.
 
-------------------------------------------------------------------------
-1B. Per-seed bands
-------------------------------------------------------------------------
+### 1B. Per-seed bands
 
 Outputs:
 
+```text
 results/publication_comparable_v2/analysis_signed_bands/
   signed_bands.csv
   signed_band_protein_summary.csv
   signed_band_parameters.json
+```
 
 There are 294,459 per-seed bands:
 
@@ -234,16 +244,17 @@ There are 294,459 per-seed bands:
 - seed 2: 96,753
 - seed 3: 99,695
 
-------------------------------------------------------------------------
-1C. Seed reproducibility
-------------------------------------------------------------------------
+### 1C. Seed reproducibility
 
 Script:
 
+```text
 signed_band_analysis/analyze_signed_band_seed_reproducibility.py
+```
 
 Outputs:
 
+```text
 results/publication_comparable_v2/
   analysis_signed_band_reproducibility/
     seed_pair_reproducibility_by_protein.csv
@@ -253,6 +264,7 @@ results/publication_comparable_v2/
     seed_pair_block_shift_null.csv
     consensus_block_shift_null.csv
     seed_reproducibility_parameters.json
+```
 
 Logic:
 
@@ -276,19 +288,19 @@ Conclusion:
 Band locations are reproducible across seeds and cannot be explained by the
 number and spacing of randomly shifted bands.
 
-------------------------------------------------------------------------
-1D. Final seed-averaged bands
-------------------------------------------------------------------------
+### 1D. Final seed-averaged bands
 
 The same detector was applied to mean_seed(I_j).
 
 Outputs:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_signed_bands/
     signed_bands.csv
     signed_band_protein_summary.csv
     signed_band_parameters.json
+```
 
 Final counts:
 
@@ -328,17 +340,19 @@ Consequences:
 - Positive and negative bands may overlap because they were detected from
   positive and negative profiles separately.
 
-========================================================================
-PHASE 2: BIOPHYSICAL ENRICHMENT, NONRANDOMNESS AND IDENTIFIER ANALYSIS
-========================================================================
+## PHASE 2: BIOPHYSICAL ENRICHMENT, NONRANDOMNESS AND IDENTIFIER ANALYSIS
 
 Phase 2 consists of all analyses implemented in:
 
+```text
 signed_band_analysis/analyze_signed_band_biophysical_enrichment.py
+```
 
 The annotation preparation is performed by:
 
+```text
 signed_band_analysis/annotate_signed_bands_with_netsurfp.py
+```
 
 The phase has four main questions:
 
@@ -356,9 +370,7 @@ The phase has four main questions:
 A test-only strain extension was subsequently added to the same enrichment
 script.
 
-------------------------------------------------------------------------
-2A. Residue and band annotation
-------------------------------------------------------------------------
+### 2A. Residue and band annotation
 
 Inputs:
 
@@ -373,11 +385,13 @@ Inputs:
 
 Annotation outputs:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_biophysics/annotations/
     residue_biophysical_annotations.csv.gz
     signed_bands_biophysical_annotations.csv.gz
     annotation_audit.json
+```
 
 Derived annotations include:
 
@@ -413,9 +427,7 @@ two degrees apart rather than 358 degrees apart.
 It is therefore not just the Q8 label at the apex. It asks whether the apex is
 part of a short C/T/S segment connecting structured regions.
 
-------------------------------------------------------------------------
-2B. Raw apex localization and circular-shift nonrandomness
-------------------------------------------------------------------------
+### 2B. Raw apex localization and circular-shift nonrandomness
 
 For each protein, condition and sign, the script circularly shifts the complete
 same-sign apex pattern within the eligible protein interval.
@@ -441,16 +453,16 @@ The analysis uses:
 
 Representative test-set results across the six model conditions:
 
-Property at apex              Positive       Negative       Shifted null
----------------------------------------------------------------------------
-Neq                           2.03–2.09      1.02–1.03      1.36–1.37
-Q3 coil                       93.3–94.6%     1.6–3.2%       43.4–43.9%
-Q8 C/T/S                      91.1–92.9%     1.2–3.1%       41.2–41.6%
-Structured linker/loop        66.9–77.7%     0.6–1.9%       ~29%
-RSA                           0.52–0.55      0.17–0.24      ~0.34
-RSA >= 0.25                   88.8–92.0%     26.7–41.8%     ~59%
-Distance to Neq peak          1.8–2.6 aa     7.8–8.4 aa     ~5.2 aa
-Torsional change              90–97 degrees  7–9 degrees    ~47 degrees
+| Property at apex | Positive | Negative | Shifted null |
+|---|---:|---:|---:|
+| Neq | 2.03–2.09 | 1.02–1.03 | 1.36–1.37 |
+| Q3 coil | 93.3–94.6% | 1.6–3.2% | 43.4–43.9% |
+| Q8 C/T/S | 91.1–92.9% | 1.2–3.1% | 41.2–41.6% |
+| Structured linker/loop | 66.9–77.7% | 0.6–1.9% | ~29% |
+| RSA | 0.52–0.55 | 0.17–0.24 | ~0.34 |
+| RSA >= 0.25 | 88.8–92.0% | 26.7–41.8% | ~59% |
+| Distance to Neq peak | 1.8–2.6 aa | 7.8–8.4 aa | ~5.2 aa |
+| Torsional change | 90–97 degrees | 7–9 degrees | ~47 degrees |
 
 Interpretation:
 
@@ -466,11 +478,11 @@ Interpretation:
 The script also performs paired positive-versus-negative protein-level
 contrasts. These are stored in:
 
+```text
 paired_flex_vs_rigid_summary.csv
+```
 
-------------------------------------------------------------------------
-2C. Inverse coverage and identifier analysis
-------------------------------------------------------------------------
+### 2C. Inverse coverage and identifier analysis
 
 The raw apex analysis estimates:
 
@@ -503,10 +515,12 @@ Detection methods include:
 
 Outputs:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_biophysics/enrichment/
     annotation_band_coverage_by_protein.csv.gz
     annotation_band_coverage_identifier_summary.csv
+```
 
 Positive-band test results for Q8 C/T/S:
 
@@ -532,9 +546,7 @@ Conclusion:
 - This asymmetry motivated Phase 3A: why is one plausible Q8 segment selected
   while another same-Q8 segment in the same protein is not?
 
-------------------------------------------------------------------------
-2D. Same-protein, within-Q3 matched analysis
-------------------------------------------------------------------------
+### 2D. Same-protein, within-Q3 matched analysis
 
 Four matching schemes are implemented:
 
@@ -631,13 +643,13 @@ The stricter schemes ask conditional questions such as whether Q8 subtype,
 torsion or boundary geometry remains different after additionally holding Neq,
 RSA and position approximately constant.
 
-------------------------------------------------------------------------
-2E. Test-set strain extension
-------------------------------------------------------------------------
+### 2E. Test-set strain extension
 
 Strain source:
 
+```text
 /home/zahralab/MDStrainMapper/results/atlas_grouped_v1_test
+```
 
 Expected layout:
 
@@ -667,9 +679,11 @@ Derived strain metrics:
 
 Final strain-aware output directory:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_biophysics/
     enrichment_with_test_strain/
+```
 
 Raw circular-shift results across the six model conditions:
 
@@ -739,12 +753,11 @@ high-strain-residue detectors.
 Because strain is currently test-only, these strain associations have not yet
 been replicated on independent train/validation strain datasets.
 
-------------------------------------------------------------------------
-2F. Outputs, visualization and audit
-------------------------------------------------------------------------
+### 2F. Outputs, visualization and audit
 
 Primary non-strain enrichment outputs:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_biophysics/enrichment/
     apex_metrics_by_protein.csv.gz
@@ -760,9 +773,11 @@ results/publication_comparable_v2/
     within_q3_matched_effects_by_protein.csv.gz
     within_q3_matched_enrichment_summary.csv
     biophysical_enrichment_parameters.json
+```
 
 Strain-aware outputs:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_biophysics/
     enrichment_with_test_strain/
@@ -780,15 +795,20 @@ results/publication_comparable_v2/
       within_q3_matched_enrichment_summary.csv
       strain_input_audit.csv
       biophysical_enrichment_parameters.json
+```
 
 Visualization script:
 
+```text
 signed_band_analysis/plot_signed_band_phase2_results.py
+```
 
 Existing figures:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_biophysics/phase2_figures/
+```
 
 These include:
 
@@ -805,14 +825,20 @@ have not yet been added to the existing Phase 2 figures.
 
 Pipeline scripts:
 
+```text
 signed_band_analysis/run_signed_band_biophysical_pipeline.sh
+```
 
+```text
 signed_band_analysis/audit_signed_band_biophysical_pipeline.py
+```
 
 Original non-strain audit:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_biophysics/pipeline_audit.json
+```
 
 - passed
 - 42 checks
@@ -820,9 +846,11 @@ results/publication_comparable_v2/
 
 Final strain-aware audit:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_biophysics/
     pipeline_audit_with_test_strain.json
+```
 
 - passed
 - 45 checks
@@ -834,13 +862,13 @@ results/publication_comparable_v2/
 - Q3 matches and matching calipers independently verified
 - summary statistics independently recomputed
 
-========================================================================
-PHASE 3A: Q8-SEGMENT OBJECT SELECTION
-========================================================================
+## PHASE 3A: Q8-SEGMENT OBJECT SELECTION
 
 Script:
 
+```text
 signed_band_analysis/analyze_signed_band_object_selection.py
+```
 
 Scientific question:
 
@@ -851,9 +879,7 @@ same protein is not?
 This phase changes the unit of analysis from an individual residue to a
 complete contiguous Q8 segment.
 
-------------------------------------------------------------------------
-3A.1 Candidate, case and control definitions
-------------------------------------------------------------------------
+### 3A.1 Candidate, case and control definitions
 
 Candidate object:
 
@@ -887,9 +913,7 @@ from being treated as clean non-band controls.
 Neq, RSA, segment length and position are not used to select controls. They
 remain candidate explanations for selection.
 
-------------------------------------------------------------------------
-3A.2 Object statistics
-------------------------------------------------------------------------
+### 3A.2 Object statistics
 
 There are 481,842 condition/split/Q8-segment rows.
 
@@ -906,9 +930,7 @@ overlapping band intervals. Phase 3A therefore tests a specific apex-containing
 Q8-object definition; it does not claim that every band interval aligns
 perfectly with one Q8 segment.
 
-------------------------------------------------------------------------
-3A.3 Feature groups
-------------------------------------------------------------------------
+### 3A.3 Feature groups
 
 Sequential feature stages:
 
@@ -945,9 +967,7 @@ Sequential feature stages:
    - aromatic fraction
    - sequence entropy
 
-------------------------------------------------------------------------
-3A.4 Modeling and held-out evaluation
-------------------------------------------------------------------------
+### 3A.4 Modeling and held-out evaluation
 
 Models are trained only on the train split.
 
@@ -969,14 +989,14 @@ Additional metrics include:
 
 Mean test AUROC across six model conditions:
 
-Stage                                  Positive    Negative
-----------------------------------------------------------------
-Q8 only                               0.500       0.500
-Add Neq                               0.712       0.663
-Add RSA/length/position               0.760       0.803
-Add geometry/boundaries               0.804       0.803
-Add disorder                          0.812       0.818
-Add sequence composition              0.812       0.821
+| Stage | Positive | Negative |
+|---|---:|---:|
+| Q8 only | 0.500 | 0.500 |
+| Add Neq | 0.712 | 0.663 |
+| Add RSA/length/position | 0.760 | 0.803 |
+| Add geometry/boundaries | 0.804 | 0.803 |
+| Add disorder | 0.812 | 0.818 |
+| Add sequence composition | 0.812 | 0.821 |
 
 Final validation AUROC was similarly strong:
 
@@ -986,9 +1006,7 @@ Final validation AUROC was similarly strong:
 Therefore, the feature-based discrimination generalized from train proteins to
 both held-out validation and test proteins.
 
-------------------------------------------------------------------------
-3A.5 Biological interpretation
-------------------------------------------------------------------------
+### 3A.5 Biological interpretation
 
 Positive selection:
 
@@ -1029,10 +1047,9 @@ Statistical safeguard:
 - rows supported by fewer than 10 proteins remain descriptive
 - those rows receive no confidence interval, p-value or q-value
 
-------------------------------------------------------------------------
-3A.6 Outputs
-------------------------------------------------------------------------
+### 3A.6 Outputs
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_phase3a/
     q8_segment_candidates.csv.gz
@@ -1041,15 +1058,16 @@ results/publication_comparable_v2/
     sequential_model_performance.csv
     sequential_model_coefficients.csv
     phase3a_parameters.json
+```
 
 The output directory retains the historical “phase3a” name even though the
 script itself was renamed to:
 
+```text
 signed_band_analysis/analyze_signed_band_object_selection.py
+```
 
-========================================================================
-PHASE 3B: EXTERNAL STRUCTURAL AND MECHANICAL EXPLANATION
-========================================================================
+## PHASE 3B: EXTERNAL STRUCTURAL AND MECHANICAL EXPLANATION
 
 Scientific questions:
 
@@ -1076,13 +1094,13 @@ Sequential structural models were:
 Test-only strain was excluded from model training and held-out model-performance
 claims.
 
-------------------------------------------------------------------------
-3B.1 Experimental structure acquisition and sequence mapping
-------------------------------------------------------------------------
+### 3B.1 Experimental structure acquisition and sequence mapping
 
 Contact-map builder:
 
+```text
 Attention/build_contact_maps_from_pdb.py
+```
 
 Purpose:
 
@@ -1103,12 +1121,12 @@ Required Phase 3B options:
 
 Contact-map outputs:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_external_structure/contact_networks/
+```
 
-------------------------------------------------------------------------
-3B.2 Structure coverage and mapping integrity
-------------------------------------------------------------------------
+### 3B.2 Structure coverage and mapping integrity
 
 Structure coverage:
 
@@ -1121,13 +1139,13 @@ Structure coverage:
 The explicit sequence-to-structure mapping prevents PDB numbering, insertion
 codes or unresolved residues from being mistaken for model-sequence indices.
 
-------------------------------------------------------------------------
-3B.3 Segment-level case and control definitions
-------------------------------------------------------------------------
+### 3B.3 Segment-level case and control definitions
 
 Analysis script:
 
+```text
 signed_band_analysis/analyze_signed_band_external_structure.py
+```
 
 Candidate object:
 
@@ -1153,9 +1171,7 @@ Clean control:
 These definitions preserve the Phase 3A object-selection estimand while adding
 experimental structural and mechanical features.
 
-------------------------------------------------------------------------
-3B.4 Experimental structural features
-------------------------------------------------------------------------
+### 3B.4 Experimental structural features
 
 Local experimental geometry:
 
@@ -1192,13 +1208,13 @@ Internal/external integration:
 - band-level external features joined to evidence-dominated,
   consultation-dominated, combined and other mechanism classes
 
-------------------------------------------------------------------------
-3B.5 Test-only strain analysis
-------------------------------------------------------------------------
+### 3B.5 Test-only strain analysis
 
 Strain source:
 
+```text
 /home/zahralab/MDStrainMapper/results/atlas_grouped_v1_test
+```
 
 Scope:
 
@@ -1214,9 +1230,7 @@ different mechanical environments than same-protein, same-Q8 clean controls. It
 does not test whether strain is a train-learned predictor that generalizes to
 new proteins.
 
-------------------------------------------------------------------------
-3B.6 Sequential held-out modeling
-------------------------------------------------------------------------
+### 3B.6 Sequential held-out modeling
 
 Feature stages:
 
@@ -1232,13 +1246,13 @@ Feature stages:
 
 Mean test AUROC across the six model conditions:
 
-Stage                                  Positive    Negative
-----------------------------------------------------------------
-Q8 only                               0.500       0.500
-Base biophysics                       0.767       0.798
-Add experimental geometry             0.806       0.800
-Add contact network                   0.815       0.805
-Add ECOD/domain features              0.831       0.822
+| Stage | Positive | Negative |
+|---|---:|---:|
+| Q8 only | 0.500 | 0.500 |
+| Base biophysics | 0.767 | 0.798 |
+| Add experimental geometry | 0.806 | 0.800 |
+| Add contact network | 0.815 | 0.805 |
+| Add ECOD/domain features | 0.831 | 0.822 |
 
 Interpretation:
 
@@ -1251,9 +1265,7 @@ Interpretation:
 - Final test AUROC reaches approximately 0.83 for positive selection and 0.82
   for negative selection.
 
-------------------------------------------------------------------------
-3B.7 Main biological results
-------------------------------------------------------------------------
+### 3B.7 Main biological results
 
 Positive selected segments tend to have:
 
@@ -1281,9 +1293,7 @@ Therefore, the positive-band signal is better described as local mechanical
 deformability or weak packing than as generic domain-boundary or hinge
 localization.
 
-------------------------------------------------------------------------
-3B.8 Integration with Phase 3C mechanisms
-------------------------------------------------------------------------
+### 3B.8 Integration with Phase 3C mechanisms
 
 Positive combined bands show the strongest combination of:
 
@@ -1308,14 +1318,14 @@ from a structurally stabilizing environment.
 These results connect the model’s internal decomposition to experimentally
 derived external structure, but remain associative rather than causal.
 
-------------------------------------------------------------------------
-3B.9 Outputs
-------------------------------------------------------------------------
+### 3B.9 Outputs
 
 Result directory:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_external_structure/
+```
 
 Important outputs:
 
@@ -1329,9 +1339,7 @@ Important outputs:
 - external_feature_coverage_summary.csv
 - parameters.json
 
-------------------------------------------------------------------------
-3B.10 Tests and integrity checks
-------------------------------------------------------------------------
+### 3B.10 Tests and integrity checks
 
 Tests:
 
@@ -1353,9 +1361,7 @@ Integrity protections include:
 - same-protein, identical-Q8 controls
 - exclusion of controls overlapping any signed band
 
-------------------------------------------------------------------------
-3B.11 Limitations
-------------------------------------------------------------------------
+### 3B.11 Limitations
 
 - The six model conditions use the same biological proteins and are not six
   independent biological datasets.
@@ -1378,13 +1384,13 @@ Integrity protections include:
 - The results support associations between band selection and external
   mechanical or structural environments; they do not by themselves establish
   causal mechanical control.
-========================================================================
-PHASE 3C: INTERNAL EVIDENCE/CONSULTATION MECHANISM
-========================================================================
+## PHASE 3C: INTERNAL EVIDENCE/CONSULTATION MECHANISM
 
 Script:
 
+```text
 signed_band_analysis/analyze_signed_band_model_mechanism.py
+```
 
 Scientific questions:
 
@@ -1398,9 +1404,7 @@ Scientific questions:
 
 4. Do positive and negative bands use these mechanisms differently?
 
-------------------------------------------------------------------------
-3C.1 Matched control design
-------------------------------------------------------------------------
+### 3C.1 Matched control design
 
 For each band apex, controls are:
 
@@ -1415,9 +1419,7 @@ residues.
 This is a residue-level internal-mechanism analysis, distinct from the
 Q8-segment object analysis in Phase 3A.
 
-------------------------------------------------------------------------
-3C.2 Seed-aware exact decomposition
-------------------------------------------------------------------------
+### 3C.2 Seed-aware exact decomposition
 
 Bands were called from mean_seed(I_j), but the identity:
 
@@ -1440,9 +1442,7 @@ The script:
 
 This avoids incorrectly multiplying seed-averaged s_j and seed-averaged B_j.
 
-------------------------------------------------------------------------
-3C.3 Mechanism classes
-------------------------------------------------------------------------
+### 3C.3 Mechanism classes
 
 For a band with positive total log-magnitude enrichment:
 
@@ -1465,9 +1465,7 @@ Additional classes:
 - unclassified:
   no eligible exact-Q8 control or the decomposition cannot support a class
 
-------------------------------------------------------------------------
-3C.4 Coverage and seed stability
-------------------------------------------------------------------------
+### 3C.4 Coverage and seed stability
 
 Total bands:
 
@@ -1490,9 +1488,7 @@ Seed-direction stability:
 - 740 bands agreed in two of three seeds
 - 93 bands agreed in one of three seeds
 
-------------------------------------------------------------------------
-3C.5 Positive-band mechanism results
-------------------------------------------------------------------------
+### 3C.5 Positive-band mechanism results
 
 Median test-set effects across the six conditions:
 
@@ -1522,9 +1518,7 @@ Positive bands usually become strong because they combine:
 
 Neither component alone explains most positive bands.
 
-------------------------------------------------------------------------
-3C.6 Negative-band mechanism results
-------------------------------------------------------------------------
+### 3C.6 Negative-band mechanism results
 
 Median test-set effects across the six conditions:
 
@@ -1547,9 +1541,7 @@ amplifies negative evidence, but less strongly than for positive bands.
 
 Purely consultation-driven negative bands are exceptionally rare.
 
-------------------------------------------------------------------------
-3C.7 Audited numerical identities
-------------------------------------------------------------------------
+### 3C.7 Audited numerical identities
 
 - mean of the three seed I_j values reproduces the stored averaged band I_j
   with maximum error 1.11e-16
@@ -1570,10 +1562,9 @@ Positive and negative bands use systematically different internal mechanisms:
 - negative bands are more often strong intrinsic evidence objects with a
   smaller attention-breadth amplifier
 
-------------------------------------------------------------------------
-3C.8 Outputs
-------------------------------------------------------------------------
+### 3C.8 Outputs
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_phase3c/
     mechanism_by_band_and_seed.csv.gz
@@ -1583,16 +1574,17 @@ results/publication_comparable_v2/
     mechanism_class_summary.csv
     per_seed_split_cache/
     phase3c_parameters.json
+```
 
 The output directory retains the historical “phase3c” name even though the
 script itself was renamed to:
 
+```text
 signed_band_analysis/analyze_signed_band_model_mechanism.py
+```
 
 
-========================================================================
-PHASE 4: QUERY RECEIVERS OF SIGNED BAND CONTRIBUTIONS
-========================================================================
+## PHASE 4: QUERY RECEIVERS OF SIGNED BAND CONTRIBUTIONS
 
 Scientific question:
 
@@ -1614,13 +1606,13 @@ Because s_j is constant across queries, query-to-query variation for that key
 comes from attention A_ij. For a multi-residue band, the receiver profile sums
 the contributions from all keys in the band.
 
-------------------------------------------------------------------------
-4.1 Script and inputs
-------------------------------------------------------------------------
+### 4.1 Script and inputs
 
 Script:
 
+```text
 signed_band_analysis/analyze_signed_band_query_receivers.py
+```
 
 Inputs:
 
@@ -1655,9 +1647,7 @@ Query features:
 - normalized sequence position
 - whether the query lies inside any signed band
 
-------------------------------------------------------------------------
-4.2 Receiver profiles and matching
-------------------------------------------------------------------------
+### 4.2 Receiver profiles and matching
 
 The script streams each LxL matrix and calculates, for every source-band/query
 pair:
@@ -1697,9 +1687,7 @@ Distance bins:
 Effects are first calculated within band/Q8/distance strata and then aggregated
 with equal protein weighting.
 
-------------------------------------------------------------------------
-4.3 Data coverage
-------------------------------------------------------------------------
+### 4.3 Data coverage
 
 All six model conditions were analyzed separately.
 
@@ -1716,9 +1704,7 @@ Total band-query rows:
 For predictive modeling, high and low receivers are balanced within each
 band/Q8/distance stratum, with at most 50 rows per receiver class and protein.
 
-------------------------------------------------------------------------
-4.4 Held-out receiver models
-------------------------------------------------------------------------
+### 4.4 Held-out receiver models
 
 Logistic models were trained only on train proteins and evaluated without
 refitting on validation and test proteins.
@@ -1738,11 +1724,11 @@ Stages:
 
 Mean test AUROC across six conditions:
 
-Stage                              Negative source   Positive source
---------------------------------------------------------------------
-Distance/Q8 baseline                   0.507             0.514
-Add query features                     0.883             0.810
-Add source mechanism                   0.883             0.811
+| Stage | Negative source | Positive source |
+|---|---:|---:|
+| Distance/Q8 baseline | 0.507 | 0.514 |
+| Add query features | 0.883 | 0.810 |
+| Add source mechanism | 0.883 | 0.811 |
 
 Validation performance was similar:
 
@@ -1762,21 +1748,19 @@ The mechanism-class main effect therefore contributes almost no additional
 receiver discrimination once query properties are known. Mechanism-by-query
 interactions were not tested.
 
-------------------------------------------------------------------------
-4.5 Feature importance
-------------------------------------------------------------------------
+### 4.5 Feature importance
 
 Mean test AUROC changes:
 
-Feature                    Negative: single / unique   Positive: single / unique
--------------------------------------------------------------------------------
-Neq                               +0.296 / +0.061             +0.252 / +0.061
-RSA                               +0.165 / +0.008             +0.130 / +0.028
-Torsional change                  +0.324 / +0.037             +0.069 / +0.003
-Query lies in any band            +0.101 / +0.008             +0.137 / +0.015
-Disorder                          +0.153 / +0.001             -0.005 / +0.011
-Amino-acid class                  +0.100 / +0.004             +0.078 / +0.001
-Normalized position              approximately zero          approximately zero
+| Feature | Negative: single / unique | Positive: single / unique |
+|---|---:|---:|
+| Neq | +0.296 / +0.061 | +0.252 / +0.061 |
+| RSA | +0.165 / +0.008 | +0.130 / +0.028 |
+| Torsional change | +0.324 / +0.037 | +0.069 / +0.003 |
+| Query lies in any band | +0.101 / +0.008 | +0.137 / +0.015 |
+| Disorder | +0.153 / +0.001 | -0.005 / +0.011 |
+| Amino-acid class | +0.100 / +0.004 | +0.078 / +0.001 |
+| Normalized position | approximately zero | approximately zero |
 
 “Single” is the gain from adding one feature to the baseline.
 
@@ -1790,9 +1774,7 @@ Interpretation:
 - RSA is the second-largest unique predictor for positive receivers.
 - Amino-acid class and normalized position provide almost no unique information.
 
-------------------------------------------------------------------------
-4.6 Matched high-versus-low effects
-------------------------------------------------------------------------
+### 4.6 Matched high-versus-low effects
 
 After exact query-Q8 and distance-bin matching:
 
@@ -1823,18 +1805,16 @@ Conclusion:
   and overlapping band intervals prevent interpreting this alone as a discrete
   band-to-band signaling network.
 
-------------------------------------------------------------------------
-4.7 Long-range receivers
-------------------------------------------------------------------------
+### 4.7 Long-range receivers
 
 Long range is defined as at least 21 residues from the source-band interval.
 
 Fraction of test high receivers at long range:
 
-Source mechanism              Negative source      Positive source
--------------------------------------------------------------------
-Combined                         55.4–60.4%           59.4–64.0%
-Evidence-dominated              66.6–69.4%           74.4–81.6%
+| Source mechanism | Negative source | Positive source |
+|---|---:|---:|
+| Combined | 55.4–60.4% | 59.4–64.0% |
+| Evidence-dominated | 66.6–69.4% | 74.4–81.6% |
 
 Mean fraction of directional contribution mass at long range:
 
@@ -1850,14 +1830,14 @@ fractions.
 These are absolute fractions, not enrichment relative to the number of
 available long-range query residues.
 
-------------------------------------------------------------------------
-4.8 Outputs
-------------------------------------------------------------------------
+### 4.8 Outputs
 
 Output root:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_query_receivers/<condition>/
+```
 
 Important outputs:
 
@@ -1872,9 +1852,7 @@ Important outputs:
 - extraction_audit.json
 - parameters.json
 
-------------------------------------------------------------------------
-4.9 Conclusion and limitations
-------------------------------------------------------------------------
+### 4.9 Conclusion and limitations
 
 The model does not distribute a band’s contribution uniformly across queries.
 After controlling for source band, query Q8 and sequence distance, query
@@ -1898,9 +1876,7 @@ Limitations:
   biochemical transmission.
 
 
-========================================================================
-PHASE 5: SIGNED-BAND SEQUENCE MOTIFS AND PWMs
-========================================================================
+## PHASE 5: SIGNED-BAND SEQUENCE MOTIFS AND PWMs
 
 Scientific questions:
 
@@ -1925,13 +1901,13 @@ Inputs:
   results/publication_comparable_v2/
     analysis_seed_averaged_band_phase3a/q8_segment_candidates.csv.gz
 
-------------------------------------------------------------------------
-5A: APEX-CENTERED PWM AND LOCAL MOTIFS
-------------------------------------------------------------------------
+### 5A: APEX-CENTERED PWM AND LOCAL MOTIFS
 
 Script:
 
+```text
 signed_band_analysis/analyze_signed_band_apex_pwm.py
+```
 
 Design:
 
@@ -1997,6 +1973,7 @@ signal is broader chemical composition rather than one universal exact motif.
 
 Outputs:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_apex_pwm/<condition>/
     pwm_amino_acid_frequencies.csv.gz
@@ -2008,14 +1985,15 @@ results/publication_comparable_v2/
     reduced_motif_cross_split_replication.csv
     reduced_alphabet_mapping.csv
     parameters.json
+```
 
-------------------------------------------------------------------------
-5B: COMPLETE Q8-SEGMENT MOTIF ANALYSIS
-------------------------------------------------------------------------
+### 5B: COMPLETE Q8-SEGMENT MOTIF ANALYSIS
 
 Script:
 
+```text
 signed_band_analysis/analyze_signed_band_sequence_motifs.py
+```
 
 Design:
 
@@ -2058,11 +2036,11 @@ Positive segments:
 
 Held-out model performance:
 
-Model                              Positive AUROC    Negative AUROC
-------------------------------------------------------------------
-Q8 + biophysical features              0.812             0.818
-Motif features only                    0.557             0.681
-Biophysical features + motifs          0.812             0.808
+| Model | Positive AUROC | Negative AUROC |
+|---|---:|---:|
+| Q8 + biophysical features | 0.812 | 0.818 |
+| Motif features only | 0.557 | 0.681 |
+| Biophysical features + motifs | 0.812 | 0.808 |
 
 Adding motifs changed test AUROC by approximately:
 
@@ -2079,6 +2057,7 @@ Q8 subtype, flexibility, exposure, length, geometry and disorder.
 
 Outputs:
 
+```text
 results/publication_comparable_v2/
   analysis_seed_averaged_band_sequence_motifs/<condition>/
     matched_sequence_windows.csv.gz
@@ -2090,10 +2069,9 @@ results/publication_comparable_v2/
     motif_incremental_model_performance.csv
     sequence_logos/
     parameters.json
+```
 
-------------------------------------------------------------------------
-PHASE 5 CONCLUSION
-------------------------------------------------------------------------
+### PHASE 5 CONCLUSION
 
 Across all six conditions:
 
@@ -2114,9 +2092,7 @@ Limitations:
 - Sequence enrichment is associative and does not establish that a motif
   causally controls band strength or protein mechanics.
 
-========================================================================
-CURRENT OVERALL CONCLUSIONS
-========================================================================
+## CURRENT OVERALL CONCLUSIONS
 
 1. Signed influence bands are highly reproducible across seeds, and their
    locations are strongly nonrandom relative to protein-preserving
@@ -2179,9 +2155,7 @@ CURRENT OVERALL CONCLUSIONS
     evidence, attention controls how broadly that evidence is consulted, and
     query biophysics helps determine which residues receive it most strongly.
 
-========================================================================
-CURRENT LIMITATIONS AND NEXT PHASES
-========================================================================
+## CURRENT LIMITATIONS AND NEXT PHASES
 
 - NetSurfP annotations are predicted structural annotations. Experimental PDB
   geometry and contact networks provide complementary evidence, but structural

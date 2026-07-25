@@ -1,5 +1,6 @@
-Pipeline Summary: 
+# Pipeline Summary:
 
+```text
 Fixed train / validation / test datasets
 │
 ├── 1. Train comparable models
@@ -51,11 +52,11 @@ Fixed train / validation / test datasets
     ├── Phase 3C: separate evidence from consultation
     ├── Phase 4: identify query residues receiving band contributions
     └── Phase 5: test sequence PWMs and motifs
+```
 
+## Implementation:
 
-Implementation:
-
-1. Train comparable models x 3 seeds
+### 1. Train comparable models x 3 seeds
 
 - esm2_frozen_linear
 - esm2_frozen_bilstm_attn
@@ -67,10 +68,12 @@ Implementation:
 
 Each of the seven model conditions is trained with three random seeds, producing 21 runs in total.
 
-2. Evaluate and extract model outputs
+### 2. Evaluate and extract model outputs
+
  After training, the pipeline evaluates each run and extracts its predictions, class probabilities, attention maps, and signed contributions.
 
-3. Test reproducibility across seeds
+### 3. Test reproducibility across seeds
+
 `analyze_publication_seed_variance.py` then compares these outputs across seeds and model conditions. It writes the resulting summary tables to `results/publication_comparable_v2/analysis/`.
 The files included on GitHub are the compact analysis summaries, not the model checkpoints or full attention matrices. They report per-seed and seed-averaged predictive performance, protein-level performance, within-condition reproducibility across seeds, and agreement between model conditions. The analysis parameters and a short run summary are also included for reproducibility.
 
@@ -85,12 +88,12 @@ The files included on GitHub are the compact analysis summaries, not the model c
 | ESM3 BiLSTM-attn — top-28 | 0.8174 ± 0.0049 | 0.8117 ± 0.0052 | 0.8445 ± 0.0042 | 0.8895 ± 0.0052 | 0.9022 ± 0.0050 | 0.6976 ± 0.0081 |
 | ESM2 linear — frozen      | 0.7920 ± 0.0008 | 0.7836 ± 0.0008 | 0.8262 ± 0.0008 | 0.8621 ± 0.0006 | 0.8756 ± 0.0010 | 0.6480 ± 0.0011 |
 
-4. Extract signed contributions for all splits
+### 4. Extract signed contributions for all splits
 
-5. Signed-band analysis
+### 5. Signed-band analysis
 
 
-Phase 1:detect bands and test seed reproducibility
+#### Phase 1: detect bands and test seed reproducibility
 
 After signed contributions are extracted for the train, validation, and test sets, `add_seed_averaged_influence.py` averages each residue’s signed influence, \(I_j\), across seeds 1–3. `extract_signed_contribution_bands.py` uses this averaged profile to identify positive flexibility-supporting bands and negative rigidity-supporting bands.
 
@@ -99,7 +102,7 @@ After signed contributions are extracted for the train, validation, and test set
 Seed reproducibility is evaluated separately by `analyze_signed_band_seed_reproducibility.py`. `consensus_reproducibility_summary.csv` summarizes bands supported across seeds, while `seed_pair_reproducibility_summary.csv` reports agreement between each pair of seeds.
 
 
-Phase 2: 
+#### Phase 2:
 
 `annotate_signed_bands_with_netsurfp.py` adds ATLAS Neq and NetSurfP annotations, including secondary structure, solvent accessibility, disorder, interface, and torsion-related features. `analyze_signed_band_biophysical_enrichment.py` compares band apices with appropriate background residues and writes the enrichment summaries. `audit_signed_band_biophysical_pipeline.py` checks the complete analysis for missing data, coordinate errors, invalid matches, and inconsistent statistics.
 
@@ -115,11 +118,11 @@ The compact results are stored in `phase2_biophysical_results/`:
 - `phase2_pipeline_audit.json` records the validation checks; all 42 checks passed.
 
 
-Phase 3: Explaining signed-band selection and mechanism
+#### Phase 3: Explaining signed-band selection and mechanism
 
 Phase 3 examines why particular residue segments are selected as signed bands, whether those selections correspond to external structural properties, and whether their effects arise from intrinsic residue evidence or attention routing.
 
-Phase 3A: Q8-segment selection
+##### Phase 3A: Q8-segment selection
 
 `analyze_signed_band_object_selection.py` treats complete contiguous Q8 segments as the analysis objects. Band-containing segments are compared with clean segments from the same protein with the same Q8 class.
 
@@ -128,7 +131,7 @@ Phase 3A: Q8-segment selection
 - `sequential_model_coefficients.csv` contains the standardized coefficients from those models.
 - `phase3a_parameters.json` records the segment definitions, matching rules, features, and model stages.
 
-Phase 3B: External structure
+##### Phase 3B: External structure
 
 `analyze_signed_band_external_structure.py` relates the Phase 3A segments to mapped experimental structures, contact networks, ECOD domain boundaries, and test-set strain data.
 
@@ -139,7 +142,7 @@ Phase 3B: External structure
 - `structure_mapping_audit.csv` records mapping quality and acceptance for each protein.
 - `parameters.json` records the structural thresholds, feature groups, and model settings.
 
-Phase 3C: Evidence versus attention routing
+##### Phase 3C: Evidence versus attention routing
 
 `analyze_signed_band_model_mechanism.py` uses the identity \(I_j=s_jB_j\) to determine whether each band is driven mainly by intrinsic signed evidence, attention consultation, or a mixture of both.
 
@@ -147,7 +150,7 @@ Phase 3C: Evidence versus attention routing
 - `mechanism_class_summary.csv` reports the number and fraction of evidence-dominated, attention-dominated, and mixed bands.
 - `phase3c_parameters.json` records the decomposition and classification rules.
 
-Phase 4: Query residues receiving band contributions
+#### Phase 4: Query residues receiving band contributions
 
 `analyze_signed_band_query_receivers.py` performs the receiver analysis separately for each model condition and seed, averages the results across seeds, compares high- and low-receiving queries, and tests which query features help explain receiver selection.
 
@@ -163,9 +166,9 @@ The results in `nonstructural_receiver_analysis/` contain the completed original
 
 The upgraded structural receiver analysis will be added separately after all six model conditions and its final audit are complete.
 
-Phase 5: Sequence PWMs and motifs
+#### Phase 5: Sequence PWMs and motifs
 
-Apex-centered PWMs and motifs
+##### Apex-centered PWMs and motifs
 
 `analyze_signed_band_apex_pwm.py` examines amino-acid windows centered on each band apex. Band windows are compared with same-protein control windows matched by Q8 secondary-structure class.
 
@@ -178,7 +181,7 @@ Apex-centered PWMs and motifs
 - `reduced_alphabet_mapping.csv` defines the biochemical amino-acid classes.
 - `parameters_by_condition.json` records the PWM, matching, discovery, and replication settings for each model condition.
 
-Complete-segment sequence motifs
+##### Complete-segment sequence motifs
 
 `analyze_signed_band_sequence_motifs.py` compares band-containing Q8 segments with unselected segments from the same protein and Q8 class. Motifs are selected using training proteins and locked before validation and test evaluation.
 
