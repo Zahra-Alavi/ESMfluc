@@ -384,10 +384,9 @@ def main() -> None:
             print(json.dumps(report), flush=True)
     aggregate_report = None
     if not args.extract_only:
-        all_manifest = pd.read_csv(args.manifest_tsv, sep="\t")
         expected = [
             cache_path(cache_dir, str(row.condition), int(row.seed), str(row.split))
-            for row in all_manifest.itertuples(index=False)
+            for row in manifest.itertuples(index=False)
         ]
         missing = [str(path) for path in expected if not path.exists()]
         if missing:
@@ -409,6 +408,15 @@ def main() -> None:
             },
             "minimum_inference_proteins": args.minimum_inference_proteins,
             "metrics": METRICS,
+            "selected_conditions": sorted(
+                manifest.condition.astype(str).unique().tolist()
+            ),
+            "selected_splits": sorted(
+                manifest.split.astype(str).unique().tolist()
+            ),
+            "selected_seeds": sorted(
+                manifest.seed.astype(int).unique().tolist()
+            ),
         }
         (output / "phase3c_parameters.json").write_text(json.dumps(parameters, indent=2) + "\n")
     print(json.dumps({
