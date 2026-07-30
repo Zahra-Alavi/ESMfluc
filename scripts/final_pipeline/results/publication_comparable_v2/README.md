@@ -95,11 +95,23 @@ The files included on GitHub are the compact analysis summaries, not the model c
 
 #### Phase 1: detect bands and test seed reproducibility
 
-After signed contributions are extracted for the train, validation, and test sets, `add_seed_averaged_influence.py` averages each residue’s signed influence, \(I_j\), across seeds 1–3. `extract_signed_contribution_bands.py` uses this averaged profile to identify positive flexibility-supporting bands and negative rigidity-supporting bands.
+`extract_signed_contribution_bands.py` detects bands separately in every seed
+and in the three-seed mean \(I_j\) profile. The current detector retains raw
+local extrema with \(|I_p|/\sigma_{\mathrm{MAD}}\ge2\), constructs contiguous
+same-sign half-intensity intervals, and merges overlapping intervals. Peak
+prominence is descriptive and does not control inclusion.
 
-`seed_averaged_signed_bands.csv.gz` contains the position, sequence, sign, width, magnitude, and persistence of every detected band. `seed_averaged_signed_band_protein_summary.csv` reports the number of positive and negative bands found for each protein. `signed_band_parameters.json` records how the bands were detected.
+`analyze_signed_band_seed_reproducibility.py` treats the mean-profile bands as
+the final objects. A mean band is stable when a same-sign seed band has
+interval IoU of at least 0.5 in at least two of three seeds, using one-to-one
+matching. The resulting primary catalog is `stable_signed_bands.csv`.
 
-Seed reproducibility is evaluated separately by `analyze_signed_band_seed_reproducibility.py`. `consensus_reproducibility_summary.csv` summarizes bands supported across seeds, while `seed_pair_reproducibility_summary.csv` reports agreement between each pair of seeds.
+Current upgraded outputs are under
+`analysis_phase1_upgraded_raw_mad2/`. Files under
+`phase1_signed_band_results/` and `analysis_signed_bands/` are legacy
+multiscale-prominence results, not the current Phase 1 catalog. The complete
+method is documented once in
+[`signed_band_analysis/README.md`](../../signed_band_analysis/README.md).
 
 
 #### Phase 2:
