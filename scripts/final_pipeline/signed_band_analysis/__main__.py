@@ -10,6 +10,7 @@ COMMANDS = {
     "add-seed-average": "add_seed_averaged_influence",
     "extract-bands": "extract_signed_contribution_bands",
     "build-uniform-control": "build_uniform_attention_control_profiles",
+    "compare-uniform-bands": "compare_observed_uniform_bands",
     "seed-reproducibility": "analyze_signed_band_seed_reproducibility",
     "annotate-biophysics": "annotate_signed_bands_with_netsurfp",
     "biophysical-enrichment": "analyze_signed_band_biophysical_enrichment",
