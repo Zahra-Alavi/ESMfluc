@@ -201,48 +201,60 @@ signed_band_analysis/extract_signed_contribution_bands.py
 
 ### 1A. Band-calling algorithm
 
-Positive and negative I_j profiles are analyzed separately.
+The current publication detector uses the raw residue-level influence profile
+without smoothing:
+
+```text
+detector_version: phase1_raw_amplitude_half_intensity_v1
+locked_parameter_set_id: phase1_raw_amp_R2_half_intensity_merge_c5d7c802e9
+```
+
+For each protein profile, the robust scale is:
+
+```text
+sigma_MAD = 1.4826 * median(|I_j - median(I)|)
+R_p = |I_p| / sigma_MAD
+```
 
 Algorithm:
 
-1. Smooth the signed profile using windows of 1, 3 and 5 residues.
-2. Detect positive local maxima or negative local minima with
-   scipy.signal.find_peaks.
-3. Estimate a robust local signal scale from the median absolute deviation.
-4. Require peak prominence to be at least 2.5 times the robust MAD-derived
-   scale.
-5. Require the peak to persist across at least two of the three smoothing
-   scales.
-6. Cluster peaks from different smoothing scales when their apices are within
-   two residues.
-7. Enforce a minimum same-scale peak distance of three residues.
-8. Define band boundaries from median half-prominence limits.
-9. Store the apex, sign, start, end, width, sequence, prominence and smoothing
-   scale persistence.
+1. Find positive local maxima and negative local minima in the raw `I_j`
+   profile. The first and last residues are not eligible as apices.
+2. Keep an apex when its absolute magnitude is at least two robust scales above
+   the profile background: `R_p >= 2`.
+3. Define its band as the contiguous, same-sign residues around the apex for
+   which `|I_j| >= 0.5 * |I_p|`.
+4. Merge overlapping bands of the same sign and retain the strongest apex as
+   the primary apex.
 
-Band strength therefore matters: the detector does not classify every local
-positive or negative fluctuation as a band.
 
-Band width is determined by the half-prominence boundaries of the detected
-multi-scale peak. It is not a fixed window and should not be interpreted as a
-physical domain boundary.
+Each final band contains its apex, contains residues of only one sign and does
+not overlap another final band. The per-seed and mean-profile interval audits
+passed with no overlapping or multiply assigned residues.
+
+The output also records band strength. The main measures are absolute apex
+influence, standardized apex magnitude `R_p`, integrated absolute influence
+across the band, and their within-protein ranks. These values can be used to
+distinguish stronger from weaker detected bands in downstream analyses.
+
 
 ### 1B. Per-seed bands
 
 Outputs:
 
 ```text
-results/publication_comparable_v2/analysis_signed_bands/
+results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/per_seed/
   signed_bands.csv
   signed_band_protein_summary.csv
   signed_band_parameters.json
+  band_interval_audit.json
 ```
+Each row includes identifying columns such as:
+- condition: which of the six models
+- seed: 1, 2, or 3
+- split: train, validation, or test
+- protein: the protein identifier
 
-There are 294,459 per-seed bands:
-
-- seed 1: 98,011
-- seed 2: 96,753
-- seed 3: 99,695
 
 ### 1C. Seed reproducibility
 
@@ -256,103 +268,269 @@ Outputs:
 
 ```text
 results/publication_comparable_v2/
-  analysis_signed_band_reproducibility/
-    seed_pair_reproducibility_by_protein.csv
-    seed_pair_reproducibility_summary.csv
-    seed_consensus_bands.csv
-    consensus_reproducibility_summary.csv
-    seed_pair_block_shift_null.csv
-    consensus_block_shift_null.csv
-    seed_reproducibility_parameters.json
+  analysis_phase1_upgraded_raw_mad2/
+    reproducibility_interval_iou05_null_fixed/
+      all_mean_bands_with_stability.csv.gz
+      seed_consensus_bands.csv
+      seed_pair_reproducibility_by_protein.csv
+      stable_signed_bands.csv
+
+    reproducibility_interval_iou05_null_fixed_test/
+      all_mean_bands_with_stability.csv.gz
+      seed_pair_reproducibility_by_protein.csv
+      seed_pair_reproducibility_summary.csv
+      seed_consensus_bands.csv
+      consensus_reproducibility_summary.csv
+      seed_pair_block_shift_null.csv
+      consensus_block_shift_null.csv
+      seed_reproducibility_parameters.json
+      stable_signed_bands.csv
 ```
 
-Logic:
+Seed matching:
 
-- Match same-sign bands between seed pairs using one-to-one positional
-  matching.
-- Compare observed overlap with protein-level circular block-shift nulls that
-  preserve band counts and relative patterns.
-- Construct seed-consensus bands supported by at least two seeds.
+- Bands are matched only within the same model condition, split, protein and
+  sign.
+- Matching is one-to-one and requires interval IoU of at least 0.5.
+- A mean-profile band is stable when it matches a band in at least two of the
+  three seed profiles. Support from all three seeds is recorded separately.
+- Band strength, rank and prominence do not affect seed matching.
 
-Results across condition/split/sign cells:
+`seed_consensus_bands.csv` is a diagnostic summary of where the three individual seed runs detected similar bands.
 
-- pairwise micro-Jaccard: 0.620–0.883; median 0.726
-- pairwise micro-F1: 0.765–0.938; median 0.842
-- mean matched-apex separation: 0.22–1.58 residues
-- Jaccard-null z-scores: 35.4–133.6
-- consensus counts: 1.13–1.35 times block-shift expectation
-- all reported consensus tests were strongly nonrandom
+The circular-shift null preserves each protein's band counts, signs, widths and
+relative spacing while shifting their locations. It tests whether the observed
+agreement across seeds is greater than expected from patterns with the same
+basic organization but unrelated residue positions. The stable-band catalog
+does not depend on the null result.
 
-Conclusion:
+Inferential test-set results across 36 condition/sign/seed-pair cells:
 
-Band locations are reproducible across seeds and cannot be explained by the
-number and spacing of randomly shifted bands.
+- pairwise micro-Jaccard: 0.427–0.880; median 0.679;
+- pairwise micro-F1: 0.599–0.936; median 0.809;
+- mean matched-apex separation: 0.19–1.28 residues; median 0.67;
+- mean matched interval IoU: 0.668–0.935; median 0.802;
+- pairwise Jaccard null z-scores: 75.5–153.6;
+- consensus-count null z-scores: 43.0–61.5;
+- all pairwise and consensus empirical BH-adjusted p-values were `0.000999`
+  with 1,000 block shifts.
 
-### 1D. Final seed-averaged bands
+The raw-profile band locations and intervals are therefore strongly
+reproducible across seeds and exceed the circular-shift expectation.
 
-The same detector was applied to mean_seed(I_j).
+### 1D. Final band catalog
+
+The same detector was applied to the arithmetic mean of the three seed
+profiles.
 
 Outputs:
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_signed_bands/
-    signed_bands.csv
-    signed_band_protein_summary.csv
-    signed_band_parameters.json
+  analysis_phase1_upgraded_raw_mad2/
+    mean/
+      signed_bands.csv
+      signed_band_protein_summary.csv
+      signed_band_parameters.json
+      band_interval_audit.json
+
+    reproducibility_interval_iou05_null_fixed/
+      all_mean_bands_with_stability.csv.gz
+      stable_signed_bands.csv
 ```
+
+The detector found 77,085 bands in the seed-averaged profiles before the seed
+stability filter. Of these, 72,465 were supported by at least two seeds and form
+the final catalog.
 
 Final counts:
 
-- 97,198 total bands
-- 50,257 positive bands
-- 46,941 negative bands
-- 5.075 total bands per 100 residues
-- positive density: 2.624 per 100 residues
-- negative density: 2.451 per 100 residues
+- 72,465 total stable bands (across 6 models)
+- 44,712 positive bands
+- 27,753 negative bands
+- 3.784 total bands per 100 residues
+- positive density: 2.335 per 100 residues
+- negative density: 1.449 per 100 residues
+- train: 50,395 bands
+- validation: 11,031 bands
+- test: 11,039 bands
+- 55,170 bands supported by all three seeds
+- 17,295 bands supported by two seeds
 
 Widths:
 
-- positive mean width: 11.59 aa
-- positive median width: 9 aa
-- negative mean width: 18.42 aa
-- negative median width: 14 aa
+- positive mean width: 4.47 aa
+- positive median width: 4 aa
+- negative mean width: 6.40 aa
+- negative median width: 5 aa
 
 Apex distances between consecutive bands in the complete ordered band list:
 
-- +/+ mean 16.28, median 14 residues
-- -/- mean 22.53, median 17 residues
-- opposite-sign mean 17.58, median 13 residues
+- +/+ mean 26.79, median 22 residues
+- -/- mean 29.93, median 25 residues
+- opposite-sign mean 21.51, median 16 residues
 
 Same-sign distance while ignoring intervening opposite-sign bands:
 
-- + to next +: mean 34.78, median 30 residues
-- - to next -: mean 34.96, median 30 residues
+- + to next +: mean 38.38, median 29 residues
+- - to next -: mean 48.71, median 38 residues
 
-Approximately 71% of consecutive opposite-sign intervals overlap or touch.
 
-Consequences:
+The primary downstream catalog is:
 
-- The reported band density is an apex density, not nonoverlapping sequence
-  coverage.
-- Band widths must not be summed to estimate the percentage of the protein
-  covered by independent bands.
-- Positive and negative bands may overlap because they were detected from
-  positive and negative profiles separately.
+```text
+results/publication_comparable_v2/
+  analysis_phase1_upgraded_raw_mad2/
+    reproducibility_interval_iou05_null_fixed/stable_signed_bands.csv
+```
+
+Test-only confirmatory analyses may use the identical test subset under
+`reproducibility_interval_iou05_null_fixed_test/`.
+
+### 1E. Uniform-attention control
+
+The observed influence profile combines two learned quantities:
+
+\[
+I_j^{\mathrm{observed}} = s_j B_j,
+\qquad
+B_j = \frac{1}{L}\sum_i A_{ij}.
+\]
+
+Here, \(s_j\) is the signed evidence stored at residue \(j\), \(A_{ij}\) is the
+attention from query residue \(i\) to key residue \(j\), \(B_j\) is the average
+attention received by residue \(j\), and \(L\) is the protein length. The
+observed profile can therefore highlight a residue because it carries strong
+evidence, because attention routes many queries toward it, or because of both.
+
+The uniform-attention control asks a simple question: if the same learned
+evidence were consulted equally across the protein, would the same bands still
+be detected? Under uniform attention, every key receives \(1/L\), so the
+control profile is:
+
+\[
+I_j^{\mathrm{uniform}} = \frac{s_j}{L}.
+\]
+
+This is a post hoc control built from the saved model quantities. It is not a
+new model and does not require retraining. It also is not a causal attention
+ablation, because \(s_j\) was produced by the original trained model. It
+separates the localization already present in the learned evidence from the
+additional localization produced by nonuniform attention routing.
+
+The attention amplification factor is:
+
+\[
+G_j = L B_j,
+\qquad
+I_j^{\mathrm{observed}} = I_j^{\mathrm{uniform}}G_j.
+\]
+
+Thus, \(G_j>1\) means that attention amplifies the evidence at residue \(j\)
+relative to uniform routing, while \(G_j<1\) means that it suppresses it.
+
+Implementation:
+
+```text
+signed_band_analysis/build_uniform_attention_control_profiles.py
+signed_band_analysis/compare_observed_uniform_bands.py
+```
+
+The analysis used the following steps:
+
+1. Build \(s_j/L\) profiles for every seed, model condition, split and protein.
+2. Average the three uniform profiles for each model and protein.
+3. Apply the same locked Phase 1 detector used for the observed profiles:
+   raw residue-level profiles, \(R_p\geq2\), and same-sign half-height band
+   boundaries.
+4. Apply the same seed-stability rule: interval IoU at least 0.5 and support in
+   at least two of three seeds.
+5. Compare observed and uniform profiles, band masks, apex locations, catalog
+   sizes and seed support within the same model, split, protein and sign.
+
+No test-set result was used to choose the detector or matching parameters. The
+test split is the primary set for scientific interpretation.
+
+Outputs:
+
+```text
+results/publication_comparable_v2/
+  analysis_uniform_attention_control_upgraded_raw_mad2/
+    profiles/
+    seed_averaged_profiles/
+    profile_comparison/
+    bands/per_seed_uniform/
+    bands/mean_uniform/
+    stability_uniform_interval_iou05_null_fixed/
+    final_observed_uniform_comparison/
+```
+
+Across all six models and all three data splits, the uniform control produced
+13,518 seed-averaged candidate bands, of which 11,605 were seed-stable. For
+comparison, the observed profiles produced 77,085 candidate bands, of which
+72,465 were seed-stable. These are technical catalog counts summed across
+models and splits, not counts of unique biological regions.
+
+The complete-catalog comparison showed a strong asymmetry:
+
+- 94.1% of uniform candidate bands overlapped an observed candidate band, but
+  only 16.5% of observed candidate bands overlapped a uniform band;
+- 94.1% of uniform stable bands overlapped an observed stable band, but only
+  15.1% of observed stable bands overlapped a uniform stable band.
+
+The complete residue profiles were nevertheless strongly correlated on the
+test set. Across models, mean observed-versus-uniform Pearson correlations
+were 0.912–0.949 for negative profiles and 0.868–0.918 for positive profiles;
+the corresponding Spearman correlations were 0.995–1.000 and 0.987–0.999.
+Thus, attention usually preserves the broad ranking already present in
+\(s_j\), while changing which local peaks cross the band threshold and how
+widely those peaks extend.
+
+Test-set residue-level band overlap across the six models was:
+
+| Catalog | Sign | Jaccard range | Observed residues covered by uniform | Uniform residues covered by observed |
+| --- | ---: | ---: | ---: | ---: |
+| Seed-averaged candidates | Negative | 0.204–0.335 | 0.286–0.531 | 0.596–0.655 |
+| Seed-averaged candidates | Positive | 0.037–0.112 | 0.049–0.142 | 0.542–0.659 |
+| Seed-stable bands | Negative | 0.182–0.300 | 0.252–0.479 | 0.586–0.675 |
+| Seed-stable bands | Positive | 0.034–0.101 | 0.049–0.131 | 0.541–0.638 |
+
+On the test set, the observed profiles also produced more candidates per
+protein than the uniform profiles in every model. The ranges across models
+were 3.28–3.75 observed versus 0.76–2.00 uniform for negative bands, and
+5.43–6.08 observed versus 0.27–0.65 uniform for positive bands. Uniform bands
+also had lower three-seed support overall, especially for positive bands.
+
+The uniform bands therefore form a relatively small subset of the observed
+bands. Evidence \(s_j\) alone explains some localization, particularly for
+negative bands, but nonuniform learned attention substantially sharpens or
+adds localization. This effect is strongest for positive bands. The result
+supports a role for attention routing in the model's decision pattern, but it
+does not by itself establish a causal biological communication network.
+
+This control answers a different question from Phase 3C. Phase 3C starts from
+the observed bands and asks whether their strength is associated with
+attention routing, signed evidence, or both. The uniform control instead
+rebuilds the full profile without nonuniform routing, detects a new band
+catalog, and tests directly whether the same locations remain detectable.
 
 ## PHASE 2: BIOPHYSICAL ENRICHMENT, NONRANDOMNESS AND IDENTIFIER ANALYSIS
 
-Phase 2 consists of all analyses implemented in:
+Phase 2 describes the biophysical environments of the seed-stable
+contribution bands. Band and residue annotations are prepared by:
+
+```text
+signed_band_analysis/annotate_signed_bands_with_netsurfp.py
+```
+The statistical analyses are performed by:
 
 ```text
 signed_band_analysis/analyze_signed_band_biophysical_enrichment.py
 ```
 
-The annotation preparation is performed by:
-
-```text
-signed_band_analysis/annotate_signed_bands_with_netsurfp.py
-```
+The publication analysis uses the stable bands detected from seed-averaged
+profiles and supported by at least two of the three seeds. Its main statistical
+conclusions are evaluated on the held-out test proteins.
 
 The phase has four main questions:
 
@@ -361,14 +539,12 @@ The phase has four main questions:
 2B. Are those locations nonrandom relative to a protein-preserving positional
     null?
 
-2C. What fraction of biological annotations is captured by bands—the inverse
-    probability P(band detects annotation)?
+2C. What fraction of biological annotations is captured by bands? This is coverage or recall. (band detects annotation)
 
 2D. After comparing apices with same-protein, same-Q3 non-band residues, what
     properties still distinguish band apices?
 
-A test-only strain extension was subsequently added to the same enrichment
-script.
+2E. On the test set, are positive and negative band apices associated with different MD-derived strain environments?
 
 ### 2A. Residue and band annotation
 
@@ -429,8 +605,11 @@ part of a short C/T/S segment connecting structured regions.
 
 ### 2B. Raw apex localization and circular-shift nonrandomness
 
-For each protein, condition and sign, the script circularly shifts the complete
-same-sign apex pattern within the eligible protein interval.
+This analysis uses the 11,039 final stable bands from the held-out test set.
+For each protein, model condition and sign, the script measures the annotations
+at the observed band apices. It then circularly shifts the complete same-sign
+apex pattern within the eligible protein interval and measures the annotations
+at the shifted positions.
 
 The null preserves:
 
@@ -443,6 +622,9 @@ The null preserves:
 
 It changes only the absolute positions of the apex pattern.
 
+Circular shifting is used only as a positional control. It does not change the
+observed bands or determine which bands enter the stable catalog.
+
 The analysis uses:
 
 - 1,000 circular block shifts
@@ -451,18 +633,25 @@ The analysis uses:
 - empirical upper, lower and two-sided p-values
 - Benjamini-Hochberg correction
 
-Representative test-set results across the six model conditions:
+Test-set results across the six model conditions:
 
-| Property at apex | Positive | Negative | Shifted null |
-|---|---:|---:|---:|
-| Neq | 2.03–2.09 | 1.02–1.03 | 1.36–1.37 |
-| Q3 coil | 93.3–94.6% | 1.6–3.2% | 43.4–43.9% |
-| Q8 C/T/S | 91.1–92.9% | 1.2–3.1% | 41.2–41.6% |
-| Structured linker/loop | 66.9–77.7% | 0.6–1.9% | ~29% |
-| RSA | 0.52–0.55 | 0.17–0.24 | ~0.34 |
-| RSA >= 0.25 | 88.8–92.0% | 26.7–41.8% | ~59% |
-| Distance to Neq peak | 1.8–2.6 aa | 7.8–8.4 aa | ~5.2 aa |
-| Torsional change | 90–97 degrees | 7–9 degrees | ~47 degrees |
+| Property at apex | Positive observed | Positive null | Negative observed | Negative null |
+|:---|---:|---:|---:|---:|
+| Neq | 2.061–2.151 | 1.368–1.370 | 1.00002–1.00046 | 1.322–1.331 |
+| Q3 coil | 94.91–95.93% | 43.69–43.95% | 0–0.37% | 41.26–42.15% |
+| Q8 C/T/S | 93.08–94.47% | 41.46–41.73% | 0–0.37% | 39.31–40.19% |
+| Structured linker/loop | 63.83–73.75% | 29.07–29.56% | 0–0.30% | 28.69–29.40% |
+| RSA | 0.537–0.555 | 0.336–0.339 | 0.178–0.270 | 0.329–0.331 |
+| RSA ≥ 0.25 | 91.32–92.29% | 58.51–58.93% | 30.05–49.22% | 56.85–57.32% |
+| Distance to Neq peak (aa) | 1.63–2.39 | 5.08–5.27 | 8.62–9.53 | 4.96–5.31 |
+| Torsional change (degrees) | 90.66–96.47 | 47.48–47.85 | 2.60–4.58 | 46.04–47.03 |
+
+The positive and negative null ranges are reported separately because the two
+signs have different observed apex patterns and are shifted independently.
+For every property in the table, all six model conditions differed from their
+sign-matched shifted controls after multiple-testing correction. The absolute
+null z-scores were 13.0–30.3 for positive apices and 3.24–19.6 for negative
+apices; all two-sided BH-adjusted p-values were at most 0.00221.
 
 Interpretation:
 
@@ -476,15 +665,20 @@ Interpretation:
   signed contribution.
 
 The script also performs paired positive-versus-negative protein-level
-contrasts. These are stored in:
+contrasts. The current outputs are stored in:
 
 ```text
-paired_flex_vs_rigid_summary.csv
+results/publication_comparable_v2/analysis_phase2_interval_iou05_test/
+  enrichment_with_test_strain/
+    apex_metrics_by_protein.csv.gz
+    apex_circular_shift_null.csv.gz
+    apex_circular_shift_enrichment_summary.csv
+    paired_flex_vs_rigid_summary.csv
 ```
 
 ### 2C. Inverse coverage and identifier analysis
 
-The raw apex analysis estimates:
+Phase 2B asks:
 
     P(annotation | band)
 
@@ -492,16 +686,20 @@ For example:
 
     What percentage of positive apices are Q8 C/T/S?
 
-The inverse analysis estimates:
+Phase 2C reverses the question and estimates:
 
-    P(band detects annotation)
+    P(detected by a band | annotation)
 
 For example:
 
-    What percentage of all Q8 C/T/S residues or segments are detected by a
-    positive band?
+    What percentage of all Q8 C/T/S residues or segments are identified by a
+    positive apex or band interval?
 
-Proteins with zero bands are retained in the denominators.
+This distinction separates precision from coverage. A high precision means
+that a detected apex is usually in the annotation of interest. High coverage
+would mean that bands identify most occurrences of that annotation. Proteins
+with zero bands are retained, so coverage is not inflated by analyzing only
+proteins in which the model detected a band.
 
 Detection methods include:
 
@@ -517,32 +715,43 @@ Outputs:
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_band_biophysics/enrichment/
-    annotation_band_coverage_by_protein.csv.gz
-    annotation_band_coverage_identifier_summary.csv
+  analysis_phase2_interval_iou05_test/
+    enrichment_with_test_strain/
+      annotation_band_coverage_by_protein.csv.gz
+      annotation_band_coverage_identifier_summary.csv
 ```
 
-Positive-band test results for Q8 C/T/S:
+The following are test-set macro estimates: each protein receives equal weight,
+and each range covers the six model conditions.
 
-- exact-apex precision: 91.1–92.9%
-- exact-apex coverage of all C/T/S residues: 5.96–7.05%
-- band-interval precision: 65.3–68.0%
-- band-interval coverage of C/T/S residues: 41.9–52.6%
-- C/T/S segments containing a positive apex: 31.1–36.7%
-- C/T/S segments overlapping a positive band: 41.3–50.7%
+Positive-band results for Q8 C/T/S:
 
-Positive-band test results for Neq peaks:
+| Measurement | Result across models |
+|:---|---:|
+| Positive apices that are Q8 C/T/S | 93.08–94.47% |
+| All Q8 C/T/S residues detected by an exact positive apex | 5.48–6.34% |
+| Residues inside positive-band intervals that are Q8 C/T/S | 88.70–90.14% |
+| All Q8 C/T/S residues covered by positive-band intervals | 21.10–28.05% |
+| Q8 C/T/S segments containing a positive apex | 28.83–33.09% |
+| Q8 C/T/S segments overlapping a positive-band interval | 31.55–35.69% |
 
-- exact-apex precision: 18.9–25.5%
-- exact-apex coverage of Neq peaks: 8.2–9.2%
-- Neq-peak coverage within two residues: 29.7–35.5%
-- Neq-peak coverage by positive band intervals: 43.2–52.5%
+Positive-band results for Neq peaks:
+
+| Measurement | Result across models |
+|:---|---:|
+| Positive apices that are Neq peaks | 18.34–25.32% |
+| All Neq peaks detected by an exact positive apex | 6.35–9.48% |
+| All Neq peaks within two residues of a positive apex | 27.25–31.05% |
+| All Neq peaks covered by positive-band intervals | 25.40–30.23% |
 
 Conclusion:
 
 - A positive apex is usually loop-like.
 - Most loop-like residues and segments do not contain an apex.
 - Positive bands are not general Q8-loop or Neq-peak detectors.
+- The updated sign-constrained bands are compact. Compared with the legacy
+  wider bands, they have higher Q8 C/T/S interval precision but cover a smaller
+  fraction of all Q8 C/T/S residues and Neq peaks.
 - This asymmetry motivated Phase 3A: why is one plausible Q8 segment selected
   while another same-Q8 segment in the same protein is not?
 
@@ -581,17 +790,29 @@ Control reuse is allowed across different apex match sets but not within one
 set.
 
 The q3_only results are stored compactly as one case row containing the number
-and means of all eligible controls. Millions of redundant individual-control
-rows are not stored.
+and means of all eligible controls. More than one million redundant
+individual-control rows are not stored.
 
 Q3-only coverage:
 
-- total apices: 97,198
-- matched apices: 95,793
-- match rate: 98.55%
-- implied control assignments: 3,735,187
-- mean controls per matched apex: approximately 39
+- total test-set apices across the six models: 11,039
+- matched apices: 11,039
+- match rate: 100%
+- implied control assignments: 1,124,964
+- mean controls per matched apex: 101.91
 - every control comes from the same protein
+
+Coverage under the stricter schemes:
+
+| Matching scheme | Matched apices | Match rate | Mean controls per matched apex |
+|:---|---:|---:|---:|
+| Q3 only | 11,039 | 100% | 101.91 |
+| Q3 + Neq | 10,538 | 95.46% | 4.61 |
+| Q3 + Neq + RSA | 9,891 | 89.60% | 4.23 |
+| Q3 + Neq + RSA + position | 8,841 | 80.09% | 3.84 |
+
+The 11,039 total is an aggregate over six model conditions. The stricter schemes lose cases when no non-band
+residue satisfies all required calipers.
 
 Inference:
 
@@ -605,30 +826,44 @@ Dominant test-set findings:
 
 Positive Q3-C apices versus same-protein Q3-C non-band controls:
 
-- Neq: +0.42 to +0.56
-- RSA: +0.092 to +0.118
-- torsional change: +17.2 to +27.2 degrees
-- Q8-S enrichment: +5.8 to +7.3 percentage points
-- structured-linker enrichment: +11.5 to +30.5 points
-- Neq-peak enrichment: +6.1 to +12.8 points
+- Neq: +0.531 to +0.625
+- RSA: +0.123 to +0.146
+- torsional change: +14.20 to +22.79 degrees
+- Q8-S enrichment: +4.45 to +6.50 percentage points
+- structured-linker enrichment: +0.62 to +12.67 percentage points
+- Neq-peak enrichment: +6.26 to +13.82 percentage points
+
+The Neq, RSA, torsion, Q8-S and Neq-peak effects were significant after
+multiple-testing correction in all six models. Structured-linker enrichment
+was more model-dependent and was significant in five of six models.
 
 Negative Q3-H apices versus same-protein Q3-H controls:
 
-- Neq: -0.17 to -0.23
-- RSA: -0.047 to -0.126
-- torsional change: -21.9 to -24.9 degrees
-- Q8-H enrichment: +10.8 to +13.0 percentage points
-- 57.0–63.4 percentage points less likely to be near a Q3 boundary
+- Neq: -0.144 to -0.131
+- RSA: -0.133 to -0.042
+- torsional change: -23.06 to -20.23 degrees
+- Q8-H enrichment: +7.91 to +9.33 percentage points
+- 59.37–67.06 percentage points less likely to be within two residues of a Q3
+  boundary
+
+All five effects were significant after multiple-testing correction in all six
+models.
 
 Negative Q3-E apices versus same-protein Q3-E controls:
 
-- Neq: -0.103 to -0.129
-- RSA: -0.083 to -0.107
-- torsional change: -16.3 to -18.9 degrees
-- Q8-E enrichment: +1.3 to +2.5 percentage points
-- 16–29 percentage points less likely to be near a boundary
+- Neq: -0.158 to -0.129
+- RSA: -0.145 to -0.037
+- torsional change: -23.73 to -0.96 degrees
+- Q8-E enrichment: +0.25 to +1.13 percentage points
+- 45.06–82.39 percentage points less likely to be within two residues of a Q3
+  boundary
 
-Normalized sequence position was weak and inconsistent.
+These strand effects have consistent directions but are not consistently
+significant across models. The updated catalog contains only 3–34 negative
+Q3-E apices from 3–25 proteins per model, so they should be treated as
+descriptive rather than as a robust cross-model result.
+
+Normalized sequence-position effects were generally weak or model-dependent.
 
 Interpretation:
 
@@ -636,12 +871,27 @@ Q3 alone does not explain selection. Within the same protein and Q3 class:
 
 - positive coil apices are more flexible, exposed and torsionally active than
   non-band coils
-- negative helical and strand apices are more rigid, buried and internally
-  positioned within structured segments than matched non-band residues
+- negative helical apices are more rigid, buried and internally positioned
+  within helices than matched non-band helical residues
+- negative strand apices show similar directions, but their small sample sizes
+  do not support the same strength of conclusion
 
 The stricter schemes ask conditional questions such as whether Q8 subtype,
 torsion or boundary geometry remains different after additionally holding Neq,
 RSA and position approximately constant.
+
+Current outputs:
+
+```text
+results/publication_comparable_v2/analysis_phase2_interval_iou05_test/
+  enrichment_with_test_strain/
+    within_q3_match_coverage_summary.csv
+    within_q3_match_balance.csv
+    within_q3_matched_cases.csv.gz
+    within_q3_matched_controls.csv.gz
+    within_q3_matched_effects_by_protein.csv.gz
+    within_q3_matched_enrichment_summary.csv
+```
 
 ### 2E. Test-set strain extension
 
@@ -681,70 +931,72 @@ Final strain-aware output directory:
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_band_biophysics/
+  analysis_phase2_interval_iou05_test/
     enrichment_with_test_strain/
 ```
 
 Raw circular-shift results across the six model conditions:
 
-Positive apices:
+| Property at apex | Positive observed | Positive null | Negative observed | Negative null |
+|:---|---:|---:|---:|---:|
+| Mean strain | 0.1044–0.1141 | 0.0772–0.0805 | 0.0578–0.0612 | 0.0748–0.0767 |
+| Absolute strain gradient | 0.0279–0.0309 | 0.0194–0.0200 | 0.0143–0.0158 | 0.0189–0.0193 |
+| Top-decile strain frequency | 25.56–30.51% | 10.22–10.30% | 1.79–3.07% | 10.21–10.34% |
+| Distance to top-decile strain (residues) | 8.11–9.96 | 11.03–11.37 | 14.12–14.56 | 11.12–11.50 |
 
-- mean strain: 0.101–0.110 versus 0.078–0.081 under the null
-- strain gradient: 0.0271–0.0293 versus 0.0196–0.0201
-- top-decile strain frequency: 22.5–27.7% versus 10.3%
-- distance to top-decile strain: 8.83–9.91 versus 11.08–11.16 residues
-
-Negative apices:
-
-- mean strain: 0.0624–0.0657 versus 0.0803–0.0808 under the null
-- strain gradient: 0.0140–0.0152 versus approximately 0.0201
-- top-decile strain frequency: 1.58–3.10% versus approximately 10.3%
-- distance to top-decile strain: 12.51–13.04 versus 11.03–11.11 residues
-
-For these strain metrics, the circular-shift tests were significant across all
-six conditions and both signs at the available permutation resolution:
-
-    BH-adjusted two-sided q = 0.001092
+For every property in this table, observed values differed significantly from
+the sign-matched circular-shift control in all six models. The two-sided
+BH-adjusted p-values were at most 0.00636.
 
 Same-protein Q3-only strain results:
 
 Positive Q3-C apices versus Q3-C controls:
 
-- mean strain difference: +0.0167 to +0.0251
-- strain-gradient difference: +0.00638 to +0.00770
-- top-decile strain enrichment: +9.53 to +15.70 percentage points
+- mean strain difference: +0.0194 to +0.0275
+- strain-gradient difference: +0.00680 to +0.00964
+- top-decile strain enrichment: +11.68 to +17.18 percentage points
 - all three effects were significant in all six conditions
 
 Negative Q3-H apices versus Q3-H controls:
 
-- mean strain difference: -0.0190 to -0.0120
-- strain-gradient difference: -0.00626 to -0.00344
-- top-decile strain difference: -8.60 to -5.19 percentage points
-- all three effects were significant in all six conditions
+- mean strain difference: -0.0158 to -0.0113
+- strain-gradient difference: -0.00417 to -0.00230
+- top-decile strain difference: -6.36 to -4.90 percentage points
+- mean strain and top-decile frequency were significant in all six conditions;
+  the gradient difference was significant in four of six
 
 Negative Q3-E apices versus Q3-E controls:
 
-- mean strain difference: -0.0137 to -0.00851
-- strain-gradient difference: -0.00694 to -0.00358
-- top-decile strain difference: -3.86 to -2.50 percentage points
-- all three effects were significant in all six conditions
+- mean strain difference: -0.0181 to -0.00294
+- strain-gradient difference: -0.0117 to -0.00154
+- top-decile strain difference: -4.00 to -1.43 percentage points
+- the directions were consistent, but mean strain and top-decile frequency
+  were significant in four of six conditions and the gradient in three of six
 
-Distance to a high-strain residue was less robust after Q3-only control. The
-local strain magnitude and strain gradient were the more consistent
-within-Q3 signals.
+The negative Q3-E comparisons contain only 3–34 apices from 3–25 proteins per
+model. They are therefore descriptive and do not establish a robust
+cross-model strain effect for strand apices.
+
+After Q3-only control, positive Q3-C apices were significantly closer to a
+high-strain residue in four of six models, while negative Q3-H apices were
+farther away in all six. The distance result was not significant for negative
+Q3-E apices.
 
 High-strain identifier results for positive bands:
 
-- exact-apex precision: 23.3–29.9%
-- exact-apex coverage of high-strain residues: 5.96–7.66%
-- band-interval precision: 15.9–18.3%
-- band-interval coverage of high-strain residues: 51.6–56.1%
+| Measurement | Result across models |
+|:---|---:|
+| Positive apices in the high-strain decile | 25.56–30.51% |
+| High-strain residues detected by an exact positive apex | 4.51–6.86% |
+| Residues in positive-band intervals that are high-strain | 25.56–31.07% |
+| High-strain residues covered by positive-band intervals | 19.86–30.49% |
 
 Conclusion:
 
 Positive apices are enriched for locally high and rapidly changing strain,
 even relative to same-protein Q3-C controls. Negative structured apices show
-the opposite pattern.
+the opposite pattern most consistently for Q3 helices. The negative Q3-E
+sample is too small for an equally strong conclusion about strands.
 
 However, most high-strain residues are not exact positive apices. Positive
 bands are enriched markers of high-strain environments, not general
@@ -862,7 +1114,7 @@ results/publication_comparable_v2/
 - Q3 matches and matching calipers independently verified
 - summary statistics independently recomputed
 
-## PHASE 3A: Q8-SEGMENT OBJECT SELECTION
+## PHASE 3A: WHY SOME Q8 SEGMENTS ARE SELECTED (only exploratory, not to be used as a main result)
 
 Script:
 
@@ -870,188 +1122,164 @@ Script:
 signed_band_analysis/analyze_signed_band_object_selection.py
 ```
 
-Scientific question:
+Phase 2 describes the residue found at a band apex. Phase 3A asks a different
+question: Do Q8 segments containing contribution-band apices differ from same-protein,
+same-Q8 segments that contain no band?
 
-Why is one plausible Q8 structural segment selected by the model as an
-influential band object while another segment of the same Q8 subtype in the
-same protein is not?
+Phase 3A compares Q8 segments that contain a seed-stable band apex with Q8
+segments that do not. It then tests whether their ATLAS, NetSurfP and sequence
+features differ.
 
-This phase changes the unit of analysis from an individual residue to a
-complete contiguous Q8 segment.
 
-### 3A.1 Candidate, case and control definitions
+### 3A.1 Cases and controls
 
-Candidate object:
+The analysis divides each protein into complete contiguous Q8 segments.
 
-- one complete contiguous Q8 segment
+A positive case:
 
-Positive case:
+- contains at least one positive apex;
+- contains no negative apex.
 
-- segment contains one or more positive apices
-- segment contains no negative apex
+A negative case:
 
-Negative case:
+- contains at least one negative apex;
+- contains no positive apex.
 
-- segment contains one or more negative apices
-- segment contains no positive apex
+A clean control:
 
-Clean control:
+- is in the same protein and has the same Q8 label as a case;
+- contains no apex;
+- does not overlap any positive or negative band interval.
 
-- same protein
-- identical Q8 subtype
-- contains no apex
-- does not overlap any positive or negative band interval
+Segments containing both signs are excluded. A segment that overlaps a band
+but does not contain its apex is also excluded rather than treated as a clean
+control. The statistical comparisons retain only protein/Q8 groups containing
+both a case and a clean control.
 
-Excluded objects:
+Neq, RSA, segment length, position and the other explanatory features are not
+used to choose controls. This allows the analysis to test whether they differ
+between selected and unselected segments.
 
-- segments containing both positive and negative apices
-- segments overlapping a band interval but containing no apex
+### 3A.2 Inputs and feature sources
 
-The exclusion of overlap-without-apex segments prevents broad band shoulders
-from being treated as clean non-band controls.
+The current run uses the upgraded Phase 1 seed-stable catalog for all three
+data splits and the residue annotation table prepared in Phase 2.
 
-Neq, RSA, segment length and position are not used to select controls. They
-remain candidate explanations for selection.
+The feature sources are:
 
-### 3A.2 Object statistics
+| Feature group | Measurements | Source |
+|:---|:---|:---|
+| Q8 identity | Q8 segment label | NetSurfP prediction |
+| Neq | Mean Neq, maximum Neq, Neq-peak fraction and Neq-peak excess | ATLAS molecular dynamics |
+| Exposure, length and position | Mean and maximum RSA, log segment length and normalized midpoint | NetSurfP RSA and sequence coordinates |
+| Geometry and boundaries | Mean and maximum torsional change, Q3-boundary fraction, distance to a Q3 boundary and structured-linker fraction | Derived from NetSurfP phi/psi and Q3/Q8 predictions |
+| Disorder | Mean and maximum disorder score | NetSurfP prediction |
+| Sequence composition | Glycine, proline, hydrophobic, charged and aromatic fractions, plus sequence entropy | Protein sequence |
 
-There are 481,842 condition/split/Q8-segment rows.
+The geometry in Phase 3A is therefore predicted geometry obtained from NetSurfP. Experimental PDB
+coordinates are not used until Phase 3B.
 
-Mutually exclusive categories:
+### 3A.3 Current object counts
 
-- positive-only selected segments: 48,900
-- negative-only selected segments: 45,513
-- dual-sign segments: 1,208
-- clean controls: 141,482
-- overlap-without-apex excluded segments: 244,739
+The latest candidate table contains 481,842 rows across six model conditions
+and the train, validation and test splits. These are analysis rows, not unique
+biological segments: the Q8 segmentation for a protein is repeated for each
+model condition.
 
-The large overlap-without-apex category reflects the broad, frequently
-overlapping band intervals. Phase 3A therefore tests a specific apex-containing
-Q8-object definition; it does not claim that every band interval aligns
-perfectly with one Q8 segment.
+The mutually exclusive categories are:
 
-### 3A.3 Feature groups
+- 44,100 positive-only selected segments;
+- 27,095 negative-only selected segments;
+- 262 segments containing both signs;
+- 355,689 clean controls;
+- 54,696 segments that overlap a band but contain no apex.
 
-Sequential feature stages:
+The test subset contains 73,044 rows: 6,703 positive-only cases, 4,128
+negative-only cases, 44 dual-sign segments, 53,842 clean controls and 8,327
+overlap-without-apex segments.
 
-1. Q8 only
+Every stable Phase 1 apex is assigned to a Q8 segment. The much smaller
+overlap-without-apex category compared with the old analysis reflects the new,
+narrower, nonoverlapping Phase 1 bands.
 
-2. Add Neq:
-   - mean Neq
-   - maximum Neq
-   - Neq-peak fraction
-   - Neq-peak excess
+### 3A.4 Sequential selection models
 
-3. Add exposure, length and position:
-   - mean RSA
-   - maximum RSA
-   - log segment length
-   - normalized midpoint
+For each ESM condition and sign, the script fits a separate logistic-regression
+analysis model.
 
-4. Add geometry and boundaries:
-   - mean torsional change
-   - maximum torsional change
-   - Q3-boundary fraction
-   - mean distance to Q3 boundary
-   - structured-linker fraction
+The feature stages are cumulative:
 
-5. Add disorder:
-   - mean disorder
-   - maximum disorder
+1. Q8 only.
+2. Add Neq.
+3. Add RSA, segment length and position.
+4. Add predicted torsional geometry and Q3 boundaries.
+5. Add predicted disorder.
+6. Add coarse amino-acid composition.
 
-6. Add coarse sequence composition:
-   - glycine fraction
-   - proline fraction
-   - hydrophobic fraction
-   - charged fraction
-   - aromatic fraction
-   - sequence entropy
+The logistic-regression models are fitted only on train proteins. The fitted
+models are then applied without refitting to validation and test proteins.
+Cases and controls receive equal total weight within each protein/Q8 group.
 
-### 3A.4 Modeling and held-out evaluation
+Mean weighted AUROC across the six ESM conditions is:
 
-Models are trained only on the train split.
+| Feature stage | Positive validation | Positive test | Negative validation | Negative test |
+|:---|---:|---:|---:|---:|
+| Q8 only | 0.500 | 0.500 | 0.500 | 0.500 |
+| Add Neq | 0.758 | 0.751 | 0.733 | 0.757 |
+| Add RSA, length and position | 0.814 | 0.809 | 0.840 | 0.848 |
+| Add predicted geometry and boundaries | 0.836 | 0.834 | 0.851 | 0.857 |
+| Add predicted disorder | 0.841 | 0.837 | 0.853 | 0.858 |
+| Add sequence composition | 0.844 | 0.838 | 0.857 | 0.863 |
 
-They are evaluated without refitting on:
+The Q8-only AUROC is 0.5 by design because cases and controls are compared
+within the same Q8 type and are balanced within those groups. It should not be
+interpreted as evidence that secondary structure is generally unrelated to
+band location.
 
-- validation proteins
-- test proteins
+The similar validation and test results show that the segment-selection
+patterns learned from train proteins transfer to both held-out splits.
 
-Weights balance selected cases and clean controls within protein/Q8 strata.
+### 3A.5 What the results show
 
-Primary held-out metric:
+Neq provides the first large improvement, but Neq alone does not explain which
+same-Q8 segment is selected. RSA, length and position provide another large
+improvement. Predicted geometry and boundary features add more information,
+particularly for positive segments. Disorder and coarse sequence composition
+provide only small additional improvements after the earlier features.
 
-- weighted AUROC
+The direct within-protein, same-Q8 comparisons show that:
 
-Additional metrics include:
+- positive cases occur mainly in Q8 C, T and S segments;
+- selected positive C, T and S segments generally have higher Neq, greater
+  exposure, greater length, higher disorder and fewer internal Q3 boundaries
+  than their same-Q8 controls;
+- torsion depends on the Q8 subtype: selected T segments have greater mean
+  torsional change, selected C segments have lower mean torsional change, and
+  the S-segment effect is weak;
+- negative cases occur mainly in Q8 H segments;
+- selected negative H segments are longer and have lower Neq, lower disorder,
+  lower mean torsional change and fewer internal Q3 boundaries than unselected
+  H segments in the same protein;
+- negative E segments are uncommon in the new catalog and should remain
+  descriptive rather than support a general strand conclusion.
 
-- weighted average precision
-- within-protein/Q8 concordance
+The C-segment torsion result is not the same comparison as the Phase 2 apex
+result. Phase 2 measures torsion at one selected residue after Q3 matching;
+Phase 3A averages torsion across an entire Q8 C segment and compares it with
+other complete Q8 C segments.
 
-Mean test AUROC across six model conditions:
+These results identify reproducible associations with model selection. They do
+not show that the features cause selection, and the NetSurfP variables are
+predictions rather than experimental structural measurements.
 
-| Stage | Positive | Negative |
-|---|---:|---:|
-| Q8 only | 0.500 | 0.500 |
-| Add Neq | 0.712 | 0.663 |
-| Add RSA/length/position | 0.760 | 0.803 |
-| Add geometry/boundaries | 0.804 | 0.803 |
-| Add disorder | 0.812 | 0.818 |
-| Add sequence composition | 0.812 | 0.821 |
-
-Final validation AUROC was similarly strong:
-
-- positive: approximately 0.811
-- negative: approximately 0.821
-
-Therefore, the feature-based discrimination generalized from train proteins to
-both held-out validation and test proteins.
-
-### 3A.5 Biological interpretation
-
-Positive selection:
-
-Selected positive Q8-S/T segments generally have:
-
-- higher Neq
-- higher RSA
-- greater segment length
-- greater torsional or geometric transition signal
-- slightly higher disorder
-- fewer internal Q3 boundaries
-
-Negative selection:
-
-Selected negative Q8-H/E segments generally have:
-
-- lower Neq
-- fewer Neq peaks
-- lower mean torsional change
-- lower disorder
-- greater length
-- fewer internal Q3 boundaries
-
-Feature-stage conclusions:
-
-- Neq is important but insufficient.
-- RSA, length and position add substantial held-out information.
-- Geometry and boundary features add particularly strong information for
-  positive selection.
-- Disorder adds a smaller but reproducible increment.
-- Coarse amino-acid composition adds almost no positive-band discrimination
-  after the biophysical features and only a very small negative-band increment.
-- This does not rule out specific local sequence motifs, which require a formal
-  motif analysis.
-
-Statistical safeguard:
-
-- rows supported by fewer than 10 proteins remain descriptive
-- those rows receive no confidence interval, p-value or q-value
+Feature-effect rows supported by fewer than 10 proteins remain descriptive and
+receive no confidence interval, p-value or adjusted p-value.
 
 ### 3A.6 Outputs
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_band_phase3a/
+  analysis_phase3a_interval_iou05_stable/
     q8_segment_candidates.csv.gz
     matched_feature_effects_by_protein.csv.gz
     matched_feature_effect_summary.csv
@@ -1060,330 +1288,315 @@ results/publication_comparable_v2/
     phase3a_parameters.json
 ```
 
-The output directory retains the historical “phase3a” name even though the
-script itself was renamed to:
+## PHASE 3B: COMPARISON WITH EXPERIMENTAL STRUCTURE
 
-```text
-signed_band_analysis/analyze_signed_band_object_selection.py
-```
+Phase 3B asks whether contribution-band locations have distinctive geometry or
+contact environments in experimental PDB structures. It now contains two
+analyses:
 
-## PHASE 3B: EXTERNAL STRUCTURAL AND MECHANICAL EXPLANATION
+1. A direct comparison at the band apex. This is the primary analysis.
+2. A Q8-segment analysis inherited from Phase 3A. This is a secondary analysis
+   because the model does not select complete Q8 segments.
 
-Scientific questions:
+### 3B.1 Structure mapping
 
-1. Do band-selected Q8 segments occupy distinctive experimentally observed
-   geometries or contact-network positions?
-
-2. Do positive and negative bands distinguish mechanically deformable regions
-   from structurally stabilizing regions?
-
-3. Do experimental structure and domain features improve held-out prediction
-   of band selection beyond the Phase 3A biophysical features?
-
-4. Are the Phase 3C internal mechanism classes associated with different
-   external structural or mechanical environments?
-
-Models were fitted separately for each model condition and band sign.
-
-Sequential structural models were:
-
-- trained only on train proteins
-- evaluated without refitting on validation and test proteins
-- kept separate for positive and negative segment selection
-
-Test-only strain was excluded from model training and held-out model-performance
-claims.
-
-### 3B.1 Experimental structure acquisition and sequence mapping
-
-Contact-map builder:
+Experimental structures and C-alpha contact maps are prepared with:
 
 ```text
 Attention/build_contact_maps_from_pdb.py
 ```
 
-Purpose:
+PDB residues are aligned explicitly to the model sequence. PDB residue numbers
+are never assumed to equal model residue indices, and unresolved residues are
+recorded rather than silently filled in.
 
-- download and cache experimental PDB structures
-- align observed PDB residues explicitly to model-sequence indices
-- never assume that model-sequence position equals PDB residue number
-- preserve PDB chain identifiers, residue numbers and insertion codes
-- identify unresolved or missing residues
-- record sequence-mapping identity and coverage
-- record experimental method and resolution
-- generate model-indexed C-alpha contact edges and distances
-- optionally retain model-indexed C-alpha coordinates
+Of the 1,383 proteins, 1,379 passed the mapping requirements. Every validation
+and test protein passed. Three train proteins had less than 80% sequence
+coverage, and one train structure could not be downloaded.
 
-Required Phase 3B options:
+The experimental features include:
 
-    --map_representation edges
-    --include_ca_coordinates
+- C-alpha curvature and virtual torsion;
+- contact degree and local packing;
+- mean spatial distance between contacts;
+- betweenness and closeness centrality;
+- contact-community participation and boundary status;
+- ECOD-domain boundary and cross-domain-contact measurements.
 
-Contact-map outputs:
+### 3B.2 Direct apex-to-structure analysis
+
+Script:
+
+```text
+signed_band_analysis/analyze_signed_band_apex_structure.py
+```
+
+This analysis uses each seed-stable test-set band apex directly. Q8 is not used
+to define the analysis object.
+
+Each structurally resolved apex is compared with residues from the same protein
+that lie outside every positive and negative band. Matching now uses the same
+four control sets as Phase 2:
+
+1. `q3_only`: same Q3 label.
+2. `q3_neq`: same Q3 label and Neq within 0.25.
+3. `q3_neq_rsa`: same Q3 label, Neq within 0.25 and RSA within 0.15.
+4. `q3_neq_rsa_position`: the preceding requirements plus normalized sequence
+   position within 0.25.
+
+The Q3-only comparison uses all eligible controls. The other comparisons use
+the five nearest eligible controls. Position is not part of the initial
+matching. It is included only in the final sensitivity analysis to check
+whether terminal location explains an effect.
+
+The statistics also follow Phase 2. Apex-minus-control effects are averaged
+within each protein so that proteins with many bands do not receive extra
+weight. The mean protein effect is tested by randomly reversing each protein's
+effect sign 10,000 times. Whole proteins are resampled 2,000 times to obtain a
+95% confidence interval. Benjamini-Hochberg correction is applied to the
+resulting tests.
+
+The audit passed. The six model catalogs contain 11,039 test-set apices, of
+which 10,804 have mapped PDB coordinates. Control coverage was:
+
+| Matching | Negative apices | Positive apices |
+|:---|---:|---:|
+| Q3 only | 99.86–100% | 95.34–97.56% |
+| Q3 + Neq | 99.86–100% | 88.46–90.38% |
+| Q3 + Neq + RSA | 99.85–100% | 79.10–80.93% |
+| Q3 + Neq + RSA + position | 99.44–100% | 64.48–67.84% |
+
+In the Q3-only comparison, positive apices had fewer contacts, lower packing
+and centrality, and greater mean contact distance than non-band controls in all
+six models. Negative apices showed the opposite contact-network pattern in all
+six models.
+
+The positive-apex pattern remained under the strictest matching. Positive
+apices had 0.63–0.97 fewer contacts, lower packing, betweenness, participation
+and community-boundary frequency, and 0.14–0.22 Å greater mean contact distance.
+Each of these results was significant after correction in all six models.
+
+The negative result was more sensitive to matching. Under the strictest
+comparison, negative apices had 1.35–1.75 degrees greater curvature, 4.11–5.17
+degrees lower absolute virtual torsion and 0.10–0.14 Å shorter mean contact
+distance in all six models. Contact degree was slightly lower, rather than
+higher, and significant in only three models; betweenness and closeness were
+not significant. Therefore, the exact negative apex should not be described as
+a consistently dense network hub after accounting for Neq and RSA.
+
+The same script tests whether stronger bands, measured by
+`log2(R_p / 2)`, have stronger structural signatures. After protein adjustment
+and multiple-testing correction, these strength associations were weak and
+not consistent across all six models. The main result is therefore the
+location of positive and negative apices, not a universal relationship between
+band rank and structural-effect size.
+
+Primary outputs:
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_band_external_structure/contact_networks/
+  analysis_apex_structure_phase2_consistent_test/
+    stable_apex_structure_features.csv.gz
+    matched_nonband_controls.csv.gz
+    matched_apex_control_effect_summary.csv
+    importance_R_structure_X_associations.csv
+    match_coverage_balance.csv
+    structural_feature_coverage.csv
+    run_audit.json
 ```
 
-### 3B.2 Structure coverage and mapping integrity
+#### Full-band interval sensitivity
 
-Structure coverage:
+The apex is only one residue within a detected band. A smaller sensitivity
+analysis therefore repeats the comparison using each actual detected band
+interval:
 
-- 1,382 of 1,383 structures loaded successfully
-- 1,379 mappings passed the identity and coverage thresholds
-- all validation and test structures were accepted
-- three train structures had insufficient mapping coverage
-- 4v4e_M failed because the legacy PDB download returned HTTP 404
+```text
+signed_band_analysis/analyze_signed_band_interval_structure.py
+```
 
-The explicit sequence-to-structure mapping prevents PDB numbering, insertion
-codes or unresolved residues from being mistaken for model-sequence indices.
+Each control is a same-protein, non-band interval with the same width and the
+same apex-to-left-boundary and apex-to-right-boundary distances as the detected
+band. Matching uses the same four schemes and the same sign-flip, bootstrap and
+multiple-testing procedure described above. The main cohort requires every
+residue in both the band and control interval to have a mapped C-alpha
+coordinate. An 80%-resolved cohort is retained as a comparison.
 
-### 3B.3 Segment-level case and control definitions
+Under the fully resolved, strictest matching, the positive-band intervals had
+0.82–1.25 fewer contacts, lower packing and centrality, and 0.08–0.17 Å greater
+mean contact distance than controls. These effects were significant in all six
+models. Negative-band intervals had 0.39–0.66 more contacts, greater packing
+and centrality, 0.11–0.17 Å shorter mean contact distance, greater curvature
+and lower absolute virtual torsion. Nearly all of these effects were significant
+in all six models.
 
-Analysis script:
+This resolves an important difference between analysis units: the exact
+negative apex is not consistently a high-degree hub after strict residue-level
+matching, but the larger negative-band interval lies in a more connected and
+more tightly packed structural environment. The positive low-connectivity
+result is consistent at both the apex and interval levels.
+
+Outputs:
+
+```text
+results/publication_comparable_v2/
+  analysis_band_interval_structure_phase2_consistent_test/
+    band_interval_structure_features.csv.gz
+    matched_nonband_intervals.csv.gz
+    band_interval_match_coverage.csv
+    matched_band_interval_effects_by_protein.csv.gz
+    matched_band_interval_effect_summary.csv
+    structure_mapping_audit.csv
+    run_audit.json
+```
+
+### 3B.3 Q8-segment analysis
+
+Script:
 
 ```text
 signed_band_analysis/analyze_signed_band_external_structure.py
 ```
 
-Candidate object:
+This analysis attaches experimental structure to the Phase 3A objects. A case
+is a complete Q8 segment containing a positive or negative apex. A control is a
+same-protein, same-Q8 segment that does not overlap any band.
 
-- one complete contiguous Phase 3A Q8 segment
+The unit is therefore a Q8 segment containing an apex, not a segment selected
+by the model. Segment averages can dilute localized effects, segment length
+affects the chance of containing an apex, and the Q8 boundaries come from
+NetSurfP. For these reasons, this analysis is best treated as a secondary or
+supplementary Q8-stratified analysis.
 
-Positive case:
+Small logistic-regression models were trained on train proteins and applied
+without refitting to validation and test proteins. Mean test AUROC across the
+six ESM conditions was:
 
-- segment contains a positive band apex
-- segment contains no negative apex
-
-Negative case:
-
-- segment contains a negative band apex
-- segment contains no positive apex
-
-Clean control:
-
-- same protein
-- identical Q8 subtype
-- contains no positive or negative apex
-- does not overlap any positive or negative band interval
-
-These definitions preserve the Phase 3A object-selection estimand while adding
-experimental structural and mechanical features.
-
-### 3B.4 Experimental structural features
-
-Local experimental geometry:
-
-- C-alpha curvature
-- C-alpha virtual torsion
-- segment end-to-end distance divided by backbone path length
-
-Contact-network organization:
-
-- contact degree
-- inverse-distance-weighted contact degree
-- betweenness centrality
-- closeness centrality
-- contact-community membership
-- participation coefficient
-- contact-community-boundary status
-
-Domain organization:
-
-- distance to the nearest ECOD-domain boundary
-- cross-domain contact counts
-- position inside or near annotated ECOD domains
-
-Test-only mechanical strain:
-
-- segment mean strain
-- segment maximum strain
-- strain variability
-- spatial strain gradient
-
-Internal/external integration:
-
-- associations between experimental features and Phase 3C mechanism classes
-- band-level external features joined to evidence-dominated,
-  consultation-dominated, combined and other mechanism classes
-
-### 3B.5 Test-only strain analysis
-
-Strain source:
-
-```text
-/home/zahralab/MDStrainMapper/results/atlas_grouped_v1_test
-```
-
-Scope:
-
-- strain is available only for test proteins
-- strain is analyzed through prespecified within-protein, same-Q8 matched
-  effects
-- strain is excluded from model training
-- strain is excluded from train-to-validation/test incremental-performance
-  claims
-
-The strain analysis therefore tests whether selected test-set segments occupy
-different mechanical environments than same-protein, same-Q8 clean controls. It
-does not test whether strain is a train-learned predictor that generalizes to
-new proteins.
-
-### 3B.6 Sequential held-out modeling
-
-Feature stages:
-
-1. Q8 only
-
-2. Add base biophysics
-
-3. Add experimental geometry
-
-4. Add contact-network features
-
-5. Add ECOD-domain features
-
-Mean test AUROC across the six model conditions:
-
-| Stage | Positive | Negative |
-|---|---:|---:|
+| Feature stage | Positive | Negative |
+|:---|---:|---:|
 | Q8 only | 0.500 | 0.500 |
-| Base biophysics | 0.767 | 0.798 |
-| Add experimental geometry | 0.806 | 0.800 |
-| Add contact network | 0.815 | 0.805 |
-| Add ECOD/domain features | 0.831 | 0.822 |
+| Add Neq, RSA, length and position | 0.807 | 0.846 |
+| Add NetSurfP torsion and boundaries | 0.830 | 0.856 |
+| Add experimental PDB geometry | 0.837 | 0.862 |
+| Add contact-network features | 0.846 | 0.865 |
+| Add ECOD-domain features | 0.852 | 0.866 |
 
-Interpretation:
+Validation performance was similar: final mean AUROC was 0.852 for positive
+segments and 0.856 for negative segments.
 
-- Experimental geometry substantially improves positive-band selection beyond
-  the base biophysical features.
-- Contact-network information adds further positive and smaller negative
-  predictive information.
-- ECOD/domain organization provides the strongest final held-out performance
-  for both signs.
-- Final test AUROC reaches approximately 0.83 for positive selection and 0.82
-  for negative selection.
+The matched segment comparisons found that positive C, T and S segments
+containing apices generally had higher test-only MD strain and lower contact
+connectivity than same-Q8 controls. Negative H segments containing apices had
+lower strain and modestly greater connectivity. Negative E samples were too
+small for a general strand conclusion. These results are associations with
+apex-containing structural context, not evidence that the model selected a
+whole Q8 segment.
 
-### 3B.7 Main biological results
-
-Positive selected segments tend to have:
-
-- higher mechanical strain
-- weaker contact-network connectivity
-- Q8 C/S/T loop-like environments
-- signatures consistent with mechanically deformable or weakly packed regions
-
-Negative selected segments tend to have:
-
-- lower mean mechanical strain
-- greater contact density
-- greater contact-network centrality
-- Q8 H/E structured environments
-- signatures consistent with stabilizing contact-network cores or hubs
-
-Boundary results:
-
-- positive bands are not enriched at contact-community boundaries
-- positive bands are not enriched at ECOD-domain boundaries
-- selected segments of both signs generally occur farther inside annotated
-  ECOD domains
-
-Therefore, the positive-band signal is better described as local mechanical
-deformability or weak packing than as generic domain-boundary or hinge
-localization.
-
-### 3B.8 Integration with Phase 3C mechanisms
-
-Positive combined bands show the strongest combination of:
-
-- high strain
-- low connectivity
-- mechanically deformable local structure
-
-This is consistent with their Phase 3C mechanism:
-
-- strong intrinsic flexibility-supporting evidence
-- combined with broad consultation by other residues
-
-Negative evidence-dominated Q8-E bands show a clear packed-core signature:
-
-- low strain
-- dense contact organization
-- greater network centrality
-
-This is consistent with strong intrinsic rigidity-supporting evidence arising
-from a structurally stabilizing environment.
-
-These results connect the model’s internal decomposition to experimentally
-derived external structure, but remain associative rather than causal.
-
-### 3B.9 Outputs
-
-Result directory:
+Outputs:
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_band_external_structure/
+  analysis_phase3b_interval_iou05_stable/
+    external_features_by_q8_segment.csv.gz
+    matched_external_effects_by_protein.csv.gz
+    matched_external_effect_summary.csv
+    sequential_external_model_performance.csv
+    mechanism_class_external_associations.csv
+    mechanism_band_external_features.csv.gz
+    structure_mapping_audit.csv
+    parameters.json
 ```
 
-Important outputs:
+Strain is available only for test proteins. It was used for matched descriptive
+comparisons but was not included in models trained on train proteins. The joins
+with Phase 3C mechanism classes are exploratory and inherit the Q8-segment
+limitations.
 
-- structure_mapping_audit.csv
-- external_features_by_q8_segment.csv.gz
-- matched_external_effects_by_protein.csv.gz
-- matched_external_effect_summary.csv
-- sequential_external_model_performance.csv
-- mechanism_class_external_associations.csv
-- mechanism_band_external_features.csv.gz
-- external_feature_coverage_summary.csv
-- parameters.json
+### 3B.4 Structural safeguards
 
-### 3B.10 Tests and integrity checks
+Script:
 
-Tests:
+```text
+signed_band_analysis/analyze_phase3b_structural_safeguards.py
+```
 
-tests/test_build_contact_maps_from_pdb.py
+Two safeguards were added to the Q8-segment analysis.
 
-tests/test_analyze_signed_band_external_structure.py
+First, the main comparisons were repeated in stricter structure cohorts:
 
-Status:
+- the reference cohort requires at least 80% protein mapping and 80% of the
+  segment to be resolved;
+- the fully resolved local cohort requires every segment residue to have a
+  mapped C-alpha coordinate;
+- the fully resolved geometry cohort requires every coordinate needed for the
+  PDB geometry measurements;
+- the strict graph cohort additionally requires complete contact-graph nodes
+  and at least 95% protein mapping.
 
-- all eight tests pass
+Cases and controls were filtered symmetrically, and protein/Q8 groups lacking a
+valid case or control after filtering were removed. For the dominant Q8 types,
+the fully resolved local and strict graph analyses preserved the direction of
+every central geometry and contact effect. The fully resolved geometry analysis
+preserved 161 of 168 model/Q8/feature directions. Missing PDB coordinates
+therefore do not explain the main segment-level directions.
 
-Integrity protections include:
+Second, uncertainty in each AUROC increase was measured by resampling whole
+test proteins 2,000 times. Every selected segment and control from a sampled
+protein was kept together, and the smaller and larger models were evaluated on
+the same bootstrap sample.
 
-- explicit model-sequence-to-PDB mapping
-- mapping identity and coverage thresholds
-- preservation of missing-residue information
-- separation of train fitting from validation/test evaluation
-- test-only isolation of strain
-- same-protein, identical-Q8 controls
-- exclusion of controls overlapping any signed band
+For the reference cohort, the mean AUROC increases across six ESM conditions
+were:
 
-### 3B.11 Limitations
+| Added information | Positive change (95% interval) | Negative change (95% interval) |
+|:---|---:|---:|
+| Experimental PDB geometry | +0.0067 (0.0030 to 0.0107) | +0.0067 (0.0030 to 0.0103) |
+| Contact network | +0.0093 (0.0064 to 0.0122) | +0.0030 (0.0001 to 0.0059) |
+| ECOD/domain | +0.0054 (0.0039 to 0.0070) | +0.0009 (-0.0007 to 0.0024) |
+| NetSurfP geometry plus all external structure | +0.0443 (0.0370 to 0.0519) | +0.0203 (0.0139 to 0.0268) |
 
-- The six model conditions use the same biological proteins and are not six
-  independent biological datasets.
+The total increase from all stages after base biophysics remained positive in
+the fully resolved geometry cohort: +0.0416 for positive segments and +0.0237
+for negative segments, with both 95% intervals excluding zero. However, the
+isolated positive PDB-geometry increase became uncertain in that strict cohort
+(+0.0019; 95% interval -0.0036 to 0.0073). Contact and domain features carried
+most of the remaining positive increment. The negative PDB-geometry increment
+remained positive, while its contact and ECOD increments individually included
+zero.
 
-- Strain is test-only and was not evaluated as a train-learned incremental
-  predictor.
+All safeguard audits passed, including candidate provenance, coordinate
+completeness, saved-prediction reconstruction and synchronized protein
+bootstrapping.
 
-- Positive loop segments have somewhat more incomplete experimental structural
-  coverage.
+Safeguard outputs:
 
-- A sensitivity analysis restricted to fully resolved segments is still
-  recommended.
+```text
+results/publication_comparable_v2/
+  analysis_phase3b_structural_safeguards_interval_iou05_stable/
+    resolution_sensitivity/
+    bootstrap/
+    audits/
+    README.md
+    parameters.json
+```
 
-- ECOD boundaries are annotations and should not be interpreted as
-  experimentally established hinge axes.
+### 3B.5 Interpretation and limitations
 
-- Contact-network centrality depends on the selected contact definition and
-  available experimental coordinates.
+The direct apex analysis is the clearest Phase 3B result because it studies the
+actual model-derived location and does not require a Q8 segment to be the
+biological object. It supports a reproducible association between positive
+apices and weakly connected, loosely packed experimental structure.
 
-- The results support associations between band selection and external
-  mechanical or structural environments; they do not by themselves establish
-  causal mechanical control.
+The negative-apex result is more complicated and should not be summarized as a
+universal packed-core or hub signal after Neq/RSA matching. The Q8-segment
+analysis provides useful multivariable and sensitivity checks, but its object
+definition is imposed after model inference and should remain secondary.
+
+All results remain associative. PDB structures are incomplete for some flexible
+regions, ECOD boundaries are annotations rather than measured hinge axes, and
+contact-network results depend on the contact definition. Neither analysis
+establishes a causal allosteric or communication pathway.
+
 ## PHASE 3C: INTERNAL EVIDENCE/CONSULTATION MECHANISM
 
 Script:
@@ -1394,15 +1607,11 @@ signed_band_analysis/analyze_signed_band_model_mechanism.py
 
 Scientific questions:
 
-1. Is a band influential because the key has unusually strong intrinsic signed
-   evidence s_j?
-
-2. Is it influential because attention consults that key unusually broadly,
-   through B_j?
-
-3. Are both mechanisms elevated?
-
-4. Do positive and negative bands use these mechanisms differently?
+1. Does a band apex contain unusually strong signed evidence, `s_j`?
+2. Is the apex consulted unusually strongly by the rest of the protein, through
+   its mean incoming attention, `B_j`?
+3. Are both components elevated at the same apex?
+4. Is their relative importance different for positive and negative bands?
 
 ### 3C.1 Matched control design
 
@@ -1416,12 +1625,14 @@ For each band apex, controls are:
 The control value is the mean over all eligible same-protein, same-Q8 control
 residues.
 
-This is a residue-level internal-mechanism analysis, distinct from the
-Q8-segment object analysis in Phase 3A.
+This is a residue-level comparison. Q8 is used only to choose comparable
+control residues; the analysis object remains the model-derived band apex. It
+is therefore different from Phase 3A, where the whole Q8 segment is the object.
 
 ### 3C.2 Seed-aware exact decomposition
 
-Bands were called from mean_seed(I_j), but the identity:
+Bands were detected from the three-seed mean influence profile, but the
+identity
 
     I_j = s_j * B_j
 
@@ -1433,140 +1644,178 @@ Therefore, for each seed separately:
       = delta log|s|
       + delta log(B)
 
-The script:
+For each seed, the script:
 
-1. Extracts case and control values separately for each seed.
-2. Computes the exact within-seed evidence and consultation differences.
-3. Verifies the log decomposition.
-4. Only then averages the effects across the three seeds.
+1. reads `s_j`, `B_j` and `I_j` at the band apex;
+2. calculates the corresponding mean over the matched control residues;
+3. calculates the apex-minus-control difference for each component;
+4. verifies the exact log decomposition;
+5. averages the three seed-specific effects only after these calculations.
 
 This avoids incorrectly multiplying seed-averaged s_j and seed-averaged B_j.
 
+For the matched summaries, band effects are first averaged within each protein,
+so a protein with many bands does not receive more weight. The current script
+reports a 95% t-based confidence interval across proteins, tests the
+protein-level effects with a two-sided Wilcoxon signed-rank test, and applies
+Benjamini-Hochberg correction across the reported mechanism tests.
+
 ### 3C.3 Mechanism classes
 
-For a band with positive total log-magnitude enrichment:
+The classes describe which component produces the increase in `|I_j|` relative
+to matched controls. For an apex with positive total log-magnitude enrichment:
 
 - evidence-dominated:
-  evidence contributes at least two-thirds of the positive enrichment, or
-  evidence increases while consultation does not
+  evidence supplies at least two-thirds of the increase, or evidence increases
+  while consultation does not;
 
 - consultation-dominated:
-  consultation contributes at least two-thirds, or consultation increases
-  while evidence does not
+  consultation supplies at least two-thirds, or consultation increases while
+  evidence does not;
 
 - combined:
-  both increase and neither contributes more than two-thirds
+  both increase and neither supplies more than two-thirds.
 
 Additional classes:
 
 - not_magnitude_enriched:
-  total matched log|I| enrichment is zero or negative
+  the apex does not have greater `|I_j|` than its matched controls;
 
 - unclassified:
-  no eligible exact-Q8 control or the decomposition cannot support a class
+  there is no eligible exact-Q8 control, or the decomposition does not support
+  one of the preceding classes.
 
 ### 3C.4 Coverage and seed stability
 
-Total bands:
+The updated run uses the final seed-stable test-set catalog from Phase 1. Each
+model contributes its own band catalog:
 
-- 97,198
+| Model | Negative | Positive | Total |
+|:---|---:|---:|---:|
+| ESM2 frozen | 653 | 1,059 | 1,712 |
+| ESM2 top 4 | 713 | 1,227 | 1,940 |
+| ESM2 top 28 | 665 | 1,194 | 1,859 |
+| ESM3 frozen | 752 | 1,115 | 1,867 |
+| ESM3 top 4 | 707 | 1,086 | 1,793 |
+| ESM3 top 28 | 750 | 1,118 | 1,868 |
 
-Bands with eligible exact-Q8 controls:
+These are not 11,039 unique biological regions. They are 11,039 model-specific
+band records across six separate catalogs.
 
-- 92,806
+Exact-Q8 controls were available for 10,958 of the 11,039 records. The 81
+without a control remain in the per-band table as unclassified but do not enter
+the matched effect summaries. Of these, 77 were positive and four were
+negative.
 
-Bands without eligible controls:
+Seed-direction agreement was nearly complete:
 
-- 4,392
-- these remain unclassified
-- they do not enter matched case/control summaries
-
-Seed-direction stability:
-
-- 96,365 of 97,198 bands had the same direction in all three seeds
-- 99.14% complete three-seed direction agreement
-- 740 bands agreed in two of three seeds
-- 93 bands agreed in one of three seeds
+- 11,038 bands had the same influence direction in all three seeds;
+- one band agreed in two of three seeds;
+- no band agreed in only one seed.
 
 ### 3C.5 Positive-band mechanism results
 
-Median test-set effects across the six conditions:
+Median apex-versus-control effects across the six models were:
 
-- delta log|s|: 1.19
-- intrinsic evidence enrichment: approximately 3.3-fold
+- `delta log|s| = 1.20`, corresponding to 3.31-fold stronger intrinsic
+  evidence;
 
-- delta log(B): 1.03
-- consultation enrichment: approximately 2.8-fold
+- `delta log(B) = 1.06`, corresponding to 2.89-fold greater attention breadth;
 
-- delta log|I|: 2.23
-- total influence enrichment: approximately 9.3-fold
+- `delta log|I| = 2.27`, corresponding to 9.66-fold greater total influence.
 
-Average test-set mechanism fractions across conditions:
+All three effects were positive and significant after Benjamini-Hochberg
+correction in all six models.
 
-- combined: 77.9%
-- evidence-dominated: 14.4%
-- consultation-dominated: 1.6%
-- not magnitude-enriched: 1.6%
-- unclassified: 4.5%
+The mean band fractions across the six model catalogs were:
+
+- combined: 90.23%;
+- evidence-dominated: 7.91%;
+- consultation-dominated: 0.71%;
+- not magnitude-enriched: 0.02%;
+- unclassified: 1.13%.
 
 Interpretation:
 
-Positive bands usually become strong because they combine:
+Positive band apices usually combine:
 
-- strong intrinsic flexibility-supporting evidence
-- unusually broad consultation by other residues
+- strong intrinsic flexibility-supporting evidence;
+- increased consultation by other residues.
 
-Neither component alone explains most positive bands.
+Neither component alone explains most positive bands in the updated catalog.
 
 ### 3C.6 Negative-band mechanism results
 
-Median test-set effects across the six conditions:
+Median apex-versus-control effects across the six models were:
 
-- intrinsic evidence enrichment: approximately 3.2-fold
-- consultation enrichment: approximately 1.5-fold
-- total |I| enrichment: approximately 5.1-fold
+- `delta log|s| = 1.21`, corresponding to 3.35-fold stronger intrinsic
+  evidence;
+- `delta log(B) = 0.75`, corresponding to 2.12-fold greater attention breadth;
+- `delta log|I| = 1.95`, corresponding to 7.04-fold greater total influence.
 
-Average test-set mechanism fractions:
+All three effects were positive and significant after Benjamini-Hochberg
+correction in all six models.
 
-- evidence-dominated: 56.6%
-- combined: 35.9%
-- consultation-dominated: approximately 0.09%
-- not magnitude-enriched: 4.2%
-- unclassified: 3.3%
+The mean band fractions across the six model catalogs were:
+
+- combined: 71.61%;
+- evidence-dominated: 28.27%;
+- consultation-dominated: 0.02%;
+- not magnitude-enriched: 0%;
+- unclassified: 0.10%.
 
 Interpretation:
 
-Negative bands are more commonly evidence-dominated. Attention breadth still
-amplifies negative evidence, but less strongly than for positive bands.
+Most negative bands are also combined evidence-plus-consultation objects in the
+updated catalog. However, negative bands are more evidence-heavy than positive
+bands: 28.27% were evidence-dominated, compared with 7.91% of positive bands,
+and their median attention-breadth enrichment was smaller. ESM2 frozen was the
+only model in which evidence-dominated negative bands slightly outnumbered
+combined negative bands.
 
-Purely consultation-driven negative bands are exceptionally rare.
+Purely consultation-dominated negative bands were exceptionally rare.
 
 ### 3C.7 Audited numerical identities
 
-- mean of the three seed I_j values reproduces the stored averaged band I_j
-  with maximum error 1.11e-16
+- the 11,039 band identifiers exactly match the final Phase 1 stable test
+  catalog;
 
-- maximum log-decomposition reconstruction error: 3.03e-7
+- the mean of the three seed `I_j` values reproduces the stored averaged apex
+  `I_j` with maximum error `1.11e-16`;
 
-- all 54 condition/seed/split cache shards were present
+- the maximum directly checked `I_j - s_j B_j` error was `3.29e-8`;
 
-- all 291,594 expected band/seed rows were present:
+- the maximum within-seed log-decomposition error was `3.91e-7`, and the
+  maximum error after seed averaging was `2.03e-7`;
 
-      97,198 bands x 3 seeds
+- all 18 expected test cache files were present:
+
+      6 models x 3 seeds
+
+- all 33,117 expected band/seed rows were present:
+
+      11,039 model-specific bands x 3 seeds
 
 Conclusion:
 
-Positive and negative bands use systematically different internal mechanisms:
+Both positive and negative bands usually combine intrinsic signed evidence with
+learned attention routing. The difference is quantitative rather than absolute:
 
-- positive bands are usually combined evidence-plus-consultation objects
-- negative bands are more often strong intrinsic evidence objects with a
-  smaller attention-breadth amplifier
+- positive bands show the stronger attention-breadth enrichment and are almost
+  always classified as combined;
+- negative bands are still usually combined, but a substantially larger
+  fraction are evidence-dominated.
+
+This analysis explains how the observed influence at detected apices is divided
+between `s_j` and `B_j`. It does not ask whether the same regions would have
+been detected if attention were uniform; that separate counterfactual question
+is addressed by the Phase 1 uniform-attention control.
 
 ### 3C.8 Outputs
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_band_phase3c/
+  analysis_phase3c_interval_iou05_stable_test/
     mechanism_by_band_and_seed.csv.gz
     mechanism_by_band_seed_averaged.csv.gz
     mechanism_effects_by_protein.csv.gz
@@ -1574,13 +1823,6 @@ results/publication_comparable_v2/
     mechanism_class_summary.csv
     per_seed_split_cache/
     phase3c_parameters.json
-```
-
-The output directory retains the historical “phase3c” name even though the
-script itself was renamed to:
-
-```text
-signed_band_analysis/analyze_signed_band_model_mechanism.py
 ```
 
 
