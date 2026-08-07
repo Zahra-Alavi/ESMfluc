@@ -229,6 +229,9 @@ def validated_parameter_set(
         "uniform_signed_influence": (
             "seed_averaged_uniform_signed_influence"
         ),
+        "shifted_attention_signed_influence": (
+            "seed_averaged_shifted_attention_signed_influence"
+        ),
     }
     per_seed_field = loaded["per_seed"].get("influence_field")
     mean_field = loaded["mean"].get("influence_field")

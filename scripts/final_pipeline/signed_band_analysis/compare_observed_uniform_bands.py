@@ -65,13 +65,35 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--observed_mean_bands", required=True)
     parser.add_argument("--observed_stable_bands", required=True)
-    parser.add_argument("--uniform_mean_bands", required=True)
-    parser.add_argument("--uniform_stable_bands", required=True)
+    parser.add_argument(
+        "--uniform_mean_bands", "--control_mean_bands",
+        dest="uniform_mean_bands", required=True,
+    )
+    parser.add_argument(
+        "--uniform_stable_bands", "--control_stable_bands",
+        dest="uniform_stable_bands", required=True,
+    )
     parser.add_argument("--observed_protein_summary", required=True)
-    parser.add_argument("--uniform_protein_summary", required=True)
+    parser.add_argument(
+        "--uniform_protein_summary", "--control_protein_summary",
+        dest="uniform_protein_summary", required=True,
+    )
+    parser.add_argument(
+        "--control_label",
+        choices=("uniform", "shifted_attention"),
+        default="uniform",
+        help=(
+            "Name used in output columns and files. Internal calculations retain "
+            "the legacy uniform labels for backward compatibility."
+        ),
+    )
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--n_bootstrap", type=int, default=2000)
     parser.add_argument("--bootstrap_seed", type=int, default=20260730)
+    parser.add_argument(
+        "--splits", nargs="*", default=None,
+        help="Optional split subset applied identically to both catalogs.",
+    )
     return parser.parse_args()
 
 
@@ -90,6 +112,24 @@ def _atomic_frame(path: Path, frame: pd.DataFrame, *, compression=None) -> None:
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
+
+
+def relabel_control_frame(frame: pd.DataFrame, control_label: str) -> pd.DataFrame:
+    """Rename legacy 'uniform' fields for a generic control comparison."""
+    if control_label == "uniform":
+        return frame
+    output = frame.copy()
+    output = output.rename(
+        columns={column: column.replace("uniform", control_label) for column in output}
+    )
+    for column in output.select_dtypes(include="object"):
+        output[column] = output[column].map(
+            lambda value: (
+                value.replace("uniform", control_label)
+                if isinstance(value, str) else value
+            )
+        )
+    return output
 
 
 def _atomic_json(path: Path, payload: dict) -> None:
@@ -852,13 +892,13 @@ def validate_comparison_outputs(
     ].dropna()
     if (finite_distances < 0).any():
         raise ValueError("Nearest-apex distance is negative")
-    if not matched["interval_iou"].between(0, 1, inclusive="both").all():
+    if not matched.empty and not matched["interval_iou"].between(0, 1, inclusive="both").all():
         raise ValueError("Matched interval IoU falls outside [0, 1]")
-    if (matched["interval_iou"] <= 0).any():
+    if not matched.empty and (matched["interval_iou"] <= 0).any():
         raise ValueError("Zero-IoU assignments must be classified as unmatched")
-    if matched.duplicated(["catalog_scope", "observed_band_id"]).any():
+    if not matched.empty and matched.duplicated(["catalog_scope", "observed_band_id"]).any():
         raise ValueError("An observed band is matched more than once")
-    if matched.duplicated(["catalog_scope", "uniform_band_id"]).any():
+    if not matched.empty and matched.duplicated(["catalog_scope", "uniform_band_id"]).any():
         raise ValueError("A uniform band is matched more than once")
     for profile in ("observed", "uniform"):
         candidates = stability_frame[f"{profile}_mean_candidate_bands"]
@@ -876,9 +916,15 @@ def validate_comparison_outputs(
     for profile in ("observed", "uniform"):
         for scope in SCOPES:
             total = len(catalogs[(profile, scope)])
-            matched_count = int(matched["catalog_scope"].eq(scope).sum())
+            matched_count = (
+                int(matched["catalog_scope"].eq(scope).sum())
+                if "catalog_scope" in matched else 0
+            )
             only_frame = observed_only if profile == "observed" else uniform_only
-            only_count = int(only_frame["catalog_scope"].eq(scope).sum())
+            only_count = (
+                int(only_frame["catalog_scope"].eq(scope).sum())
+                if "catalog_scope" in only_frame else 0
+            )
             if matched_count + only_count != total:
                 raise ValueError(
                     f"{profile}/{scope}: matching classification is incomplete"
@@ -915,6 +961,22 @@ def main() -> None:
     uniform_stable = load_bands(paths["uniform_stable_bands"], stable=True)
     observed_summary = load_summary(paths["observed_protein_summary"])
     uniform_summary = load_summary(paths["uniform_protein_summary"])
+    if args.splits:
+        selected_splits = set(map(str, args.splits))
+        observed_mean = observed_mean[observed_mean.split.isin(selected_splits)].copy()
+        observed_stable = observed_stable[
+            observed_stable.split.isin(selected_splits)
+        ].copy()
+        uniform_mean = uniform_mean[uniform_mean.split.isin(selected_splits)].copy()
+        uniform_stable = uniform_stable[
+            uniform_stable.split.isin(selected_splits)
+        ].copy()
+        observed_summary = observed_summary[
+            observed_summary.split.isin(selected_splits)
+        ].copy()
+        uniform_summary = uniform_summary[
+            uniform_summary.split.isin(selected_splits)
+        ].copy()
     universe = build_universe(observed_summary, uniform_summary)
     catalogs = {
         ("observed", "mean_candidate"): observed_mean,
@@ -1059,6 +1121,25 @@ def main() -> None:
         ascending=[False, True, True, True, True, True],
     )
 
+    control_label = args.control_label
+    if control_label != "uniform":
+        mask_frame = relabel_control_frame(mask_frame, control_label)
+        mask_summary = relabel_control_frame(mask_summary, control_label)
+        distance_frame = relabel_control_frame(distance_frame, control_label)
+        apex_protein_frame = relabel_control_frame(apex_protein_frame, control_label)
+        apex_summary = relabel_control_frame(apex_summary, control_label)
+        cdf_frame = relabel_control_frame(cdf_frame, control_label)
+        matched = relabel_control_frame(matched, control_label)
+        observed_only = relabel_control_frame(observed_only, control_label)
+        uniform_only = relabel_control_frame(uniform_only, control_label)
+        pairing_summary = relabel_control_frame(pairing_summary, control_label)
+        stability_frame = relabel_control_frame(stability_frame, control_label)
+        stability_summary = relabel_control_frame(stability_summary, control_label)
+        all_mean_stability = relabel_control_frame(
+            all_mean_stability, control_label
+        )
+        bootstrap = relabel_control_frame(bootstrap, control_label)
+
     _atomic_frame(
         output_dir / "per_protein_band_mask_overlap.csv", mask_frame
     )
@@ -1075,10 +1156,10 @@ def main() -> None:
     _atomic_frame(output_dir / "apex_distance_summary.csv", apex_summary)
     _atomic_frame(output_dir / "apex_distance_cdf.csv", cdf_frame)
     _atomic_frame(
-        output_dir / "matched_observed_uniform_bands.csv", matched
+        output_dir / f"matched_observed_{control_label}_bands.csv", matched
     )
     _atomic_frame(output_dir / "observed_only_bands.csv", observed_only)
-    _atomic_frame(output_dir / "uniform_only_bands.csv", uniform_only)
+    _atomic_frame(output_dir / f"{control_label}_only_bands.csv", uniform_only)
     _atomic_frame(
         output_dir / "band_pairing_threshold_summary.csv", pairing_summary
     )
@@ -1096,7 +1177,9 @@ def main() -> None:
     )
 
     parameters = {
-        "analysis": "observed versus uniform band localization comparison",
+        "analysis": f"observed versus {control_label} band localization comparison",
+        "control_label": control_label,
+        "selected_splits": args.splits,
         "primary_analysis": (
             "test-set residue-level binary band-mask overlap, aggregated with "
             "equal protein weighting"
@@ -1135,7 +1218,7 @@ def main() -> None:
         },
         "test_set_primary": True,
         "inputs": {
-            label: {
+            label.replace("uniform", control_label): {
                 "path": str(path),
                 "bytes": path.stat().st_size,
                 "sha256": sha256_file(path),
@@ -1148,7 +1231,7 @@ def main() -> None:
     audit = {
         "all_invariants_pass": True,
         "input_band_counts": {
-            f"{profile}_{scope}": len(frame)
+            f"{profile.replace('uniform', control_label)}_{scope}": len(frame)
             for (profile, scope), frame in catalogs.items()
         },
         "protein_contexts": len(universe) // 2,
@@ -1157,11 +1240,11 @@ def main() -> None:
         "nearest_apex_rows": len(distance_frame),
         "matched_band_pairs": len(matched),
         "observed_only_bands": len(observed_only),
-        "uniform_only_bands": len(uniform_only),
+        f"{control_label}_only_bands": len(uniform_only),
         "band_classification_audit": band_classification_audit,
         "stable_subset_of_mean": {
             "observed": True,
-            "uniform": True,
+            control_label: True,
         },
         "matching_context_and_sign_invariants": True,
         "input_intervals_nonoverlapping_within_catalog_context": True,

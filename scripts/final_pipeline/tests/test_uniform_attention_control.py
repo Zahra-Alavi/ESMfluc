@@ -13,6 +13,7 @@ from signed_band_analysis.build_uniform_attention_control_profiles import (
     StreamingControlWriter,
     audit_seed_average_profile,
     build_control_profile,
+    deterministic_shift_offset,
     generate_per_seed_profiles,
     generate_seed_averaged_profiles,
     iter_control_profiles,
@@ -22,6 +23,8 @@ from signed_band_analysis.build_uniform_attention_control_profiles import (
 )
 from signed_band_analysis.extract_signed_contribution_bands import (
     CONTROL_AVERAGED_UNIFORM_FIELD,
+    CONTROL_AVERAGED_SHIFTED_FIELD,
+    CONTROL_SHIFTED_FIELD,
     CONTROL_UNIFORM_FIELD,
     iter_profiles as iter_detector_profiles,
     load_inputs as load_detector_inputs,
@@ -66,6 +69,7 @@ def make_control(name="protein_a", sequence="ACDE", evidence=None, attention=Non
         dtype=float,
     )
     length = len(sequence)
+    shifted_attention = np.roll(attention, 1) if length > 1 else attention.copy()
     return {
         "name": name,
         "sequence": sequence,
@@ -75,6 +79,8 @@ def make_control(name="protein_a", sequence="ACDE", evidence=None, attention=Non
         "uniform_signed_influence": evidence / length,
         "attention_column_mean": attention,
         "attention_amplification": length * attention,
+        "shifted_attention_column_mean": shifted_attention,
+        "shifted_attention_signed_influence": evidence * shifted_attention,
     }
 
 
@@ -127,6 +133,41 @@ class UniformAttentionControlTests(unittest.TestCase):
         )
         self.assertEqual(audit["exact_zero_evidence_residues"], 1)
         self.assertEqual(audit["unexpected_sign_disagreements"], 0)
+
+    def test_shifted_attention_preserves_distribution_and_breaks_alignment(self):
+        evidence = np.asarray([1.0, 2.0, 3.0, 4.0])
+        attention = np.asarray([0.1, 0.2, 0.3, 0.4])
+        control, audit = build_control_profile(
+            {
+                "name": "p", "sequence": "ACDE", "length": 4,
+                "intrinsic_signed_evidence": evidence,
+                "signed_column_influence": evidence * attention,
+                "attention_column_mean": attention,
+            },
+            shift_offset=2,
+            identity_atol=1e-12, identity_rtol=1e-12,
+            normalization_atol=1e-12, normalization_rtol=1e-12,
+        )
+        np.testing.assert_allclose(
+            control["shifted_attention_column_mean"], np.roll(attention, 2)
+        )
+        np.testing.assert_allclose(
+            control["shifted_attention_signed_influence"],
+            evidence * np.roll(attention, 2),
+        )
+        self.assertEqual(audit["shift_offset"], 2)
+        first = deterministic_shift_offset(
+            condition="c", seed=1, split="test", protein="p", length=4,
+            random_seed=7,
+        )
+        second = deterministic_shift_offset(
+            condition="c", seed=2, split="test", protein="p", length=4,
+            random_seed=7,
+        )
+        # The same protein/condition rotation is used across model seeds. This
+        # preserves seed-to-seed stability rather than destroying it by design.
+        self.assertEqual(first, second)
+        self.assertIn(first, (1, 2, 3))
 
     def test_nonzero_evidence_with_zero_attention_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "sign disagreements"):
@@ -517,6 +558,22 @@ class UniformAttentionControlTests(unittest.TestCase):
                 "esmfluc.uniform_attention_control.seed_average.v1",
             )
             self.assertEqual(len(list(mean_profiles)), 1)
+            _, shifted_mean_profiles = iter_detector_profiles(
+                Path(averaged_manifest.iloc[0]["profile_json_gz"]),
+                CONTROL_AVERAGED_SHIFTED_FIELD,
+            )
+            shifted_mean = list(shifted_mean_profiles)[0]
+            self.assertEqual(
+                shifted_mean[CONTROL_AVERAGED_SHIFTED_FIELD].shape, (4,)
+            )
+            _, shifted_seed_profiles = iter_detector_profiles(
+                Path(profile_manifest.iloc[0]["profile_json_gz"]),
+                CONTROL_SHIFTED_FIELD,
+            )
+            self.assertEqual(
+                list(shifted_seed_profiles)[0][CONTROL_SHIFTED_FIELD].shape,
+                (4,),
+            )
 
             parameter_args = types.SimpleNamespace(
                 conditions=["condition_a"],
@@ -528,6 +585,7 @@ class UniformAttentionControlTests(unittest.TestCase):
                 normalization_rtol=1e-12,
                 g_uniform_atol=1e-6,
                 g_uniform_rtol=1e-6,
+                shift_random_seed=20260807,
             )
             write_parameters(
                 output,

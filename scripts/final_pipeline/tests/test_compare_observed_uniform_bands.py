@@ -8,6 +8,7 @@ from signed_band_analysis.compare_observed_uniform_bands import (
     mask_metrics,
     nearest_distances,
     pair_one_group,
+    relabel_control_frame,
 )
 
 
@@ -116,6 +117,19 @@ class ObservedUniformComparisonTests(unittest.TestCase):
             annotated.set_index("band_id").loc["b2", "stability_status"],
             "not_retained_lt2_support_count_unknown",
         )
+
+    def test_generic_control_relabel_preserves_values(self):
+        frame = pd.DataFrame({
+            "uniform_n_bands": [2],
+            "observed_minus_uniform_n_bands": [3],
+            "profile_type": ["uniform"],
+        })
+        result = relabel_control_frame(frame, "shifted_attention")
+        self.assertEqual(result.shifted_attention_n_bands.iloc[0], 2)
+        self.assertEqual(
+            result.observed_minus_shifted_attention_n_bands.iloc[0], 3
+        )
+        self.assertEqual(result.profile_type.iloc[0], "shifted_attention")
 
 
 if __name__ == "__main__":

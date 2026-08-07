@@ -37,15 +37,19 @@ DEFAULT_INFLUENCE_FIELD = "signed_column_influence"
 AVERAGED_INFLUENCE_FIELD = "seed_averaged_signed_column_influence"
 CONTROL_OBSERVED_FIELD = "observed_signed_influence"
 CONTROL_UNIFORM_FIELD = "uniform_signed_influence"
+CONTROL_SHIFTED_FIELD = "shifted_attention_signed_influence"
 CONTROL_AVERAGED_OBSERVED_FIELD = "seed_averaged_observed_signed_influence"
 CONTROL_AVERAGED_UNIFORM_FIELD = "seed_averaged_uniform_signed_influence"
+CONTROL_AVERAGED_SHIFTED_FIELD = "seed_averaged_shifted_attention_signed_influence"
 INFLUENCE_FIELDS = (
     DEFAULT_INFLUENCE_FIELD,
     AVERAGED_INFLUENCE_FIELD,
     CONTROL_OBSERVED_FIELD,
     CONTROL_UNIFORM_FIELD,
+    CONTROL_SHIFTED_FIELD,
     CONTROL_AVERAGED_OBSERVED_FIELD,
     CONTROL_AVERAGED_UNIFORM_FIELD,
+    CONTROL_AVERAGED_SHIFTED_FIELD,
 )
 SIGNED_CONTRIBUTION_SCHEMA = "esmfluc.signed_contributions.v1"
 CONTROL_SCHEMA = "esmfluc.uniform_attention_control.v1"
@@ -291,10 +295,12 @@ def iter_profiles(
         CONTROL_SCHEMA: {
             CONTROL_OBSERVED_FIELD,
             CONTROL_UNIFORM_FIELD,
+            CONTROL_SHIFTED_FIELD,
         },
         CONTROL_SEED_AVERAGE_SCHEMA: {
             CONTROL_AVERAGED_OBSERVED_FIELD,
             CONTROL_AVERAGED_UNIFORM_FIELD,
+            CONTROL_AVERAGED_SHIFTED_FIELD,
         },
     }
     if schema not in allowed_fields:
@@ -340,6 +346,11 @@ def iter_profiles(
                         "attention_column_mean",
                         "attention_amplification",
                     ]
+                    if influence_field == CONTROL_SHIFTED_FIELD:
+                        profile_fields.extend([
+                            "shifted_attention_column_mean",
+                            CONTROL_SHIFTED_FIELD,
+                        ])
                     evidence_field = "intrinsic_signed_evidence"
                     attention_field = "attention_column_mean"
                 else:
@@ -350,6 +361,11 @@ def iter_profiles(
                         "seed_averaged_attention_column_mean",
                         "seed_averaged_attention_amplification",
                     ]
+                    if influence_field == CONTROL_AVERAGED_SHIFTED_FIELD:
+                        profile_fields.extend([
+                            "seed_averaged_shifted_attention_column_mean",
+                            CONTROL_AVERAGED_SHIFTED_FIELD,
+                        ])
                     evidence_field = "seed_averaged_intrinsic_signed_evidence"
                     attention_field = "seed_averaged_attention_column_mean"
                 profiles = {}
@@ -438,6 +454,42 @@ def iter_profiles(
                                 f"{path}: {name} violates per-seed control "
                                 "decomposition"
                             )
+                    shifted_field = (
+                        CONTROL_SHIFTED_FIELD
+                        if schema == CONTROL_SCHEMA
+                        else CONTROL_AVERAGED_SHIFTED_FIELD
+                    )
+                    shifted_attention_field = (
+                        "shifted_attention_column_mean"
+                        if schema == CONTROL_SCHEMA
+                        else "seed_averaged_shifted_attention_column_mean"
+                    )
+                    if influence_field == shifted_field:
+                        shifted_attention = profiles[shifted_attention_field]
+                        if schema == CONTROL_SCHEMA:
+                            shifted_error = float(np.max(np.abs(
+                                profiles[shifted_field]
+                                - evidence * shifted_attention
+                            )))
+                            errors.append(shifted_error)
+                        else:
+                            # As with observed influence, mean_seed(s*shift(B))
+                            # must not be factorized into mean_seed(s) times
+                            # mean_seed(shift(B)).
+                            shifted_error = 0.0
+                        if (
+                            shifted_error > 5e-6
+                            or not np.isclose(
+                                np.sum(shifted_attention),
+                                1.0,
+                                atol=5e-6,
+                                rtol=1e-6,
+                            )
+                        ):
+                            raise ValueError(
+                                f"{path}: {name} violates shifted-attention identity"
+                            )
+                        attention = shifted_attention
                 count += 1
                 residue_count += length
                 yield {
@@ -447,8 +499,8 @@ def iter_profiles(
                     "source_schema_version": schema,
                     "profile_identity_max_abs_error": max(errors, default=0.0),
                     "intrinsic_signed_evidence": evidence,
-                    "attention_column_mean": attention,
                     **profiles,
+                    "attention_column_mean": attention,
                 }
             expected = metadata.get("protein_count")
             if expected is not None and count != int(expected):
@@ -1543,11 +1595,15 @@ def main() -> None:
             ),
             CONTROL_OBSERVED_FIELD: "I_j_observed = s_j * B_j",
             CONTROL_UNIFORM_FIELD: "I_j_uniform = s_j / L",
+            CONTROL_SHIFTED_FIELD: "I_j_shifted = s_j * circular_shift(B_j)",
             CONTROL_AVERAGED_OBSERVED_FIELD: (
                 "mean_seed_I_j_observed = mean_seed(s_j * B_j)"
             ),
             CONTROL_AVERAGED_UNIFORM_FIELD: (
                 "mean_seed_I_j_uniform = mean_seed(s_j / L)"
+            ),
+            CONTROL_AVERAGED_SHIFTED_FIELD: (
+                "mean_seed_I_j_shifted = mean_seed(s_j * circular_shift(B_j))"
             ),
         }[args.influence_field],
         "influence_field": args.influence_field,
@@ -1563,6 +1619,7 @@ def main() -> None:
                 if args.influence_field in {
                     CONTROL_AVERAGED_OBSERVED_FIELD,
                     CONTROL_AVERAGED_UNIFORM_FIELD,
+                    CONTROL_AVERAGED_SHIFTED_FIELD,
                 }
                 else "Apex intrinsic evidence and attention breadth are from "
                 "the same seed."

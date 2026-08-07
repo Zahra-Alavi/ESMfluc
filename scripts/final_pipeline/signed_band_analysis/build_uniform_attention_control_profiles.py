@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import csv
 import gzip
+import hashlib
 import json
 import math
 import os
@@ -43,6 +44,8 @@ PROFILE_FIELDS = (
     "uniform_signed_influence",
     "attention_column_mean",
     "attention_amplification",
+    "shifted_attention_column_mean",
+    "shifted_attention_signed_influence",
 )
 SEED_AVERAGED_FIELDS = (
     "seed_averaged_intrinsic_signed_evidence",
@@ -50,10 +53,15 @@ SEED_AVERAGED_FIELDS = (
     "seed_averaged_uniform_signed_influence",
     "seed_averaged_attention_column_mean",
     "seed_averaged_attention_amplification",
+    "seed_averaged_shifted_attention_column_mean",
+    "seed_averaged_shifted_attention_signed_influence",
 )
 SIMILARITY_METRICS = (
     "pearson_observed_uniform",
     "spearman_observed_uniform",
+    "pearson_observed_shifted_attention",
+    "spearman_observed_shifted_attention",
+    "same_sign_top_decile_overlap_shifted_attention",
     "pearson_complete_absolute_magnitude",
     "same_sign_top_decile_overlap",
     "top_5pct_jaccard",
@@ -103,7 +111,32 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="Debugging only; zero processes every protein.",
     )
+    parser.add_argument(
+        "--shift_random_seed",
+        type=int,
+        default=20260807,
+        help=(
+            "Seed for a reproducible nonzero circular shift of B_j within each "
+            "protein and condition. The same offset is used for all model seeds "
+            "so the control does not artificially erase cross-seed stability."
+        ),
+    )
     return parser.parse_args()
+
+
+def deterministic_shift_offset(
+    *, condition: str, seed: int, split: str, protein: str, length: int,
+    random_seed: int,
+) -> int:
+    """Choose a reproducible nonzero offset shared by all model seeds."""
+    if length <= 1:
+        return 0
+    # Intentionally omit ``seed``. Giving each model seed a different rotation
+    # would manufacture instability in the shifted-B control.
+    del seed
+    token = f"{random_seed}|{condition}|{split}|{protein}".encode()
+    value = int.from_bytes(hashlib.sha256(token).digest()[:8], "big")
+    return 1 + value % (length - 1)
 
 
 def _safe_token(value: object, label: str) -> str:
@@ -366,6 +399,7 @@ def _max_abs(values: np.ndarray) -> float:
 def build_control_profile(
     profile: dict,
     *,
+    shift_offset: int = 0,
     identity_atol: float,
     identity_rtol: float,
     normalization_atol: float,
@@ -387,6 +421,12 @@ def build_control_profile(
 
     uniform = evidence / length
     amplification = attention * length
+    if not 0 <= shift_offset < length:
+        raise ValueError(
+            f"{profile['name']}: shift offset {shift_offset} outside [0, {length})"
+        )
+    shifted_attention = np.roll(attention, shift_offset)
+    shifted = evidence * shifted_attention
     reconstructed_from_components = evidence * attention
     reconstructed_from_control = uniform * amplification
     component_error = _max_abs(observed - reconstructed_from_components)
@@ -453,6 +493,8 @@ def build_control_profile(
         "uniform_signed_influence": uniform,
         "attention_column_mean": attention,
         "attention_amplification": amplification,
+        "shifted_attention_column_mean": shifted_attention,
+        "shifted_attention_signed_influence": shifted,
     }
     audit = {
         "protein": profile["name"],
@@ -465,6 +507,13 @@ def build_control_profile(
         "unexpected_sign_disagreements": sign_disagreements,
         "positive_evidence_residues": int(np.sum(evidence > 0)),
         "negative_evidence_residues": int(np.sum(evidence < 0)),
+        "shift_offset": int(shift_offset),
+        "shifted_attention_sum_abs_error": abs(
+            float(np.sum(shifted_attention)) - 1.0
+        ),
+        "max_shifted_minus_s_shifted_b_abs_error": _max_abs(
+            shifted - evidence * shifted_attention
+        ),
     }
     return result, audit
 
@@ -511,6 +560,9 @@ def profile_similarity_rows(
     evidence = np.asarray(control["intrinsic_signed_evidence"])
     observed = np.asarray(control["observed_signed_influence"])
     uniform = np.asarray(control["uniform_signed_influence"])
+    shifted = np.asarray(
+        control.get("shifted_attention_signed_influence", uniform)
+    )
     amplification = np.asarray(control["attention_amplification"])
     complete_absolute_correlation = _safe_correlation(
         np.abs(observed), np.abs(uniform)
@@ -520,10 +572,12 @@ def profile_similarity_rows(
         indices = np.flatnonzero(sign * evidence > 0)
         obs = sign * observed[indices]
         uni = sign * uniform[indices]
+        shifted_values = sign * shifted[indices]
         g = amplification[indices]
         abs_evidence = np.abs(evidence[indices])
         top_obs_10 = _top_indices(obs, 0.10)
         top_uni_10 = _top_indices(uni, 0.10)
+        top_shifted_10 = _top_indices(shifted_values, 0.10)
         top_obs_05 = _top_indices(obs, 0.05)
         top_uni_05 = _top_indices(uni, 0.05)
         high_union = np.union1d(top_obs_10, top_uni_10)
@@ -552,6 +606,18 @@ def profile_similarity_rows(
             "n_same_sign_residues": len(indices),
             "pearson_observed_uniform": _safe_correlation(obs, uni),
             "spearman_observed_uniform": _safe_correlation(obs, uni, ranked=True),
+            "pearson_observed_shifted_attention": _safe_correlation(
+                obs, shifted_values
+            ),
+            "spearman_observed_shifted_attention": _safe_correlation(
+                obs, shifted_values, ranked=True
+            ),
+            "same_sign_top_decile_overlap_shifted_attention": (
+                len(set(top_obs_10) & set(top_shifted_10))
+                / min(len(top_obs_10), len(top_shifted_10))
+                if min(len(top_obs_10), len(top_shifted_10))
+                else math.nan
+            ),
             "pearson_complete_absolute_magnitude": (
                 complete_absolute_correlation
             ),
@@ -686,6 +752,7 @@ def generate_per_seed_profiles(
     g_uniform_atol: float = DEFAULT_G_UNIFORM_ATOL,
     g_uniform_rtol: float = DEFAULT_G_UNIFORM_RTOL,
     max_proteins_per_file: int = 0,
+    shift_random_seed: int = 20260807,
 ) -> tuple[pd.DataFrame, dict]:
     profile_dir = output_dir / "profiles"
     comparison_dir = output_dir / "profile_comparison"
@@ -724,6 +791,9 @@ def generate_per_seed_profiles(
         "max_observed_minus_uniform_g_abs_error": 0.0,
         "max_attention_sum_abs_error": 0.0,
         "max_amplification_mean_abs_error": 0.0,
+        "max_shifted_attention_sum_abs_error": 0.0,
+        "max_shifted_identity_abs_error": 0.0,
+        "nonzero_shift_profiles": 0,
         "counts_by_condition_seed_split": [],
         "selection": {
             "selected_conditions": sorted(
@@ -793,8 +863,17 @@ def generate_per_seed_profiles(
             ) as writer:
                 try:
                     for profile in profiles:
+                        shift_offset = deterministic_shift_offset(
+                            condition=condition,
+                            seed=seed,
+                            split=split,
+                            protein=str(profile["name"]),
+                            length=int(profile["length"]),
+                            random_seed=shift_random_seed,
+                        )
                         control, audit = build_control_profile(
                             profile,
+                            shift_offset=shift_offset,
                             identity_atol=identity_atol,
                             identity_rtol=identity_rtol,
                             normalization_atol=normalization_atol,
@@ -823,6 +902,9 @@ def generate_per_seed_profiles(
                         aggregate_audit["unexpected_sign_disagreements"] += audit[
                             "unexpected_sign_disagreements"
                         ]
+                        aggregate_audit["nonzero_shift_profiles"] += int(
+                            audit["shift_offset"] != 0
+                        )
                         for source_key, destination_key in (
                             (
                                 "max_observed_minus_s_b_abs_error",
@@ -839,6 +921,14 @@ def generate_per_seed_profiles(
                             (
                                 "amplification_mean_abs_error",
                                 "max_amplification_mean_abs_error",
+                            ),
+                            (
+                                "shifted_attention_sum_abs_error",
+                                "max_shifted_attention_sum_abs_error",
+                            ),
+                            (
+                                "max_shifted_minus_s_shifted_b_abs_error",
+                                "max_shifted_identity_abs_error",
                             ),
                         ):
                             aggregate_audit[destination_key] = max(
@@ -940,6 +1030,12 @@ def build_seed_average(profiles: tuple[dict, ...]) -> dict:
         "seed_averaged_uniform_signed_influence": "uniform_signed_influence",
         "seed_averaged_attention_column_mean": "attention_column_mean",
         "seed_averaged_attention_amplification": "attention_amplification",
+        "seed_averaged_shifted_attention_column_mean": (
+            "shifted_attention_column_mean"
+        ),
+        "seed_averaged_shifted_attention_signed_influence": (
+            "shifted_attention_signed_influence"
+        ),
     }
     for output_field, input_field in mapping.items():
         result[output_field] = np.mean(
@@ -979,6 +1075,12 @@ def seed_average_as_control(averaged: dict) -> dict:
         "attention_amplification": averaged[
             "seed_averaged_attention_amplification"
         ],
+        "shifted_attention_column_mean": averaged[
+            "seed_averaged_shifted_attention_column_mean"
+        ],
+        "shifted_attention_signed_influence": averaged[
+            "seed_averaged_shifted_attention_signed_influence"
+        ],
     }
 
 
@@ -1002,7 +1104,13 @@ def audit_seed_average_profile(
     amplification = np.asarray(
         averaged["seed_averaged_attention_amplification"], dtype=np.float64
     )
-    arrays = (evidence, uniform, attention, amplification)
+    shifted_attention = np.asarray(
+        averaged["seed_averaged_shifted_attention_column_mean"], dtype=np.float64
+    )
+    shifted = np.asarray(
+        averaged["seed_averaged_shifted_attention_signed_influence"], dtype=np.float64
+    )
+    arrays = (evidence, uniform, attention, amplification, shifted_attention, shifted)
     if length <= 0 or any(values.shape != (length,) for values in arrays):
         raise ValueError(f"{averaged['name']}: invalid seed-mean profile lengths")
     if any(not np.all(np.isfinite(values)) for values in arrays):
@@ -1015,6 +1123,7 @@ def audit_seed_average_profile(
     amplification_identity_error = _max_abs(
         amplification - length * attention
     )
+    shifted_attention_sum_error = abs(float(np.sum(shifted_attention)) - 1.0)
     if not math.isclose(
         float(np.sum(attention)),
         1.0,
@@ -1045,11 +1154,22 @@ def audit_seed_average_profile(
             f"{averaged['name']}: mean_seed(G_j) != "
             f"L*mean_seed(B_j); max error={amplification_identity_error}"
         )
+    if not math.isclose(
+        float(np.sum(shifted_attention)),
+        1.0,
+        abs_tol=normalization_atol,
+        rel_tol=normalization_rtol,
+    ):
+        raise ValueError(
+            f"{averaged['name']}: sum(mean_seed(shift(B_j))) != 1; "
+            f"error={shifted_attention_sum_error}"
+        )
     return {
         "mean_uniform_identity_abs_error": uniform_error,
         "mean_attention_sum_abs_error": attention_sum_error,
         "mean_amplification_average_abs_error": amplification_mean_error,
         "mean_amplification_identity_abs_error": amplification_identity_error,
+        "mean_shifted_attention_sum_abs_error": shifted_attention_sum_error,
     }
 
 
@@ -1105,6 +1225,7 @@ def generate_seed_averaged_profiles(
         "max_mean_attention_sum_abs_error": 0.0,
         "max_mean_amplification_average_abs_error": 0.0,
         "max_mean_amplification_identity_abs_error": 0.0,
+        "max_mean_shifted_attention_sum_abs_error": 0.0,
         "tolerances": {
             "normalization_atol": normalization_atol,
             "normalization_rtol": normalization_rtol,
@@ -1222,6 +1343,10 @@ def generate_seed_averaged_profiles(
                                 "mean_amplification_identity_abs_error",
                                 "max_mean_amplification_identity_abs_error",
                             ),
+                            (
+                                "mean_shifted_attention_sum_abs_error",
+                                "max_mean_shifted_attention_sum_abs_error",
+                            ),
                         ):
                             audit[destination_key] = max(
                                 audit[destination_key], profile_audit[source_key]
@@ -1328,7 +1453,14 @@ def write_parameters(
             "uniform_signed_influence": "I_j_uniform = s_j / L",
             "attention_amplification": "G_j = L * B_j",
             "decomposition": "I_j_observed = I_j_uniform * G_j",
+            "shifted_attention_control": (
+                "I_j_shifted = s_j * circular_shift(B_j); each nontrivial "
+                "protein/condition receives a reproducible nonzero offset "
+                "independent of s_j and B_j values, shared across model seeds "
+                "to preserve cross-seed comparability"
+            ),
         },
+        "shift_random_seed": args.shift_random_seed,
         "tolerances": {
             "identity_atol": args.identity_atol,
             "identity_rtol": args.identity_rtol,
@@ -1437,6 +1569,7 @@ def main() -> None:
         g_uniform_atol=args.g_uniform_atol,
         g_uniform_rtol=args.g_uniform_rtol,
         max_proteins_per_file=args.max_proteins_per_file,
+        shift_random_seed=args.shift_random_seed,
     )
     averaged_manifest, averaging_audit = generate_seed_averaged_profiles(
         profile_manifest,
