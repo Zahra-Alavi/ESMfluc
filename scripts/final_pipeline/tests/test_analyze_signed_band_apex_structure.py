@@ -1,5 +1,7 @@
 import types
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -10,6 +12,7 @@ from signed_band_analysis.analyze_signed_band_apex_structure import (
     clustered_ols,
     design_matrix,
     matched_effects,
+    union_group_network_inference,
 )
 
 
@@ -32,13 +35,14 @@ class BandApexStructureTests(unittest.TestCase):
             "rsa": np.linspace(0, 0.9, 10),
         })
         case = types.SimpleNamespace(
-            protein="p", condition="c", q3="C", neq=1.5, rsa=0.5,
+            protein="p", condition="c", split="test", band_id="b1",
+            q3="C", neq=1.5, rsa=0.5,
             normalized_position=5 / 9, eligible_start_index_0based=0,
             eligible_end_index_0based_exclusive=10,
         )
         args = types.SimpleNamespace(
             position_caliper=0.5, neq_caliper=1.0, rsa_caliper=1.0,
-            max_controls_per_apex=5,
+            max_controls_per_apex=5, random_seed=123,
         )
         selected = candidate_control_pool(case, {"p": residues}, masks, "q3_only", args)
         self.assertTrue((selected.q3 == "C").all())
@@ -60,13 +64,14 @@ class BandApexStructureTests(unittest.TestCase):
             "rsa": [0.2] * 10,
         })
         case = types.SimpleNamespace(
-            protein="p", condition="c", q3="C", neq=1.0, rsa=0.2,
+            protein="p", condition="c", split="test", band_id="b1",
+            q3="C", neq=1.0, rsa=0.2,
             normalized_position=4 / 9, eligible_start_index_0based=0,
             eligible_end_index_0based_exclusive=10,
         )
         args = types.SimpleNamespace(
             position_caliper=0.12, neq_caliper=0.25, rsa_caliper=0.15,
-            max_controls_per_apex=5,
+            max_controls_per_apex=5, random_seed=123,
         )
         q3_only = candidate_control_pool(case, {"p": residues}, masks, "q3_only", args)
         final = candidate_control_pool(
@@ -147,6 +152,32 @@ class BandApexStructureTests(unittest.TestCase):
         self.assertAlmostEqual(
             fit["coefficient_R_per_1sd_X"], explicit_beta, places=10,
         )
+
+    def test_union_group_network_inference_uses_group_means(self):
+        by_protein = pd.DataFrame({
+            "condition": ["c"] * 4, "split": ["test"] * 4,
+            "protein": ["p1", "p2", "p3", "p4"], "sign": [1] * 4,
+            "match_model": ["q3_neq_rsa_position"] * 4,
+            "feature": ["contact_degree"] * 4,
+            "apex_minus_control": [1.0, 3.0, 5.0, 7.0],
+        })
+        manifest = pd.DataFrame({
+            "name": ["p1", "p2", "p3", "p4"], "split": ["test"] * 4,
+            "union_group_id": ["g1", "g1", "g2", "g3"],
+        })
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "groups.csv"
+            manifest.to_csv(path, index=False)
+            args = types.SimpleNamespace(
+                group_manifest_csv=str(path), random_seed=123,
+                n_bootstrap=200, n_sign_flips=100,
+                minimum_inference_proteins=2,
+            )
+            result = union_group_network_inference(by_protein, args)
+        row = result.iloc[0]
+        self.assertEqual(row.n_union_groups, 3)
+        self.assertAlmostEqual(row.union_group_mean_effect, (2 + 5 + 7) / 3)
+        self.assertEqual(row.primary_p_two_sided, row.union_group_p_two_sided)
 
 
 if __name__ == "__main__":

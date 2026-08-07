@@ -45,7 +45,9 @@ try:
     )
     from signed_band_analysis.analyze_signed_band_biophysical_enrichment import (
         MATCH_SCHEMES as PHASE2_MATCH_SCHEMES,
+        add_primary_pvalue_family,
         bootstrap_mean_ci,
+        deterministic_tie_values,
         sign_flip_test,
     )
 except ModuleNotFoundError:  # supports direct execution from this directory
@@ -59,7 +61,9 @@ except ModuleNotFoundError:  # supports direct execution from this directory
     )
     from analyze_signed_band_biophysical_enrichment import (  # type: ignore
         MATCH_SCHEMES as PHASE2_MATCH_SCHEMES,
+        add_primary_pvalue_family,
         bootstrap_mean_ci,
+        deterministic_tie_values,
         sign_flip_test,
     )
 
@@ -93,6 +97,14 @@ IMPORTANCE_MODELS = {
     ],
 }
 
+HEADLINE_NETWORK_FEATURES = (
+    "contact_degree",
+    "ca_packing_index",
+    "betweenness",
+    "closeness",
+    "participation_coefficient",
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -118,6 +130,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n_sign_flips", type=int, default=10000)
     parser.add_argument("--n_bootstrap", type=int, default=2000)
     parser.add_argument("--random_seed", type=int, default=123)
+    parser.add_argument(
+        "--group_manifest_csv",
+        default="data_splits/atlas_grouped_v1/split_manifest_grouped_v1.csv",
+        help="Manifest containing name, split, and union_group_id.",
+    )
     args = parser.parse_args()
     if args.detection_threshold_R_p <= 0:
         parser.error("--detection_threshold_R_p must be positive")
@@ -401,9 +418,16 @@ def candidate_control_pool(
             pool.delta_position.to_numpy(float) / args.position_caliper
         ) ** 2
     pool["match_distance"] = np.sqrt(distance_squared)
-    ordered = pool.sort_values(
-        ["match_distance", "residue_index_0based"], kind="mergesort"
+    pool["tie_break"] = deterministic_tie_values(
+        random_seed=args.random_seed,
+        condition=str(case.condition),
+        split=str(case.split),
+        protein=str(case.protein),
+        band_id=str(case.band_id),
+        match_scheme=model,
+        candidate_indices=pool.residue_index_0based.to_numpy(int),
     )
+    ordered = pool.sort_values(["match_distance", "tie_break"], kind="mergesort")
     return ordered if settings["use_all_controls"] else ordered.head(
         args.max_controls_per_apex
     )
@@ -560,6 +584,61 @@ def matched_effects(
         ["match_model", "sign"], group_keys=False
     ).sign_flip_p_two_sided.apply(bh)
     return by_protein, summary
+
+
+def union_group_network_inference(
+    by_protein: pd.DataFrame, args,
+) -> pd.DataFrame:
+    """Equal-union-group sensitivity intervals for strict network effects."""
+    if by_protein.empty:
+        return pd.DataFrame()
+    manifest = pd.read_csv(args.group_manifest_csv)
+    required = {"name", "split", "union_group_id"}
+    missing = required - set(manifest)
+    if missing:
+        raise ValueError(f"Group manifest lacks required columns: {sorted(missing)}")
+    mapping = manifest[["name", "split", "union_group_id"]].rename(
+        columns={"name": "protein"}
+    )
+    if mapping.duplicated(["protein", "split"]).any():
+        raise ValueError("Group manifest has duplicate protein/split keys")
+    selected = by_protein[
+        by_protein.match_model.eq("q3_neq_rsa_position")
+        & by_protein.feature.isin(HEADLINE_NETWORK_FEATURES)
+    ].copy()
+    selected = selected.merge(
+        mapping, on=["protein", "split"], how="left", validate="many_to_one"
+    )
+    if selected.union_group_id.isna().any():
+        raise ValueError("At least one apex-structure protein lacks a union group")
+    keys = ["condition", "split", "sign", "match_model", "feature"]
+    group_effects = selected.groupby(
+        [*keys, "union_group_id"], as_index=False
+    ).agg(
+        group_effect=("apex_minus_control", "mean"),
+        proteins_in_group=("protein", "nunique"),
+    )
+    rng = np.random.default_rng(args.random_seed + 4001)
+    rows = []
+    for key, frame in group_effects.groupby(keys, sort=False):
+        values = frame.group_effect.to_numpy(float)
+        low, high = bootstrap_mean_ci(values, args.n_bootstrap, rng)
+        z = p_two = np.nan
+        if len(values) >= args.minimum_inference_proteins:
+            _, z, _, _, p_two = sign_flip_test(values, args.n_sign_flips, rng)
+        rows.append({
+            **dict(zip(keys, key)),
+            "n_union_groups": int(len(values)),
+            "n_proteins": int(frame.proteins_in_group.sum()),
+            "union_group_mean_effect": float(np.mean(values)),
+            "union_group_ci95_low": low,
+            "union_group_ci95_high": high,
+            "union_group_sign_flip_z": z,
+            "union_group_p_two_sided": p_two,
+        })
+    return add_primary_pvalue_family(
+        pd.DataFrame(rows), source="union_group_p_two_sided"
+    )
 
 
 def design_matrix(group: pd.DataFrame, feature: str, adjustments: list[str]):
@@ -798,6 +877,7 @@ def main() -> None:
     print("Summarizing matched structural effects...", file=sys.stderr)
     coverage_balance = match_coverage_balance(apex, controls)
     by_protein, effect_summary = matched_effects(apex, controls, args)
+    group_inference = union_group_network_inference(by_protein, args)
     print("Fitting R ~ X nested fixed-effect models...", file=sys.stderr)
     associations = importance_associations(apex, args)
     coverage = feature_coverage(apex)
@@ -820,6 +900,9 @@ def main() -> None:
     )
     effect_summary.to_csv(
         output / "matched_apex_control_effect_summary.csv", index=False,
+    )
+    group_inference.to_csv(
+        output / "headline_union_group_network_inference.csv", index=False,
     )
     coverage_balance.to_csv(output / "match_coverage_balance.csv", index=False)
     associations.to_csv(output / "importance_R_structure_X_associations.csv", index=False)
@@ -857,8 +940,13 @@ def main() -> None:
             "matched effects are averaged within protein, tested with protein-level "
             "sign flips, and assigned protein-bootstrap confidence intervals; "
             "importance models use protein fixed effects and protein-clustered "
-            "standard errors"
+            "standard errors. The sole primary structural family is the 60 "
+            "strict-match union-group tests (6 conditions x 2 signs x 5 headline "
+            "network features), with one BH correction across that table. Other "
+            "p-values are diagnostic or exploratory."
         ),
+        "group_manifest_csv": str(Path(args.group_manifest_csv).expanduser().resolve()),
+        "headline_union_group_features": list(HEADLINE_NETWORK_FEATURES),
         "minimum_inference_proteins": args.minimum_inference_proteins,
         "n_sign_flips": args.n_sign_flips,
         "n_bootstrap": args.n_bootstrap,
@@ -870,6 +958,7 @@ def main() -> None:
         "structure_resolved_apices": int(apex.structure_resolved.fillna(False).sum()),
         "matched_control_rows": len(controls),
         "matched_effect_summary_rows": len(effect_summary),
+        "headline_union_group_rows": len(group_inference),
         "importance_association_rows": len(associations),
         "audit_status": audit["status"],
         "output_dir": str(output),
