@@ -17,6 +17,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--annotation_dir", required=True)
     parser.add_argument("--enrichment_dir", required=True)
     parser.add_argument("--output_json", required=True)
+    parser.add_argument(
+        "--splits",
+        nargs="+",
+        choices=("train", "validation", "test"),
+        default=None,
+        help=(
+            "Dataset splits included in the enrichment run. The annotation "
+            "files may still contain all splits; completeness expectations "
+            "are restricted to the splits listed here."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -70,6 +81,43 @@ def main() -> None:
         if strain_audit_path.exists():
             strain_audit = pd.read_csv(strain_audit_path)
     checks = []
+
+    requested_splits = set(args.splits or annotated["split"].astype(str).unique())
+    scoped_annotated = annotated[
+        annotated["split"].astype(str).isin(requested_splits)
+    ].copy()
+    scoped_protein_summary = protein_summary[
+        protein_summary["split"].astype(str).isin(requested_splits)
+    ].copy()
+
+    scoped_outputs = {
+        "enrichment_summary": summary,
+        "null": null,
+        "per_protein_metrics": per_protein,
+        "paired_contrasts": contrasts,
+        "coverage_by_protein": phase1_protein,
+        "coverage_summary": phase1_summary,
+        "matched_controls": matched_controls,
+        "matched_cases": matched_cases,
+        "match_coverage": match_coverage,
+        "match_balance": match_balance,
+        "matched_effects_by_protein": matched_protein,
+        "matched_summary": matched_summary,
+    }
+    output_split_details = {
+        name: sorted(frame["split"].astype(str).unique().tolist())
+        for name, frame in scoped_outputs.items()
+        if "split" in frame.columns
+    }
+    check(
+        "analysis_outputs_match_requested_splits",
+        all(set(splits) == requested_splits for splits in output_split_details.values()),
+        {
+            "requested": sorted(requested_splits),
+            "observed_by_output": output_split_details,
+        },
+        checks,
+    )
 
     check("original_band_ids_unique", not original.band_id.duplicated().any(), len(original), checks)
     check("annotated_band_ids_unique", not annotated.band_id.duplicated().any(), len(annotated), checks)
@@ -183,7 +231,9 @@ def main() -> None:
 
     n_permutations = int(parameters["n_block_shifts"])
     metric_count = len(parameters["metrics"])
-    strata_count = annotated[["condition", "split", "sign", "label"]].drop_duplicates().shape[0]
+    strata_count = scoped_annotated[
+        ["condition", "split", "sign", "label"]
+    ].drop_duplicates().shape[0]
     expected_summary_rows = strata_count * metric_count
     expected_null_rows = expected_summary_rows * n_permutations
     check(
@@ -270,14 +320,16 @@ def main() -> None:
         "detection_method",
     ]
     n_phase1_methods_per_sign = 9  # Q8 residue 2 + Neq residue 5 + Q8 segment 2.
-    expected_phase1_rows = len(protein_summary) * 2 * n_phase1_methods_per_sign
+    expected_phase1_rows = (
+        len(scoped_protein_summary) * 2 * n_phase1_methods_per_sign
+    )
     if strain_requested and not strain_audit.empty:
         ok_proteins = set(
             strain_audit.loc[strain_audit.strain_status == "ok", "protein"].astype(str)
         )
-        strain_contexts = protein_summary[
-            (protein_summary["split"].astype(str) == "test")
-            & protein_summary["protein"].astype(str).isin(ok_proteins)
+        strain_contexts = scoped_protein_summary[
+            (scoped_protein_summary["split"].astype(str) == "test")
+            & scoped_protein_summary["protein"].astype(str).isin(ok_proteins)
         ]
         expected_phase1_rows += len(strain_contexts) * 2 * 5
     check(
@@ -325,7 +377,10 @@ def main() -> None:
             {"strain_metrics": strain_metrics},
             checks,
         )
-    expected_contexts = set(map(tuple, protein_summary[["condition", "split", "protein"]].to_numpy()))
+    expected_contexts = set(map(
+        tuple,
+        scoped_protein_summary[["condition", "split", "protein"]].to_numpy(),
+    ))
     observed_contexts = set(map(tuple, phase1_protein[["condition", "split", "protein"]].drop_duplicates().to_numpy()))
     check(
         "phase1_zero_band_proteins_retained",
@@ -740,6 +795,7 @@ def main() -> None:
         "passed": len(failures) == 0,
         "n_checks": len(checks),
         "n_failures": len(failures),
+        "analysis_scope": {"splits": sorted(requested_splits)},
         "checks": checks,
         "strain_status": (
             strain_audit.strain_status.value_counts().to_dict()

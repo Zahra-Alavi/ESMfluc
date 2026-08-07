@@ -46,13 +46,17 @@ BASE_FEATURES = [
     "mean_neq", "max_neq", "mean_rsa", "max_rsa",
     "log_segment_length", "normalized_midpoint",
 ]
-GEOMETRY_FEATURES = [
+LOCAL_ANNOTATION_FEATURES = [
     "mean_torsion_change", "max_torsion_change",
     "q3_boundary_fraction", "mean_distance_to_q3_boundary",
-    "structured_linker_fraction", "mean_ca_curvature_degrees",
+    "structured_linker_fraction",
+]
+PDB_GEOMETRY_FEATURES = [
+    "mean_ca_curvature_degrees",
     "max_ca_curvature_degrees", "mean_abs_ca_virtual_torsion_degrees",
     "max_abs_ca_virtual_torsion_degrees", "ca_end_to_end_ratio",
 ]
+GEOMETRY_FEATURES = LOCAL_ANNOTATION_FEATURES + PDB_GEOMETRY_FEATURES
 NETWORK_FEATURES = [
     "mean_contact_degree", "max_contact_degree",
     "mean_inverse_distance_weighted_degree",
@@ -69,7 +73,7 @@ STRAIN_FEATURES = [
     "mean_strain_spatial_gradient", "max_strain_spatial_gradient",
 ]
 EXTERNAL_FEATURE_GROUPS = {
-    "experimental_geometry": GEOMETRY_FEATURES[-5:],
+    "experimental_geometry": PDB_GEOMETRY_FEATURES,
     "contact_network": NETWORK_FEATURES,
     "inter_domain_geometry": DOMAIN_FEATURES,
     "mechanical_strain_test_only": STRAIN_FEATURES,
@@ -77,9 +81,12 @@ EXTERNAL_FEATURE_GROUPS = {
 STAGES = {
     "00_q8_only": [],
     "01_base_biophysics": BASE_FEATURES,
-    "02_add_experimental_geometry": BASE_FEATURES + GEOMETRY_FEATURES,
-    "03_add_contact_network": BASE_FEATURES + GEOMETRY_FEATURES + NETWORK_FEATURES,
-    "04_add_inter_domain": (
+    "02_add_local_sequence_or_annotation_geometry": (
+        BASE_FEATURES + LOCAL_ANNOTATION_FEATURES
+    ),
+    "03_add_experimental_pdb_geometry": BASE_FEATURES + GEOMETRY_FEATURES,
+    "04_add_contact_network": BASE_FEATURES + GEOMETRY_FEATURES + NETWORK_FEATURES,
+    "05_add_ecod_domain": (
         BASE_FEATURES + GEOMETRY_FEATURES + NETWORK_FEATURES + DOMAIN_FEATURES
     ),
 }
@@ -419,6 +426,118 @@ def segment_path_ratio(coordinates, start: int, end: int) -> float:
     return float(np.linalg.norm(points[-1] - points[0]) / path) if path > 0 else np.nan
 
 
+def coordinate_valid_mask(coordinates, length: int) -> np.ndarray:
+    """Return which model-sequence positions have finite 3D C-alpha coordinates."""
+    valid = np.zeros(length, dtype=bool)
+    if coordinates is None or len(coordinates) != length:
+        return valid
+    for index, point in enumerate(coordinates):
+        if point is None:
+            continue
+        values = np.asarray(point, dtype=float)
+        valid[index] = values.shape == (3,) and bool(np.all(np.isfinite(values)))
+    return valid
+
+
+def segment_coordinate_completeness(
+    *,
+    coordinates,
+    resolved_mask,
+    curvature_values,
+    torsion_values,
+    contact_degree_values,
+    start: int,
+    end: int,
+    mapping_accepted: bool,
+) -> dict:
+    """Audit coordinate and derived-feature completeness for one segment.
+
+    Curvature is mathematically intended only at protein positions 1..L-2 and
+    virtual torsion only at 1..L-3 (zero-based). A segment touching a true
+    protein terminus is therefore not penalized for nonexistent outside-chain
+    residues. Empty intended-position sets are complete by vacuous truth, while
+    their finite fractions are reported as missing because no value is defined.
+    End-to-end geometry additionally requires a segment of at least two residues.
+    """
+    length = len(resolved_mask)
+    if not (0 <= start < end <= length):
+        raise ValueError(f"Invalid segment [{start}, {end}) for protein length {length}")
+    resolved = np.asarray(resolved_mask, dtype=bool)
+    coordinate_valid = coordinate_valid_mask(coordinates, length)
+    curvature = np.asarray(curvature_values, dtype=float)
+    torsion = np.asarray(torsion_values, dtype=float)
+    degree = np.asarray(contact_degree_values, dtype=float)
+    if any(len(values) != length for values in (curvature, torsion, degree)):
+        raise ValueError("Per-residue feature arrays must match protein length")
+
+    segment_positions = np.arange(start, end, dtype=int)
+    curvature_positions = np.arange(max(start, 1), min(end, length - 1), dtype=int)
+    torsion_positions = np.arange(max(start, 1), min(end, length - 2), dtype=int)
+
+    curvature_requirements = [
+        bool(np.all(coordinate_valid[index - 1:index + 2]))
+        for index in curvature_positions
+    ]
+    torsion_requirements = [
+        bool(np.all(coordinate_valid[index - 1:index + 3]))
+        for index in torsion_positions
+    ]
+    n_finite_curvature = int(np.isfinite(curvature[curvature_positions]).sum())
+    n_finite_torsion = int(np.isfinite(torsion[torsion_positions]).sum())
+    n_finite_degree = int(np.isfinite(degree[segment_positions]).sum())
+    n_curvature_intended = len(curvature_positions)
+    n_torsion_intended = len(torsion_positions)
+    n_segment = len(segment_positions)
+
+    segment_ca_complete = bool(
+        mapping_accepted
+        and np.all(resolved[segment_positions])
+        and np.all(coordinate_valid[segment_positions])
+    )
+    curvature_complete = bool(mapping_accepted and all(curvature_requirements))
+    torsion_complete = bool(mapping_accepted and all(torsion_requirements))
+    end_to_end_complete = bool(
+        mapping_accepted and n_segment >= 2 and np.all(coordinate_valid[segment_positions])
+    )
+    network_complete = bool(
+        mapping_accepted
+        and np.all(resolved[segment_positions])
+        and n_finite_degree == n_segment
+    )
+    experimental_complete = bool(
+        segment_ca_complete
+        and curvature_complete
+        and torsion_complete
+        and end_to_end_complete
+    )
+    return {
+        "n_segment_residues": n_segment,
+        "n_resolved_segment_residues": int(resolved[segment_positions].sum()),
+        "n_coordinate_resolved_segment_residues": int(
+            coordinate_valid[segment_positions].sum()
+        ),
+        "n_intended_curvature_values": n_curvature_intended,
+        "n_finite_curvature_values": n_finite_curvature,
+        "curvature_finite_fraction": (
+            n_finite_curvature / n_curvature_intended
+            if n_curvature_intended else np.nan
+        ),
+        "n_intended_torsion_values": n_torsion_intended,
+        "n_finite_torsion_values": n_finite_torsion,
+        "torsion_finite_fraction": (
+            n_finite_torsion / n_torsion_intended if n_torsion_intended else np.nan
+        ),
+        "n_finite_contact_degree_values": n_finite_degree,
+        "contact_degree_finite_fraction": n_finite_degree / n_segment,
+        "segment_ca_fully_resolved": segment_ca_complete,
+        "curvature_coordinate_complete": curvature_complete,
+        "torsion_coordinate_complete": torsion_complete,
+        "end_to_end_coordinate_complete": end_to_end_complete,
+        "network_coordinate_complete": network_complete,
+        "experimental_geometry_complete": experimental_complete,
+    }
+
+
 def aggregate_segments(candidates: pd.DataFrame, records: dict, ecod, args) -> pd.DataFrame:
     protein_arrays = {}
     split_by_protein = dict(
@@ -464,6 +583,27 @@ def aggregate_segments(candidates: pd.DataFrame, records: dict, ecod, args) -> p
             "mapping_status": None, "alignment_identity": np.nan,
             "protein_structure_coverage": np.nan, "segment_resolved_fraction": np.nan,
             "segment_structure_eligible": False, "strain_status": "structure_unavailable",
+            "n_segment_residues": end - start,
+            "n_resolved_segment_residues": 0,
+            "n_coordinate_resolved_segment_residues": 0,
+            "n_intended_curvature_values": max(
+                0, min(end, int(row["protein_length"]) - 1) - max(start, 1)
+            ),
+            "n_finite_curvature_values": 0,
+            "curvature_finite_fraction": np.nan,
+            "n_intended_torsion_values": max(
+                0, min(end, int(row["protein_length"]) - 2) - max(start, 1)
+            ),
+            "n_finite_torsion_values": 0,
+            "torsion_finite_fraction": np.nan,
+            "n_finite_contact_degree_values": 0,
+            "contact_degree_finite_fraction": 0.0,
+            "segment_ca_fully_resolved": False,
+            "curvature_coordinate_complete": False,
+            "torsion_coordinate_complete": False,
+            "end_to_end_coordinate_complete": False,
+            "network_coordinate_complete": False,
+            "experimental_geometry_complete": False,
         })
         for feature in sum(EXTERNAL_FEATURE_GROUPS.values(), []):
             row[feature] = np.nan
@@ -472,6 +612,16 @@ def aggregate_segments(candidates: pd.DataFrame, records: dict, ecod, args) -> p
             record = arrays["record"]
             alignment = record["alignment"]
             resolved_fraction = safe_mean(arrays["resolved"][start:end])
+            completeness = segment_coordinate_completeness(
+                coordinates=arrays["coordinates"],
+                resolved_mask=np.asarray(arrays["resolved"], dtype=bool),
+                curvature_values=arrays["ca_curvature_degrees"],
+                torsion_values=arrays["abs_ca_virtual_torsion_degrees"],
+                contact_degree_values=arrays["contact_degree"],
+                start=start,
+                end=end,
+                mapping_accepted=True,
+            )
             row.update({
                 "mapping_status": record.get("mapping_status"),
                 "alignment_identity": alignment.get("identity"),
@@ -509,6 +659,7 @@ def aggregate_segments(candidates: pd.DataFrame, records: dict, ecod, args) -> p
                     if np.isfinite(arrays["strain"][start:end]).sum() > 1 else np.nan,
                 "mean_strain_spatial_gradient": safe_mean(arrays["strain_spatial_gradient"][start:end]),
                 "max_strain_spatial_gradient": safe_max(arrays["strain_spatial_gradient"][start:end]),
+                **completeness,
             })
         rows.append(row)
     return pd.DataFrame(rows)
@@ -522,9 +673,26 @@ def analysis_rows(candidates: pd.DataFrame, sign: int) -> pd.DataFrame:
     cases["selected"], controls["selected"] = 1, 0
     data = pd.concat([cases, controls], ignore_index=True)
     data["sign"] = sign
+    return reconstruct_matched_strata(data)
+
+
+def reconstruct_matched_strata(data: pd.DataFrame) -> pd.DataFrame:
+    """Retain only protein/Q8/sign strata containing both cases and controls."""
+    if data.empty:
+        return data.copy()
     keys = ["condition", "split", "protein", "q8", "sign"]
     counts = data.groupby(keys + ["selected"]).size().unstack(fill_value=0)
-    valid = counts[(counts.get(0, 0) > 0) & (counts.get(1, 0) > 0)].reset_index()[keys]
+    control_counts = (
+        counts[0] if 0 in counts.columns
+        else pd.Series(0, index=counts.index, dtype=int)
+    )
+    selected_counts = (
+        counts[1] if 1 in counts.columns
+        else pd.Series(0, index=counts.index, dtype=int)
+    )
+    valid = counts[(control_counts > 0) & (selected_counts > 0)].reset_index()[keys]
+    if valid.empty:
+        return data.iloc[0:0].copy()
     return data.merge(valid, on=keys, how="inner")
 
 
@@ -604,7 +772,10 @@ def within_stratum_concordance(frame: pd.DataFrame, scores: np.ndarray) -> tuple
 
 
 def sequential_models(data: pd.DataFrame, args) -> pd.DataFrame:
-    data = add_weights(data[data.segment_structure_eligible].copy())
+    data = reconstruct_matched_strata(
+        data[data.segment_structure_eligible].copy()
+    )
+    data = add_weights(data)
     rows = []
     for condition in sorted(data.condition.unique()):
         for sign in (-1, 1):

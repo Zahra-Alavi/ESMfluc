@@ -15,10 +15,9 @@ bands:
    structural feature X? The fitted response is
        R = log2(R_p / detection_threshold) ~ X + adjustments.
 
-Three nested adjustment/matching models are reported:
-M1: protein, normalized position, and seed-stability;
-M2: M1 plus Q3;
-M3: M2 plus N_eq and RSA.
+The matched comparison uses the same four nested control schemes as Phase 2:
+Q3 only; Q3 plus N_eq; Q3 plus N_eq and RSA; and a final sensitivity that also
+matches normalized sequence position.
 Q8 is never used to define, match, or model an object.
 """
 
@@ -34,7 +33,6 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 from scipy.stats import t as student_t
-from scipy.stats import wilcoxon
 
 try:
     from signed_band_analysis.analyze_signed_band_external_structure import (
@@ -45,6 +43,11 @@ try:
         graph_features,
         load_contacts,
     )
+    from signed_band_analysis.analyze_signed_band_biophysical_enrichment import (
+        MATCH_SCHEMES as PHASE2_MATCH_SCHEMES,
+        bootstrap_mean_ci,
+        sign_flip_test,
+    )
 except ModuleNotFoundError:  # supports direct execution from this directory
     from analyze_signed_band_external_structure import (  # type: ignore
         audit_contacts,
@@ -53,6 +56,11 @@ except ModuleNotFoundError:  # supports direct execution from this directory
         contact_edges,
         graph_features,
         load_contacts,
+    )
+    from analyze_signed_band_biophysical_enrichment import (  # type: ignore
+        MATCH_SCHEMES as PHASE2_MATCH_SCHEMES,
+        bootstrap_mean_ci,
+        sign_flip_test,
     )
 
 
@@ -73,25 +81,15 @@ COMPLETE_STRUCTURE_FEATURES = [
 ]
 
 MATCH_MODELS = {
-    "M1_protein_position": {
-        "exact_q3": False, "use_neq_rsa": False,
-        "description": "same protein; nearest position within the position caliper",
-    },
-    "M2_add_q3": {
-        "exact_q3": True, "use_neq_rsa": False,
-        "description": "same protein and Q3; nearest position within the position caliper",
-    },
-    "M3_add_neq_rsa": {
-        "exact_q3": True, "use_neq_rsa": True,
-        "description": "same protein and Q3; caliper-match N_eq, RSA, and position",
-    },
+    name: dict(settings) for name, settings in PHASE2_MATCH_SCHEMES.items()
 }
 
 IMPORTANCE_MODELS = {
-    "M1_position_stability": ["normalized_position", "strict_3_of_3"],
-    "M2_add_q3": ["normalized_position", "strict_3_of_3", "q3"],
-    "M3_add_neq_rsa": [
-        "normalized_position", "strict_3_of_3", "q3", "neq", "rsa",
+    "A1_q3_stability": ["strict_3_of_3", "q3"],
+    "A2_add_neq": ["strict_3_of_3", "q3", "neq"],
+    "A3_add_rsa": ["strict_3_of_3", "q3", "neq", "rsa"],
+    "A4_add_position": [
+        "strict_3_of_3", "q3", "neq", "rsa", "normalized_position",
     ],
 }
 
@@ -109,14 +107,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--conditions", nargs="*", default=None)
     parser.add_argument("--detection_threshold_R_p", type=float, default=2.0)
     parser.add_argument("--max_controls_per_apex", type=int, default=5)
-    parser.add_argument("--position_caliper", type=float, default=0.20)
-    parser.add_argument("--neq_caliper", type=float, default=0.35)
-    parser.add_argument("--rsa_caliper", type=float, default=0.20)
+    parser.add_argument("--position_caliper", type=float, default=0.25)
+    parser.add_argument("--neq_caliper", type=float, default=0.25)
+    parser.add_argument("--rsa_caliper", type=float, default=0.15)
     parser.add_argument("--min_mapping_identity", type=float, default=0.90)
     parser.add_argument("--min_input_coverage", type=float, default=0.80)
     parser.add_argument("--min_contact_sequence_separation", type=int, default=3)
     parser.add_argument("--betweenness_samples", type=int, default=64)
     parser.add_argument("--minimum_inference_proteins", type=int, default=10)
+    parser.add_argument("--n_sign_flips", type=int, default=10000)
+    parser.add_argument("--n_bootstrap", type=int, default=2000)
     parser.add_argument("--random_seed", type=int, default=123)
     args = parser.parse_args()
     if args.detection_threshold_R_p <= 0:
@@ -128,6 +128,8 @@ def parse_args() -> argparse.Namespace:
             parser.error(f"--{name} must be positive")
     if args.minimum_inference_proteins < 2:
         parser.error("--minimum_inference_proteins must be at least 2")
+    if args.n_sign_flips < 1 or args.n_bootstrap < 1:
+        parser.error("--n_sign_flips and --n_bootstrap must be positive")
     return args
 
 
@@ -362,35 +364,49 @@ def candidate_control_pool(
         & (indices < int(case.eligible_end_index_0based_exclusive))
     ].copy()
     settings = MATCH_MODELS[model]
-    if settings["exact_q3"]:
-        if pd.isna(case.q3):
-            return pool.iloc[0:0]
-        pool = pool[pool.q3.astype(str).eq(str(case.q3))].copy()
+    if pd.isna(case.q3):
+        return pool.iloc[0:0]
+    pool = pool[pool.q3.astype(str).eq(str(case.q3))].copy()
     if pool.empty:
         return pool
     pool["delta_position"] = pool.normalized_position - float(case.normalized_position)
     pool["abs_delta_position"] = pool.delta_position.abs()
     pool["delta_neq"] = pd.to_numeric(pool.neq, errors="coerce") - float(case.neq)
     pool["delta_rsa"] = pd.to_numeric(pool.rsa, errors="coerce") - float(case.rsa)
-    if settings["use_neq_rsa"]:
-        if not all(np.isfinite([case.neq, case.rsa, case.normalized_position])):
+    distance_squared = np.zeros(len(pool), dtype=float)
+    if settings["use_neq"]:
+        if not np.isfinite(case.neq):
             return pool.iloc[0:0]
-        pool = pool[
-            pool.abs_delta_position.le(args.position_caliper)
-            & pool.delta_neq.abs().le(args.neq_caliper)
-            & pool.delta_rsa.abs().le(args.rsa_caliper)
-        ].copy()
-        pool["match_distance"] = np.sqrt(
-            (pool.delta_position / args.position_caliper) ** 2
-            + (pool.delta_neq / args.neq_caliper) ** 2
-            + (pool.delta_rsa / args.rsa_caliper) ** 2
-        )
+        keep = pool.delta_neq.abs().le(args.neq_caliper)
+        pool = pool[keep].copy()
+        distance_squared = (
+            pool.delta_neq.to_numpy(float) / args.neq_caliper
+        ) ** 2
     else:
-        pool = pool[pool.abs_delta_position.le(args.position_caliper)].copy()
-        pool["match_distance"] = pool.abs_delta_position
-    return pool.sort_values(
+        distance_squared = np.zeros(len(pool), dtype=float)
+    if settings["use_rsa"]:
+        if not np.isfinite(case.rsa):
+            return pool.iloc[0:0]
+        keep = pool.delta_rsa.abs().le(args.rsa_caliper)
+        pool = pool[keep].copy()
+        distance_squared = distance_squared[keep.to_numpy()] + (
+            pool.delta_rsa.to_numpy(float) / args.rsa_caliper
+        ) ** 2
+    if settings["use_position"]:
+        if not np.isfinite(case.normalized_position):
+            return pool.iloc[0:0]
+        keep = pool.abs_delta_position.le(args.position_caliper)
+        pool = pool[keep].copy()
+        distance_squared = distance_squared[keep.to_numpy()] + (
+            pool.delta_position.to_numpy(float) / args.position_caliper
+        ) ** 2
+    pool["match_distance"] = np.sqrt(distance_squared)
+    ordered = pool.sort_values(
         ["match_distance", "residue_index_0based"], kind="mergesort"
-    ).head(args.max_controls_per_apex)
+    )
+    return ordered if settings["use_all_controls"] else ordered.head(
+        args.max_controls_per_apex
+    )
 
 
 def match_controls(apex: pd.DataFrame, residues: pd.DataFrame, masks, args) -> pd.DataFrame:
@@ -511,33 +527,38 @@ def matched_effects(
         apex_minus_control=("apex_minus_control", "mean"),
     )
     rows = []
+    rng = np.random.default_rng(args.random_seed)
     for keys, group in by_protein.groupby(
         ["condition", "split", "sign", "match_model", "feature"], sort=False,
     ):
         values = group.apex_minus_control.dropna().to_numpy(float)
         n = len(values)
         mean = float(np.mean(values)) if n else np.nan
-        sd = float(np.std(values, ddof=1)) if n > 1 else np.nan
-        se = sd / math.sqrt(n) if n > 1 else np.nan
-        critical = float(student_t.ppf(0.975, n - 1)) if n > 1 else np.nan
-        pvalue = np.nan
-        if n >= args.minimum_inference_proteins and np.any(values != 0):
-            pvalue = float(wilcoxon(values, zero_method="zsplit", method="approx").pvalue)
+        lower, upper = bootstrap_mean_ci(values, args.n_bootstrap, rng)
+        observed = mean
+        sign_flip_z = p_upper = p_lower = p_two = np.nan
+        if n >= args.minimum_inference_proteins:
+            observed, sign_flip_z, p_upper, p_lower, p_two = sign_flip_test(
+                values, args.n_sign_flips, rng
+            )
         rows.append({
             **dict(zip(["condition", "split", "sign", "match_model", "feature"], keys)),
             "n_proteins": n, "n_apices": int(group.n_apices.sum()),
-            "mean_apex_minus_control": mean,
-            "ci95_low": mean - critical * se if np.isfinite(se) else np.nan,
-            "ci95_high": mean + critical * se if np.isfinite(se) else np.nan,
+            "mean_apex_minus_control": observed,
+            "ci95_low": lower, "ci95_high": upper,
+            "bootstrap_ci95_low": lower, "bootstrap_ci95_high": upper,
             "median_apex_minus_control": float(np.median(values)) if n else np.nan,
-            "wilcoxon_p_two_sided": pvalue,
+            "sign_flip_z": sign_flip_z,
+            "sign_flip_p_upper": p_upper,
+            "sign_flip_p_lower": p_lower,
+            "sign_flip_p_two_sided": p_two,
             "inference_eligible": n >= args.minimum_inference_proteins,
         })
     summary = pd.DataFrame(rows)
-    summary["wilcoxon_q_bh_global"] = bh(summary.wilcoxon_p_two_sided)
-    summary["wilcoxon_q_bh_within_model_sign"] = summary.groupby(
+    summary["sign_flip_q_bh_global"] = bh(summary.sign_flip_p_two_sided)
+    summary["sign_flip_q_bh_within_model_sign"] = summary.groupby(
         ["match_model", "sign"], group_keys=False
-    ).wilcoxon_p_two_sided.apply(bh)
+    ).sign_flip_p_two_sided.apply(bh)
     return by_protein, summary
 
 
@@ -728,17 +749,30 @@ def integrity_audit(
         checks["controls_differ_from_apex"] = bool(
             (controls.control_index_0based != controls.apex_index_0based).all()
         )
-        checks["all_controls_within_position_caliper"] = bool(
-            controls.delta_position_control_minus_apex.abs().le(
+        position = controls[controls.match_model.eq("q3_neq_rsa_position")]
+        checks["position_caliper_where_required"] = bool(
+            position.delta_position_control_minus_apex.abs().le(
                 args.position_caliper + 1e-12
             ).all()
         )
-        exact = controls[controls.match_model.isin(["M2_add_q3", "M3_add_neq_rsa"])]
-        checks["q3_exact_where_required"] = bool(
-            (exact.apex_q3.astype(str) == exact.control_q3.astype(str)).all()
+        checks["q3_exact_for_all_controls"] = bool(
+            (controls.apex_q3.astype(str) == controls.control_q3.astype(str)).all()
         )
+        neq = controls[controls.match_model.isin([
+            "q3_neq", "q3_neq_rsa", "q3_neq_rsa_position",
+        ])]
+        checks["neq_caliper_where_required"] = bool(
+            neq.delta_neq_control_minus_apex.abs().le(args.neq_caliper + 1e-12).all()
+        )
+        rsa = controls[controls.match_model.isin([
+            "q3_neq_rsa", "q3_neq_rsa_position",
+        ])]
+        checks["rsa_caliper_where_required"] = bool(
+            rsa.delta_rsa_control_minus_apex.abs().le(args.rsa_caliper + 1e-12).all()
+        )
+        capped = controls[~controls.match_model.eq("q3_only")]
         checks["max_controls_respected"] = bool(
-            controls.groupby(["band_id", "match_model"]).size().max()
+            capped.empty or capped.groupby(["band_id", "match_model"]).size().max()
             <= args.max_controls_per_apex
         )
     return {
@@ -820,10 +854,14 @@ def main() -> None:
             "neq": args.neq_caliper, "rsa": args.rsa_caliper,
         },
         "inference": (
-            "matched effects are averaged within protein; importance models use "
-            "protein fixed effects and protein-clustered standard errors"
+            "matched effects are averaged within protein, tested with protein-level "
+            "sign flips, and assigned protein-bootstrap confidence intervals; "
+            "importance models use protein fixed effects and protein-clustered "
+            "standard errors"
         ),
         "minimum_inference_proteins": args.minimum_inference_proteins,
+        "n_sign_flips": args.n_sign_flips,
+        "n_bootstrap": args.n_bootstrap,
         "random_seed": args.random_seed,
     }
     (output / "parameters.json").write_text(json.dumps(parameters, indent=2) + "\n")

@@ -9,6 +9,7 @@ from signed_band_analysis.analyze_signed_band_apex_structure import (
     candidate_control_pool,
     clustered_ols,
     design_matrix,
+    matched_effects,
 )
 
 
@@ -39,12 +40,71 @@ class BandApexStructureTests(unittest.TestCase):
             position_caliper=0.5, neq_caliper=1.0, rsa_caliper=1.0,
             max_controls_per_apex=5,
         )
-        selected = candidate_control_pool(
-            case, {"p": residues}, masks, "M2_add_q3", args,
-        )
+        selected = candidate_control_pool(case, {"p": residues}, masks, "q3_only", args)
         self.assertTrue((selected.q3 == "C").all())
         self.assertTrue(set(selected.residue_index_0based).isdisjoint({2, 3, 6, 7}))
-        self.assertTrue((selected.abs_delta_position <= args.position_caliper).all())
+
+    def test_phase2_nested_matching_adds_position_only_in_final_scheme(self):
+        bands = pd.DataFrame({
+            "condition": ["c"], "protein": ["p"], "protein_length": [10],
+            "start_index_0based": [4], "end_index_0based_inclusive": [4],
+        })
+        masks = band_masks(bands)
+        residues = pd.DataFrame({
+            "protein": ["p"] * 10,
+            "residue_index_0based": np.arange(10),
+            "structure_resolved": [True] * 10,
+            "normalized_position": np.arange(10) / 9,
+            "q3": ["C"] * 10,
+            "neq": [1.0] * 10,
+            "rsa": [0.2] * 10,
+        })
+        case = types.SimpleNamespace(
+            protein="p", condition="c", q3="C", neq=1.0, rsa=0.2,
+            normalized_position=4 / 9, eligible_start_index_0based=0,
+            eligible_end_index_0based_exclusive=10,
+        )
+        args = types.SimpleNamespace(
+            position_caliper=0.12, neq_caliper=0.25, rsa_caliper=0.15,
+            max_controls_per_apex=5,
+        )
+        q3_only = candidate_control_pool(case, {"p": residues}, masks, "q3_only", args)
+        final = candidate_control_pool(
+            case, {"p": residues}, masks, "q3_neq_rsa_position", args,
+        )
+        self.assertGreater(len(q3_only), len(final))
+        self.assertTrue((final.abs_delta_position <= args.position_caliper).all())
+
+    def test_matched_inference_uses_sign_flips_and_protein_bootstrap(self):
+        apex = pd.DataFrame({
+            "band_id": [f"b{i}" for i in range(4)],
+            "condition": ["c"] * 4, "split": ["test"] * 4,
+            "protein": [f"p{i}" for i in range(4)], "sign": [1] * 4,
+            "contact_degree": [2.0, 3.0, 4.0, 5.0],
+        })
+        controls = pd.DataFrame({
+            "band_id": [f"b{i}" for i in range(4)],
+            "match_model": ["q3_only"] * 4,
+            "control_contact_degree": [1.0, 2.0, 3.0, 4.0],
+        })
+        for feature in (
+            "ca_curvature_degrees", "abs_ca_virtual_torsion_degrees",
+            "ca_packing_index", "mean_contact_distance_angstrom", "betweenness",
+            "closeness", "participation_coefficient", "community_boundary",
+        ):
+            apex[feature] = np.nan
+            controls[f"control_{feature}"] = np.nan
+        args = types.SimpleNamespace(
+            random_seed=123, n_bootstrap=200, n_sign_flips=500,
+            minimum_inference_proteins=2,
+        )
+        _, summary = matched_effects(apex, controls, args)
+        row = summary.loc[summary.feature.eq("contact_degree")].iloc[0]
+        self.assertEqual(row.mean_apex_minus_control, 1.0)
+        self.assertEqual(row.bootstrap_ci95_low, 1.0)
+        self.assertEqual(row.bootstrap_ci95_high, 1.0)
+        self.assertTrue(np.isfinite(row.sign_flip_p_two_sided))
+        self.assertTrue(np.isfinite(row.sign_flip_q_bh_global))
 
     def test_R_on_X_fixed_effect_fit_recovers_positive_association(self):
         rows = []
