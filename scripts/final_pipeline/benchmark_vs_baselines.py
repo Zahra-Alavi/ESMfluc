@@ -67,10 +67,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr, wilcoxon
+from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     average_precision_score,
     roc_auc_score,
 )
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 # ── Bio2Byte msatools API ─────────────────────────────────────────────────────
 _B2B_API_BASE = "https://bio2byte.be/msatools/api/"
@@ -89,6 +93,18 @@ _NPZ_CONDITIONS = [
 ]
 _LINEAR_CONDITION = "esm2_frozen_linear"
 SEEDS = [1, 2, 3]
+_NETSURFP_BASELINE = "NetSurfP logistic baseline"
+_AA_WINDOW = tuple(range(-5, 6))
+_AA_FEATURE_COLS = [f"aa_offset_{offset:+d}" for offset in _AA_WINDOW]
+_CATEGORICAL_FEATURE_COLS = _AA_FEATURE_COLS + ["q3_pred", "q8_pred"]
+_NUMERIC_FEATURE_COLS = [
+    "rsa", "asa", "disorder", "interface",
+    "phi_sin", "phi_cos", "psi_sin", "psi_cos",
+    "q3_prob_0", "q3_prob_1", "q3_prob_2",
+    "q8_prob_0", "q8_prob_1", "q8_prob_2", "q8_prob_3",
+    "q8_prob_4", "q8_prob_5", "q8_prob_6",
+]
+_FEATURE_COLUMNS = _CATEGORICAL_FEATURE_COLS + _NUMERIC_FEATURE_COLS
 
 # Display names for the paper table
 _DISPLAY = {
@@ -200,6 +216,176 @@ def validate_fasta_against_labels(
            if len(fasta_records[name]) != length]
     if bad:
         raise ValueError(f"FASTA/label length mismatch: {bad[:5]}")
+
+
+def infer_grouped_v1_paths(test_csv_path: str | Path) -> dict[str, Path]:
+    root = Path(test_csv_path).resolve().parent
+    paths = {
+        "train_csv": root / "train_grouped_v1.csv",
+        "validation_csv": root / "validation_grouped_v1.csv",
+        "test_csv": root / "test_grouped_v1.csv",
+        "train_netsurfp": root / "train_grouped_v1_netsurfp3.json",
+        "validation_netsurfp": root / "validation_grouped_v1_netsurfp3.json",
+        "test_netsurfp": root / "test_grouped_v1_netsurfp3.json",
+        "split_manifest": root / "split_manifest_grouped_v1.csv",
+    }
+    missing = [str(path) for path in paths.values() if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "Grouped-v1 companion files are missing: " + ", ".join(missing[:5])
+        )
+    return paths
+
+
+def load_split_manifest(path: str | Path) -> pd.DataFrame:
+    manifest = pd.read_csv(path)
+    required = {"name", "split", "union_group_id"}
+    missing = required - set(manifest.columns)
+    if missing:
+        raise ValueError(f"Split manifest is missing columns: {sorted(missing)}")
+    if manifest["name"].astype(str).duplicated().any():
+        raise ValueError("Split manifest contains duplicate protein names")
+    return manifest[["name", "split", "union_group_id"]].copy()
+
+
+def _angle_components(value_deg: float) -> tuple[float, float]:
+    radians = np.deg2rad(float(value_deg))
+    return float(np.sin(radians)), float(np.cos(radians))
+
+
+def _sequence_to_netsurfp_record(records: list[dict]) -> dict[str, dict]:
+    mapping: dict[str, dict] = {}
+    for record in records:
+        seq = str(record["seq"])
+        if seq not in mapping:
+            mapping[seq] = record
+    return mapping
+
+
+def build_netsurfp_residue_table(
+    split_csv_path: str | Path,
+    netsurfp_json_path: str | Path,
+    thresh: float,
+) -> pd.DataFrame:
+    split_frame = pd.read_csv(split_csv_path)
+    with Path(netsurfp_json_path).open(encoding="utf-8") as handle:
+        netsurfp_records = json.load(handle)
+    if not isinstance(netsurfp_records, list) or not netsurfp_records:
+        raise ValueError(f"Unexpected NetSurfP JSON schema: {netsurfp_json_path}")
+    seq_to_record = _sequence_to_netsurfp_record(netsurfp_records)
+
+    rows: list[dict] = []
+    for protein in split_frame.itertuples(index=False):
+        name = str(protein.name)
+        seq = str(protein.sequence)
+        neq_vals = ast.literal_eval(protein.neq) if isinstance(protein.neq, str) else protein.neq
+        neq_vals = [float(value) for value in neq_vals]
+        if len(neq_vals) != len(seq):
+            raise ValueError(f"{name}: split CSV sequence/Neq length mismatch")
+        if seq not in seq_to_record:
+            raise ValueError(f"{name}: sequence not found in {netsurfp_json_path}")
+        record = seq_to_record[seq]
+        if len(record["seq"]) != len(seq):
+            raise ValueError(f"{name}: NetSurfP sequence length mismatch")
+
+        q3 = str(record["q3"])
+        q8 = str(record["q8"])
+        q3_prob = record["q3_prob"]
+        q8_prob = record["q8_prob"]
+        rsa = record["rsa"]
+        asa = record["asa"]
+        disorder = record["disorder"]
+        interface = record["interface"]
+        phi = record["phi"]
+        psi = record["psi"]
+
+        expected_len = len(seq)
+        for field_name, values in [
+            ("q3", q3), ("q8", q8), ("q3_prob", q3_prob), ("q8_prob", q8_prob),
+            ("rsa", rsa), ("asa", asa), ("disorder", disorder),
+            ("interface", interface), ("phi", phi), ("psi", psi),
+        ]:
+            if len(values) != expected_len:
+                raise ValueError(f"{name}: NetSurfP field {field_name} length mismatch")
+
+        for idx in range(expected_len):
+            phi_sin, phi_cos = _angle_components(phi[idx])
+            psi_sin, psi_cos = _angle_components(psi[idx])
+            row = {
+                "name": name,
+                "res_idx": idx + 1,
+                "Neq": neq_vals[idx],
+                "label": int(neq_vals[idx] > thresh),
+                "q3_pred": q3[idx],
+                "q8_pred": q8[idx],
+                "rsa": float(rsa[idx]),
+                "asa": float(asa[idx]),
+                "disorder": float(disorder[idx]),
+                "interface": float(interface[idx]),
+                "phi_sin": phi_sin,
+                "phi_cos": phi_cos,
+                "psi_sin": psi_sin,
+                "psi_cos": psi_cos,
+                "q3_prob_0": float(q3_prob[idx][0]),
+                "q3_prob_1": float(q3_prob[idx][1]),
+                "q3_prob_2": float(q3_prob[idx][2]),
+                "q8_prob_0": float(q8_prob[idx][0]),
+                "q8_prob_1": float(q8_prob[idx][1]),
+                "q8_prob_2": float(q8_prob[idx][2]),
+                "q8_prob_3": float(q8_prob[idx][3]),
+                "q8_prob_4": float(q8_prob[idx][4]),
+                "q8_prob_5": float(q8_prob[idx][5]),
+                "q8_prob_6": float(q8_prob[idx][6]),
+            }
+            for offset in _AA_WINDOW:
+                pos = idx + offset
+                row[f"aa_offset_{offset:+d}"] = seq[pos] if 0 <= pos < expected_len else "<PAD>"
+            rows.append(row)
+
+    feature_table = pd.DataFrame(rows)
+    if feature_table[_NUMERIC_FEATURE_COLS].isna().any().any():
+        raise ValueError(f"{netsurfp_json_path}: numeric features contain NaN")
+    return feature_table
+
+
+def fit_netsurfp_logistic_baseline(
+    train_table: pd.DataFrame,
+    random_seed: int,
+) -> Pipeline:
+    preprocessor = ColumnTransformer(
+        transformers=[
+            (
+                "categorical",
+                OneHotEncoder(handle_unknown="ignore"),
+                _CATEGORICAL_FEATURE_COLS,
+            ),
+            (
+                "numeric",
+                StandardScaler(with_mean=False),
+                _NUMERIC_FEATURE_COLS,
+            ),
+        ]
+    )
+    classifier = LogisticRegression(
+        solver="saga",
+        penalty="l2",
+        max_iter=400,
+        tol=1e-3,
+        random_state=random_seed,
+    )
+    model = Pipeline([
+        ("preprocessor", preprocessor),
+        ("classifier", classifier),
+    ])
+    model.fit(train_table[_FEATURE_COLUMNS], train_table["label"].to_numpy(dtype=int))
+    return model
+
+
+def add_netsurfp_scores(model: Pipeline, feature_table: pd.DataFrame) -> pd.DataFrame:
+    scores = model.predict_proba(feature_table[_FEATURE_COLUMNS])[:, 1]
+    result = feature_table[["name", "res_idx", "Neq", "label"]].copy()
+    result["netsurfp_logistic_score"] = scores.astype(float)
+    return result
 
 
 # =============================================================================
@@ -526,6 +712,8 @@ def compute_metrics(
 def evaluate_method(
     df_long: pd.DataFrame,
     score_col: str,
+    n_bootstrap: int,
+    random_seed: int,
     label_col: str = "label",
     neq_col: str = "Neq",
 ) -> tuple[dict, pd.DataFrame]:
@@ -545,10 +733,10 @@ def evaluate_method(
     auc_vals = per_protein["AUROC"].dropna().values
     global_m["AUROC_macro"] = float(np.mean(auc_vals)) if len(auc_vals) else np.nan
     if len(auc_vals) >= 10:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(random_seed)
         boots = [
             rng.choice(auc_vals, len(auc_vals), replace=True).mean()
-            for _ in range(2000)
+            for _ in range(n_bootstrap)
         ]
         global_m["AUROC_macro_CI95_lo"] = float(np.percentile(boots, 2.5))
         global_m["AUROC_macro_CI95_hi"] = float(np.percentile(boots, 97.5))
@@ -556,11 +744,46 @@ def evaluate_method(
     return global_m, per_protein
 
 
+def evaluate_by_unit(
+    df_long: pd.DataFrame,
+    score_col: str,
+    unit_col: str,
+    unit_label: str,
+    n_bootstrap: int,
+    random_seed: int,
+    label_col: str = "label",
+    neq_col: str = "Neq",
+) -> tuple[dict, pd.DataFrame]:
+    recs = []
+    for unit_value, g in df_long.groupby(unit_col):
+        g2 = g[[score_col, label_col, neq_col]].dropna()
+        metrics = compute_metrics(
+            g2[label_col].values,
+            g2[score_col].values,
+            g2[neq_col].values,
+        )
+        recs.append({unit_col: unit_value, **metrics})
+    per_unit = pd.DataFrame(recs)
+    summary: dict = {
+        f"{unit_label}_count": int(len(per_unit)),
+    }
+    auc_vals = per_unit["AUROC"].dropna().to_numpy(dtype=float)
+    summary[f"{unit_label}_AUROC_macro"] = float(np.mean(auc_vals)) if len(auc_vals) else np.nan
+    if len(auc_vals) >= 10:
+        rng = np.random.default_rng(random_seed)
+        draws = rng.integers(0, len(auc_vals), size=(n_bootstrap, len(auc_vals)))
+        boot_means = auc_vals[draws].mean(axis=1)
+        summary[f"{unit_label}_AUROC_macro_CI95_lo"] = float(np.quantile(boot_means, 0.025))
+        summary[f"{unit_label}_AUROC_macro_CI95_hi"] = float(np.quantile(boot_means, 0.975))
+    return summary, per_unit
+
+
 def paired_bootstrap_auroc_difference(
     esm: pd.Series,
     dynamine: pd.Series,
     n_bootstrap: int,
     random_seed: int,
+    bootstrap_unit: str = "test_protein",
 ) -> dict:
     paired = pd.concat(
         [esm.rename("esm"), dynamine.rename("dynamine")], axis=1, join="inner"
@@ -573,20 +796,61 @@ def paired_bootstrap_auroc_difference(
     sampled = differences[indices]
     boot_mean = sampled.mean(axis=1)
     boot_median = np.median(sampled, axis=1)
-    return {
-        "n_proteins": len(differences),
+    result = {
+        "n_units": len(differences),
         "mean_delta_AUROC": float(differences.mean()),
         "mean_delta_AUROC_CI95_lo": float(np.quantile(boot_mean, 0.025)),
         "mean_delta_AUROC_CI95_hi": float(np.quantile(boot_mean, 0.975)),
         "median_delta_AUROC": float(np.median(differences)),
         "median_delta_AUROC_CI95_lo": float(np.quantile(boot_median, 0.025)),
         "median_delta_AUROC_CI95_hi": float(np.quantile(boot_median, 0.975)),
-        "proteins_ESMfluc_better": int((differences > 0).sum()),
-        "proteins_DynaMine_better": int((differences < 0).sum()),
-        "proteins_tied": int((differences == 0).sum()),
+        "units_method_better": int((differences > 0).sum()),
+        "units_reference_better": int((differences < 0).sum()),
+        "units_tied": int((differences == 0).sum()),
         "bootstrap_repetitions": n_bootstrap,
-        "bootstrap_unit": "test_protein",
+        "bootstrap_unit": bootstrap_unit,
     }
+    if bootstrap_unit == "test_protein":
+        result.update({
+            "n_proteins": result["n_units"],
+            "proteins_ESMfluc_better": result["units_method_better"],
+            "proteins_DynaMine_better": result["units_reference_better"],
+            "proteins_tied": result["units_tied"],
+        })
+    return result
+
+
+def paired_unit_comparisons(
+    method_tables: dict[str, pd.DataFrame],
+    reference_method: str,
+    index_col: str,
+    unit_label: str,
+    n_bootstrap: int,
+    random_seed: int,
+) -> list[dict]:
+    if reference_method not in method_tables:
+        return []
+    reference = method_tables[reference_method].set_index(index_col)["AUROC"].dropna()
+    rows: list[dict] = []
+    for method, unit_df in method_tables.items():
+        if method == reference_method or not method.startswith("ESMfluc"):
+            continue
+        series = unit_df.set_index(index_col)["AUROC"].dropna()
+        summary = paired_bootstrap_auroc_difference(
+            series, reference, n_bootstrap, random_seed, bootstrap_unit=unit_label
+        )
+        common = reference.index.intersection(series.index).sort_values()
+        diff = series.loc[common].to_numpy() - reference.loc[common].to_numpy()
+        stat, pval = wilcoxon(diff, alternative="greater")
+        rows.append({
+            "method": method,
+            "reference_method": reference_method,
+            "unit": unit_label,
+            **summary,
+            "wilcoxon_stat": float(stat),
+            "wilcoxon_p_one_sided": float(pval),
+        })
+    return rows
 
 
 def benjamini_hochberg(values: list[float]) -> np.ndarray:
@@ -650,20 +914,103 @@ def main() -> None:
     print("ESMfluc vs DynaMine — publication benchmark")
     print("=" * 72)
 
-    # ── 1. Ground truth ──────────────────────────────────────────────────────
-    print("\n[1/4] Loading test-set labels …")
+    # ── 1. Ground truth and grouped-split metadata ──────────────────────────
+    print("\n[1/5] Loading test-set labels …")
     df_labels = load_neq_labels(args.neq_csv, args.neq_thresh)
     lengths = expected_lengths(df_labels)
     fasta_records = parse_fasta(args.fasta)
     validate_fasta_against_labels(fasta_records, lengths)
+    grouped_paths = infer_grouped_v1_paths(args.neq_csv)
+    split_manifest = load_split_manifest(grouped_paths["split_manifest"])
+    test_group_map = split_manifest.loc[
+        split_manifest["split"] == "test", ["name", "union_group_id"]
+    ].copy()
+    validation_group_map = split_manifest.loc[
+        split_manifest["split"] == "validation", ["name", "union_group_id"]
+    ].copy()
     n_prot = df_labels["name"].nunique()
     n_res  = len(df_labels)
     n_pos  = int(df_labels["label"].sum())
     print(f"  {n_prot} proteins, {n_res} residues")
     print(f"  Flexible (Neq > {args.neq_thresh}): {n_pos / n_res * 100:.1f}%")
 
-    # ── 2. ESMfluc scores ────────────────────────────────────────────────────
-    print("\n[2/4] Extracting ESMfluc per-residue scores …")
+    # ── 2. NetSurfP logistic baseline (train only) ──────────────────────────
+    print("\n[2/5] Training NetSurfP logistic baseline (train only) …")
+    train_netsurfp = build_netsurfp_residue_table(
+        grouped_paths["train_csv"], grouped_paths["train_netsurfp"], args.neq_thresh
+    )
+    validation_netsurfp = build_netsurfp_residue_table(
+        grouped_paths["validation_csv"], grouped_paths["validation_netsurfp"], args.neq_thresh
+    )
+    test_netsurfp = build_netsurfp_residue_table(
+        grouped_paths["test_csv"], grouped_paths["test_netsurfp"], args.neq_thresh
+    )
+    validation_lengths = expected_lengths(
+        validation_netsurfp[["name", "res_idx", "Neq", "label"]]
+    )
+    netsurfp_model = fit_netsurfp_logistic_baseline(train_netsurfp, args.random_seed)
+    validation_netsurfp_scores = add_netsurfp_scores(netsurfp_model, validation_netsurfp)
+    test_netsurfp_scores = add_netsurfp_scores(netsurfp_model, test_netsurfp)
+    validation_netsurfp_scores = validation_netsurfp_scores.merge(
+        validation_group_map, on="name", how="left", validate="many_to_one"
+    )
+    test_netsurfp_scores = test_netsurfp_scores.merge(
+        test_group_map, on="name", how="left", validate="many_to_one"
+    )
+    if validation_netsurfp_scores["union_group_id"].isna().any():
+        raise ValueError("Validation NetSurfP scores missing union_group_id")
+    if test_netsurfp_scores["union_group_id"].isna().any():
+        raise ValueError("Test NetSurfP scores missing union_group_id")
+
+    validation_baseline_global, validation_baseline_per_protein = evaluate_method(
+        validation_netsurfp_scores,
+        "netsurfp_logistic_score",
+        args.n_bootstrap,
+        args.random_seed,
+    )
+    validation_group_summary, validation_baseline_per_group = evaluate_by_unit(
+        validation_netsurfp_scores,
+        "netsurfp_logistic_score",
+        unit_col="union_group_id",
+        unit_label="union_group",
+        n_bootstrap=args.n_bootstrap,
+        random_seed=args.random_seed,
+    )
+    validation_baseline_global.update(validation_group_summary)
+
+    test_baseline_global, test_baseline_per_protein = evaluate_method(
+        test_netsurfp_scores,
+        "netsurfp_logistic_score",
+        args.n_bootstrap,
+        args.random_seed,
+    )
+    test_group_summary, test_baseline_per_group = evaluate_by_unit(
+        test_netsurfp_scores,
+        "netsurfp_logistic_score",
+        unit_col="union_group_id",
+        unit_label="union_group",
+        n_bootstrap=args.n_bootstrap,
+        random_seed=args.random_seed,
+    )
+    test_baseline_global.update(test_group_summary)
+
+    netsurfp_split_summary = pd.DataFrame([
+        {
+            "split": "validation",
+            "method": _NETSURFP_BASELINE,
+            **validation_baseline_global,
+            "score_source": "train-only logistic regression on NetSurfP-3.0 residue features and AA identity window",
+        },
+        {
+            "split": "test",
+            "method": _NETSURFP_BASELINE,
+            **test_baseline_global,
+            "score_source": "train-only logistic regression on NetSurfP-3.0 residue features and AA identity window",
+        },
+    ])
+
+    # ── 3. ESMfluc scores ────────────────────────────────────────────────────
+    print("\n[3/5] Extracting ESMfluc per-residue scores …")
     esmfluc_dfs = extract_esmfluc_scores(
         results_root, _NPZ_CONDITIONS, SEEDS, lengths
     )
@@ -681,8 +1028,11 @@ def main() -> None:
               f"(AUROC={linear_precomputed['AUROC']:.4f})")
     else:
         print(f"    [WARN] Could not load pre-computed metrics for {_LINEAR_CONDITION}")
+    score_audits[_NETSURFP_BASELINE] = validate_score_table(
+        test_netsurfp_scores, lengths, "netsurfp_logistic_score", _NETSURFP_BASELINE
+    )
 
-    # ── 3. DynaMine ──────────────────────────────────────────────────────────
+    # ── 4. DynaMine ──────────────────────────────────────────────────────────
     df_dynamine: pd.DataFrame | None = None
     cache_path: Path | None = None
     if not args.skip_dynamine:
@@ -692,12 +1042,12 @@ def main() -> None:
             else out_dir / "cache_dynamine.csv"
         )
         if cache_path.exists():
-            print(f"\n[3/4] Loading cached DynaMine predictions from {cache_path} …")
+            print(f"\n[4/5] Loading cached DynaMine predictions from {cache_path} …")
             df_dynamine = pd.read_csv(cache_path)
             print(f"  {df_dynamine['name'].nunique()} proteins, "
                   f"{df_dynamine['dynamine_bb'].notna().sum()} valid scores")
         else:
-            print(f"\n[3/4] Fetching DynaMine predictions (token: {session_token}) …")
+            print(f"\n[4/5] Fetching DynaMine predictions (token: {session_token}) …")
             test_names = set(df_labels["name"].unique())
             fasta_filtered = {n: s for n, s in fasta_records.items() if n in test_names}
             print(f"  Submitting {len(fasta_filtered)} sequences in batches of "
@@ -720,28 +1070,56 @@ def main() -> None:
             print(f"  Note: {above_one} raw DynaMine predictions exceed 1; "
                   "values are retained because rank metrics do not require clipping")
     else:
-        print("\n[3/4] DynaMine skipped (--skip_dynamine).")
+        print("\n[4/5] DynaMine skipped (--skip_dynamine).")
 
-    # ── 4. Compute and save metrics ──────────────────────────────────────────
-    print("\n[4/4] Computing metrics …")
+    # ── 5. Compute and save metrics ──────────────────────────────────────────
+    print("\n[5/5] Computing metrics …")
 
     all_global: list[dict] = []
     all_per_protein: dict[str, pd.DataFrame] = {}
+    all_per_group: dict[str, pd.DataFrame] = {}
+
+    baseline_row = dict(test_baseline_global)
+    baseline_row["method"] = _NETSURFP_BASELINE
+    baseline_row["score_source"] = (
+        "train-only logistic regression on NetSurfP-3.0 residue features and AA identity window"
+    )
+    baseline_row["target_relation"] = (
+        "supervised ATLAS Neq binary target using predicted-structure covariates only"
+    )
+    all_global.append(baseline_row)
+    all_per_protein[_NETSURFP_BASELINE] = test_baseline_per_protein
+    all_per_group[_NETSURFP_BASELINE] = test_baseline_per_group
 
     # DynaMine
     if df_dynamine is not None:
         df_dm = merge_scores_exact(
             df_labels, df_dynamine, "dynamine_bb", "DynaMine"
         )
+        df_dm = df_dm.merge(test_group_map, on="name", how="left", validate="many_to_one")
+        if df_dm["union_group_id"].isna().any():
+            raise ValueError("DynaMine scores missing union_group_id")
         # Lower S² means greater dynamics. Negation preserves the full raw
         # ordering without implying that every API prediction lies in [0, 1].
         df_dm["dynamine_flex"] = -df_dm["dynamine_bb"]
-        g_m, pp_df = evaluate_method(df_dm, score_col="dynamine_flex")
+        g_m, pp_df = evaluate_method(
+            df_dm, "dynamine_flex", args.n_bootstrap, args.random_seed
+        )
+        group_summary, group_df = evaluate_by_unit(
+            df_dm,
+            "dynamine_flex",
+            unit_col="union_group_id",
+            unit_label="union_group",
+            n_bootstrap=args.n_bootstrap,
+            random_seed=args.random_seed,
+        )
+        g_m.update(group_summary)
         g_m["method"] = "DynaMine"
         g_m["score_source"] = "Bio2Byte msatools API (negative raw backbone S² prediction)"
         g_m["target_relation"] = "external sequence-only NMR-order-parameter predictor; not trained on ATLAS Neq"
         all_global.append(g_m)
         all_per_protein["DynaMine"] = pp_df
+        all_per_group["DynaMine"] = group_df
 
     # ESMfluc bilstm_attn conditions (from npz)
     for condition in _NPZ_CONDITIONS:
@@ -750,12 +1128,27 @@ def main() -> None:
         df_esm = merge_scores_exact(
             df_labels, esmfluc_dfs[condition], "esmfluc_score", condition
         )
-        g_m, pp_df = evaluate_method(df_esm, score_col="esmfluc_score")
+        df_esm = df_esm.merge(test_group_map, on="name", how="left", validate="many_to_one")
+        if df_esm["union_group_id"].isna().any():
+            raise ValueError(f"{condition}: missing union_group_id")
+        g_m, pp_df = evaluate_method(
+            df_esm, "esmfluc_score", args.n_bootstrap, args.random_seed
+        )
+        group_summary, group_df = evaluate_by_unit(
+            df_esm,
+            "esmfluc_score",
+            unit_col="union_group_id",
+            unit_label="union_group",
+            n_bootstrap=args.n_bootstrap,
+            random_seed=args.random_seed,
+        )
+        g_m.update(group_summary)
         g_m["method"] = _DISPLAY.get(condition, condition)
         g_m["score_source"] = "mean across three seed-specific row-sum logit margins from exact C_ij"
         g_m["target_relation"] = "supervised ATLAS Neq binary target"
         all_global.append(g_m)
         all_per_protein[g_m["method"]] = pp_df
+        all_per_group[g_m["method"]] = group_df
 
     # ESMfluc linear (pre-computed)
     if linear_precomputed:
@@ -771,6 +1164,7 @@ def main() -> None:
     # Save
     df_global = pd.DataFrame(all_global).set_index("method")
     df_global.to_csv(out_dir / "benchmark_global_metrics.csv")
+    netsurfp_split_summary.to_csv(out_dir / "benchmark_netsurfp_split_metrics.csv", index=False)
 
     if all_per_protein:
         per_prot_long = pd.concat(
@@ -778,27 +1172,41 @@ def main() -> None:
             ignore_index=True,
         )
         per_prot_long.to_csv(out_dir / "benchmark_per_protein_metrics.csv", index=False)
+    if all_per_group:
+        per_group_long = pd.concat(
+            [df.assign(method=m) for m, df in all_per_group.items()],
+            ignore_index=True,
+        )
+        per_group_long.to_csv(out_dir / "benchmark_per_union_group_metrics.csv", index=False)
+    validation_baseline_per_protein.assign(
+        method=_NETSURFP_BASELINE, split="validation"
+    ).to_csv(out_dir / "benchmark_netsurfp_validation_per_protein_metrics.csv", index=False)
+    validation_baseline_per_group.assign(
+        method=_NETSURFP_BASELINE, split="validation"
+    ).to_csv(out_dir / "benchmark_netsurfp_validation_per_union_group_metrics.csv", index=False)
 
-    # Paired protein comparisons: synchronized protein bootstrap plus Wilcoxon.
     comparison_rows: list[dict] = []
-    if "DynaMine" in all_per_protein:
-        dm_pp = all_per_protein["DynaMine"].set_index("name")["AUROC"].dropna()
-        for method, pp_df in all_per_protein.items():
-            if method == "DynaMine":
-                continue
-            esm_pp = pp_df.set_index("name")["AUROC"].dropna()
-            summary = paired_bootstrap_auroc_difference(
-                esm_pp, dm_pp, args.n_bootstrap, args.random_seed
+    for reference_method in [_NETSURFP_BASELINE, "DynaMine"]:
+        comparison_rows.extend(
+            paired_unit_comparisons(
+                all_per_protein,
+                reference_method=reference_method,
+                index_col="name",
+                unit_label="test_protein",
+                n_bootstrap=args.n_bootstrap,
+                random_seed=args.random_seed,
             )
-            common = dm_pp.index.intersection(esm_pp.index).sort_values()
-            diff = esm_pp.loc[common].to_numpy() - dm_pp.loc[common].to_numpy()
-            stat, pval = wilcoxon(diff, alternative="greater")
-            comparison_rows.append({
-                "ESMfluc_condition": method,
-                **summary,
-                "wilcoxon_stat": float(stat),
-                "wilcoxon_p_one_sided": float(pval),
-            })
+        )
+        comparison_rows.extend(
+            paired_unit_comparisons(
+                all_per_group,
+                reference_method=reference_method,
+                index_col="union_group_id",
+                unit_label="test_union_group",
+                n_bootstrap=args.n_bootstrap,
+                random_seed=args.random_seed,
+            )
+        )
 
     if comparison_rows:
         adjusted = benjamini_hochberg(
@@ -832,7 +1240,8 @@ def main() -> None:
         "test_target": f"ATLAS Neq > {args.neq_thresh}",
         "test_proteins": n_prot,
         "test_residues": n_res,
-        "reported_metrics": ["AUROC", "AUPRC", "Spearman", "protein_macro_AUROC"],
+        "test_union_groups": int(test_group_map["union_group_id"].nunique()),
+        "reported_metrics": ["AUROC", "AUPRC", "Spearman", "protein_macro_AUROC", "union_group_macro_AUROC"],
         "excluded_metrics": {
             "F1": "omitted because no decision threshold was selected independently of test data",
             "MCC": "omitted because no decision threshold was selected independently of test data",
@@ -852,16 +1261,30 @@ def main() -> None:
             "only precomputed seed-summary metrics are available; it is excluded "
             "from residue-level paired comparisons"
         ),
+        "NetSurfP_logistic_baseline": {
+            "training_split": "train_grouped_v1",
+            "evaluation_splits": ["validation_grouped_v1", "test_grouped_v1"],
+            "features": {
+                "categorical": _CATEGORICAL_FEATURE_COLS,
+                "numeric": _NUMERIC_FEATURE_COLS,
+            },
+            "model": "LogisticRegression(solver='saga', penalty='l2')",
+            "join_rule": "split CSV rows matched to NetSurfP records by exact sequence string",
+        },
         "paired_inference": {
-            "unit": "test protein",
+            "unit": ["test_protein", "test_union_group"],
             "bootstrap_repetitions": args.n_bootstrap,
             "random_seed": args.random_seed,
             "interval": "paired percentile 95% interval for mean and median AUROC difference",
-            "test": "one-sided paired Wilcoxon signed-rank, BH corrected across six conditions",
+            "test": "one-sided paired Wilcoxon signed-rank, BH corrected across all paired comparisons",
         },
         "sources": {
             "neq_csv": {"path": str(Path(args.neq_csv).resolve()), "sha256": sha256(args.neq_csv)},
             "fasta": {"path": str(Path(args.fasta).resolve()), "sha256": sha256(args.fasta)},
+            "grouped_v1_companion_files": {
+                key: {"path": str(path.resolve()), "sha256": sha256(path)}
+                for key, path in grouped_paths.items()
+            },
             "dynamine_cache": (
                 {"path": str(cache_path.resolve()), "sha256": sha256(cache_path)}
                 if cache_path is not None and cache_path.is_file() else None
@@ -877,10 +1300,16 @@ def main() -> None:
 
     required_outputs = [
         "benchmark_global_metrics.csv", "benchmark_per_protein_metrics.csv",
+        "benchmark_per_union_group_metrics.csv", "benchmark_netsurfp_split_metrics.csv",
+        "benchmark_netsurfp_validation_per_protein_metrics.csv",
+        "benchmark_netsurfp_validation_per_union_group_metrics.csv",
         "benchmark_paired_vs_dynamine.csv", "benchmark_wilcoxon_vs_dynamine.csv",
         "benchmark_methodology.json",
     ] if df_dynamine is not None else [
         "benchmark_global_metrics.csv", "benchmark_per_protein_metrics.csv",
+        "benchmark_per_union_group_metrics.csv", "benchmark_netsurfp_split_metrics.csv",
+        "benchmark_netsurfp_validation_per_protein_metrics.csv",
+        "benchmark_netsurfp_validation_per_union_group_metrics.csv",
         "benchmark_methodology.json",
     ]
     checks = {
@@ -889,15 +1318,15 @@ def main() -> None:
         "all_score_tables_exactly_aligned": all(
             item["exact_key_alignment"] for item in score_audits.values()
         ),
+        "netsurfp_validation_present": len(validation_baseline_per_protein) == 208,
+        "netsurfp_validation_union_groups_present": len(validation_baseline_per_group) == 88,
+        "netsurfp_test_union_groups_present": len(test_baseline_per_group) == 91,
         "test_optimized_threshold_metrics_absent": not {"F1", "MCC"} & set(df_global.columns),
         "expected_global_rows": len(df_global) == (
-            6 + int(linear_precomputed is not None) + int(df_dynamine is not None)
+            7 + int(linear_precomputed is not None) + int(df_dynamine is not None)
         ),
         "expected_paired_comparisons": len(comparison_rows) == (
-            6 if df_dynamine is not None else 0
-        ),
-        "paired_intervals_above_zero": all(
-            row["mean_delta_AUROC_CI95_lo"] > 0 for row in comparison_rows
+            24 if df_dynamine is not None else 12
         ),
         "required_outputs_present": all((out_dir / name).is_file() for name in required_outputs),
     }
@@ -917,7 +1346,7 @@ def main() -> None:
         raise ValueError("Benchmark completion audit failed")
 
     # ── Print summary ─────────────────────────────────────────────────────────
-    show_cols = [c for c in ["AUROC", "AUROC_macro", "AUPRC", "Spearman"]
+    show_cols = [c for c in ["AUROC", "AUROC_macro", "union_group_AUROC_macro", "AUPRC", "Spearman"]
                  if c in df_global.columns]
     df_show = df_global[show_cols].sort_values("AUROC", ascending=False, na_position="last")
 
@@ -925,30 +1354,31 @@ def main() -> None:
     print("=" * 80)
     print(f"BENCHMARK  (atlas_grouped_v1 test set, 208 proteins, Neq > {args.neq_thresh} = flexible)")
     print("=" * 80)
-    hdr = f"{'Method':<36}  {'AUROC':>7}  {'macro':>7}  {'AUPRC':>7}  {'Spearman':>9}"
+    hdr = f"{'Method':<36}  {'AUROC':>7}  {'prot':>7}  {'group':>7}  {'AUPRC':>7}  {'Spearman':>9}"
     print(hdr)
     print("-" * len(hdr))
     for method, row in df_show.iterrows():
         auroc_str = f"{row['AUROC']:.4f}" if not np.isnan(row.get("AUROC", np.nan)) else "  —   "
         macro_str = f"{row['AUROC_macro']:.4f}" if "AUROC_macro" in row and not np.isnan(row["AUROC_macro"]) else "  —   "
+        group_str = f"{row['union_group_AUROC_macro']:.4f}" if "union_group_AUROC_macro" in row and not np.isnan(row["union_group_AUROC_macro"]) else "  —   "
         auprc_str = f"{row.get('AUPRC', np.nan):.4f}" if not np.isnan(row.get("AUPRC", np.nan)) else "  —   "
         spear_str = f"{row.get('Spearman', np.nan):.4f}" if not np.isnan(row.get("Spearman", np.nan)) else "   —    "
-        print(f"  {method:<34}  {auroc_str:>7}  {macro_str:>7}  {auprc_str:>7}  {spear_str:>9}")
+        print(f"  {method:<34}  {auroc_str:>7}  {macro_str:>7}  {group_str:>7}  {auprc_str:>7}  {spear_str:>9}")
 
     if comparison_rows:
         print()
-        print("Paired protein AUROC comparison against DynaMine:")
+        print("Paired AUROC comparisons against test-set baselines:")
         for r in comparison_rows:
             sig = ("***" if r["wilcoxon_BH_FDR_q"] < 0.001
                    else "**" if r["wilcoxon_BH_FDR_q"] < 0.01
                    else "*" if r["wilcoxon_BH_FDR_q"] < 0.05
                    else "ns")
-            print(f"  {r['ESMfluc_condition']:<36}  "
+            print(f"  {r['method']:<36} vs {r['reference_method']:<26}  {r['unit']:<16}  "
                   f"mean Δ={r['mean_delta_AUROC']:+.4f} "
                   f"[{r['mean_delta_AUROC_CI95_lo']:+.4f}, "
                   f"{r['mean_delta_AUROC_CI95_hi']:+.4f}]  "
                   f"q={r['wilcoxon_BH_FDR_q']:.3g} {sig}  "
-                  f"(n={r['n_proteins']})")
+                  f"(n={r['n_units']})")
 
     print(f"\nOutputs saved to: {out_dir}/")
     print("=" * 80)
