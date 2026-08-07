@@ -1,162 +1,125 @@
 #!/usr/bin/env python3
 """
-benchmark_vs_baselines.py
+benchmark_vs_baselines.py  (rewritten August 2026)
 
-Compare ESMfluc models against DynaMine (via b2btools) on the 277-protein
-test set.  Produces a publication-ready comparison table.
+Compare the seven ESMfluc model conditions against DynaMine on the held-out
+ATLAS grouped-v1 test set (208 proteins, ~47,751 residues).
 
-Metrics
--------
-  AUC-ROC   – threshold-independent, primary metric
-  AUC-PR    – better for imbalanced labels (Neq>1.0 is minority)
-  F1        – at Youden-optimal threshold per method
-  MCC       – Matthews Correlation Coefficient at same threshold
-  Spearman  – rank correlation with continuous Neq (where applicable)
+ESMfluc metrics are read from pre-computed pipeline outputs stored under
+results/publication_comparable_v2/.  No model reload is required.
 
-Usage (remote machine, conda env esm_env)
------------------------------------------
-  python benchmark_vs_baselines.py \\
-      --results_root /home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results \\
-      --neq_csv      /home/zahralab/Desktop/ESMfluc/data/test_data_with_names.csv \\
-      --nsp3_csv     /home/zahralab/Desktop/ESMfluc/data/test_data_nsp3.csv \\
-      --fasta        /home/zahralab/Desktop/ESMfluc/data/test_data_sequences.fasta \\
-      --output_dir   /home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/benchmark \\
-      --neq_thresh   1.0 \\
-      --device       cuda
+  For bilstm_attn conditions (6 of 7): per-residue logit margins are
+  extracted from flex_rigid_logit_contributions.npz.  The row sum of C_ij
+  (flexible-minus-rigid exact logit contribution) gives the per-residue logit
+  margin up to a run-wide classifier bias. Margins are averaged across seeds
+  1, 2 and 3, defining a logit-margin ensemble used for rank-based metrics.
 
-Install missing deps first (once):
-  pip install b2btools logomaker
+  For the esm2_frozen_linear condition: per-residue scores are not stored in
+  an npz; its metrics are read directly from the pre-computed pipeline CSV.
+
+DynaMine predictions are fetched from the Bio2Byte msatools REST API
+(https://bio2byte.be/msatools/api/).  The API is asynchronous: one POST
+submits the job, subsequent GETs poll the queue, and a final GET retrieves
+the JSON result.  Results are cached locally so re-runs skip the API call.
+
+DynaMine output is a per-residue backbone S^2 prediction. Low values correspond
+to greater dynamics, so the predictor used for ranking is -dynamine_bb. Raw API
+outputs are not clipped; a small number can fall outside the physical 0-to-1
+interpretation of S^2.
+
+The benchmark reports threshold-independent AUROC and AUPRC plus Spearman
+association with continuous Neq. It deliberately does not optimize a binary
+decision threshold on the held-out test set.
+
+Usage
+-----
+    python benchmark_vs_baselines.py \\
+        --results_root results/publication_comparable_v2 \\
+        --neq_csv      data_splits/atlas_grouped_v1/test_grouped_v1.csv \\
+        --fasta        data_splits/atlas_grouped_v1/test_grouped_v1.fasta \\
+        --output_dir   results/benchmark
+
+Optional flags
+--------------
+    --neq_thresh   float   Neq threshold for the flexible class (default 1.0)
+    --dynamine_cache path  Pre-cached DynaMine CSV (name,res_idx,dynamine_bb).
+                           If the file exists the API call is skipped.
+    --skip_dynamine        Skip DynaMine; output ESMfluc-only table.
+    --batch_size   int     Sequences per API request (max 50, default 40).
+    --poll_interval int    Seconds between queue-status polls (default 20).
+    --max_polls    int     Maximum queue checks before giving up (default 90).
+    --n_bootstrap  int     Paired protein bootstrap repetitions (default 2000).
+    --random_seed  int     Bootstrap seed (default 42).
 """
+
+from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
-import subprocess
+import random
+import string
 import sys
-import textwrap
+import time
 from pathlib import Path
-
-# ── networkx ≥ 3.3 required: earlier versions generate invalid Python
-#    identifiers from config keys like "nx-loopback" (hyphen), breaking
-#    Python 3.11 dataclasses at import time.
-def _ensure_networkx():
-    """
-    networkx < 3.3 uses config keys with hyphens (e.g. 'nx-loopback') as
-    Python identifiers in generated dataclasses, causing a SyntaxError on
-    Python 3.11.  In conda environments pip install is shadowed by the conda
-    package, so we must upgrade via conda.  After upgrading we re-exec so the
-    new version is loaded from a clean process.
-    """
-    import os, shutil, importlib.metadata as _im
-
-    needs_upgrade = False
-    try:
-        ver_str = _im.version("networkx")
-        major, minor = [int(x) for x in ver_str.split(".")[:2]]
-        if (major, minor) < (3, 3):
-            needs_upgrade = True
-    except Exception:
-        needs_upgrade = True
-
-    if not needs_upgrade or os.environ.get("_NX_UPGRADED") == "1":
-        return
-
-    print("[INFO] networkx < 3.3 detected — upgrading and restarting …")
-    conda = shutil.which("conda")
-    upgraded = False
-    if conda:
-        try:
-            subprocess.check_call(
-                [conda, "install", "-c", "conda-forge", "networkx>=3.3", "-y", "-q"],
-                timeout=300,
-            )
-            upgraded = True
-        except Exception as e:
-            print(f"  [WARN] conda upgrade failed: {e}")
-    if not upgraded:
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "networkx>=3.3", "-q"]
-        )
-
-    env = os.environ.copy()
-    env["_NX_UPGRADED"] = "1"
-    os.execve(sys.executable, [sys.executable] + sys.argv, env)
-
-_ensure_networkx()
 
 import numpy as np
 import pandas as pd
-import torch
-from scipy.stats import spearmanr
+from scipy.stats import spearmanr, wilcoxon
 from sklearn.metrics import (
     average_precision_score,
-    f1_score,
-    matthews_corrcoef,
     roc_auc_score,
-    roc_curve,
 )
 
-# ── optional imports resolved at runtime ──────────────────────────────────────
-try:
-    from b2btools import SingleSeqAnalysis
-    B2B_AVAILABLE = True
-except ImportError:
-    B2B_AVAILABLE = False
+# ── Bio2Byte msatools API ─────────────────────────────────────────────────────
+_B2B_API_BASE = "https://bio2byte.be/msatools/api/"
+_B2B_BATCH_MAX = 50
 
-try:
-    from transformers import EsmModel, EsmTokenizer
-    HF_AVAILABLE = True
-except ImportError:
-    HF_AVAILABLE = False
+# ── ESMfluc conditions (publication-comparable-v2 pipeline) ──────────────────
+# Six bilstm_attn conditions have flex_rigid_logit_contributions.npz.
+# The linear condition uses pre-computed metrics from the analysis CSVs.
+_NPZ_CONDITIONS = [
+    "esm2_frozen_bilstm_attn",
+    "esm2_top4_bilstm_attn",
+    "esm2_top28_bilstm_attn",
+    "esm3_frozen_bilstm_attn",
+    "esm3_top4_bilstm_attn",
+    "esm3_top28_bilstm_attn",
+]
+_LINEAR_CONDITION = "esm2_frozen_linear"
+SEEDS = [1, 2, 3]
 
-try:
-    from esm.pretrained import ESM3_sm_open_v0
-    from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
-    ESM3_AVAILABLE = True
-except Exception:
-    ESM3_AVAILABLE = False
-
-
-# ── local imports ─────────────────────────────────────────────────────────────
-SCRIPT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(SCRIPT_DIR))
-from models import BiLSTMWithSelfAttentionModel, ESM3Wrapper  # noqa: E402
-
-
-# =============================================================================
-# CLI
-# =============================================================================
-def parse_args():
-    ap = argparse.ArgumentParser(
-        description="Benchmark ESMfluc vs DynaMine on the test set."
-    )
-    ap.add_argument("--results_root", required=True,
-                    help="Root dir containing per-experiment sub-dirs.")
-    ap.add_argument("--neq_csv", required=True,
-                    help="CSV with columns: name,sequence,neq.")
-    ap.add_argument("--nsp3_csv", required=True,
-                    help="NetSurfP long CSV with disorder column.")
-    ap.add_argument("--fasta", required=True,
-                    help="FASTA of test sequences (used for b2btools).")
-    ap.add_argument("--output_dir", default="./benchmark_results")
-    ap.add_argument("--neq_thresh", type=float, default=1.0,
-                    help="Neq > thresh → flexible (label=1). Default=1.0")
-    ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    ap.add_argument("--skip_b2b", action="store_true",
-                    help="Skip b2btools/DynaMine (use if already cached).")
-    ap.add_argument("--b2b_cache", default=None,
-                    help="Path to cached b2btools CSV (long format). "
-                         "If given, skip running b2btools.")
-    ap.add_argument("--force_api", action="store_true",
-                    help="Skip local b2btools install and use DynaMine web API directly.")
-    return ap.parse_args()
+# Display names for the paper table
+_DISPLAY = {
+    "esm2_frozen_linear":       "ESMfluc ESM2 frozen linear",
+    "esm2_frozen_bilstm_attn":  "ESMfluc ESM2 frozen BiLSTM-Attn",
+    "esm2_top4_bilstm_attn":    "ESMfluc ESM2 top-4 BiLSTM-Attn",
+    "esm2_top28_bilstm_attn":   "ESMfluc ESM2 top-28 BiLSTM-Attn",
+    "esm3_frozen_bilstm_attn":  "ESMfluc ESM3 frozen BiLSTM-Attn",
+    "esm3_top4_bilstm_attn":    "ESMfluc ESM3 top-4 BiLSTM-Attn",
+    "esm3_top28_bilstm_attn":   "ESMfluc ESM3 top-28 BiLSTM-Attn",
+}
 
 
 # =============================================================================
-# Data helpers
+# Utilities
 # =============================================================================
-def parse_fasta(path):
-    records = {}
+def _random_token(length: int = 10) -> str:
+    """Generate a random alphanumeric session token for the Bio2Byte API."""
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+
+def sha256(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def parse_fasta(path: str | Path) -> dict[str, str]:
+    records: dict[str, str] = {}
     with open(path) as fh:
         name, buf = None, []
         for line in fh:
@@ -165,390 +128,390 @@ def parse_fasta(path):
                 continue
             if line.startswith(">"):
                 if name:
+                    if name in records:
+                        raise ValueError(f"Duplicate FASTA name: {name}")
                     records[name] = "".join(buf)
                 name = line[1:].strip()
+                if not name:
+                    raise ValueError("Empty FASTA header")
                 buf = []
             else:
                 buf.append(line)
         if name:
+            if name in records:
+                raise ValueError(f"Duplicate FASTA name: {name}")
             records[name] = "".join(buf)
+    if not records:
+        raise ValueError(f"No FASTA records in {path}")
     return records
 
 
-def load_neq_csv(path, thresh):
-    df = pd.read_csv(path)
+def load_neq_labels(neq_csv: str | Path, thresh: float) -> pd.DataFrame:
+    """Return long DataFrame: name, res_idx (1-based), Neq, label."""
+    df = pd.read_csv(neq_csv)
+    required = {"name", "sequence", "neq"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Neq CSV is missing columns: {sorted(missing)}")
+    if df["name"].astype(str).duplicated().any():
+        duplicates = df.loc[df["name"].astype(str).duplicated(), "name"].tolist()
+        raise ValueError(f"Duplicate proteins in Neq CSV: {duplicates[:5]}")
     rows = []
     for _, row in df.iterrows():
         name = str(row["name"])
-        seq  = str(row["sequence"])
-        raw  = row["neq"]
-        vals = ast.literal_eval(raw) if isinstance(raw, str) else [float(raw)]
-        vals = [float(v) for v in vals]
-        L = min(len(vals), len(seq))
-        for i in range(L):
+        seq = str(row["sequence"])
+        raw = row["neq"]
+        neq_vals = ast.literal_eval(raw) if isinstance(raw, str) else [float(raw)]
+        neq_vals = [float(v) for v in neq_vals]
+        if len(neq_vals) != len(seq):
+            raise ValueError(
+                f"{name}: sequence length {len(seq)} != Neq length {len(neq_vals)}"
+            )
+        if not np.isfinite(neq_vals).all():
+            raise ValueError(f"{name}: Neq contains nonfinite values")
+        for i in range(len(seq)):
             rows.append({
                 "name": name,
                 "res_idx": i + 1,
-                "aa": seq[i],
-                "Neq": vals[i],
-                "label": int(vals[i] > thresh),
+                "Neq": neq_vals[i],
+                "label": int(neq_vals[i] > thresh),
             })
     return pd.DataFrame(rows)
 
 
-def load_nsp3(path, disorder_col="disorder"):
-    df = pd.read_csv(path, sep=None, engine="python")
-    df.columns = [c.strip() for c in df.columns]
-    rows = []
-    for _, r in df.iterrows():
-        name = str(r["id"]).lstrip(">")
-        idx_col = "n" if "n" in df.columns else " n"
-        rows.append({
-            "name": name,
-            "res_idx": int(r[idx_col]),
-            "nsp3_disorder": float(r[disorder_col.strip()]),
-        })
-    return pd.DataFrame(rows)
+def expected_lengths(df_labels: pd.DataFrame) -> dict[str, int]:
+    grouped = df_labels.groupby("name")["res_idx"].agg(["count", "min", "max"])
+    bad = grouped[(grouped["min"] != 1) | (grouped["count"] != grouped["max"])]
+    if not bad.empty:
+        raise ValueError(f"Non-contiguous label positions: {bad.index.tolist()[:5]}")
+    return grouped["count"].astype(int).to_dict()
+
+
+def validate_fasta_against_labels(
+    fasta_records: dict[str, str], lengths: dict[str, int]
+) -> None:
+    if set(fasta_records) != set(lengths):
+        raise ValueError(
+            "FASTA/label protein mismatch: "
+            f"missing={sorted(set(lengths)-set(fasta_records))[:5]}, "
+            f"extra={sorted(set(fasta_records)-set(lengths))[:5]}"
+        )
+    bad = [name for name, length in lengths.items()
+           if len(fasta_records[name]) != length]
+    if bad:
+        raise ValueError(f"FASTA/label length mismatch: {bad[:5]}")
 
 
 # =============================================================================
-# b2btools / DynaMine predictions
+# ESMfluc score extraction (no model reload)
 # =============================================================================
-def _try_install_b2btools():
+def _load_npz_margins(npz_path: Path) -> dict[str, np.ndarray]:
     """
-    b2btools depends on pomegranate which needs Cython.
-    Strategy: conda install pomegranate first (has pre-built wheels), then pip.
-    Falls back to pip-only if conda is not available.
+    Extract per-residue logit margins from a flex_rigid_logit_contributions.npz.
+
+    Each protein entry is the LxL contribution matrix C_ij
+    (flexible-minus-rigid exact logit contribution, query × key).
+    Row sum over keys j → per-query logit margin (without bias).
+    Sigmoid is monotone so AUROC from row sums equals AUROC from P(flexible).
+
+    Returns {protein_name: float32 array of length L}.
     """
-    import shutil
-    conda = shutil.which("conda")
-    if conda:
-        print("[INFO] Installing pomegranate via conda-forge …")
-        try:
-            subprocess.check_call(
-                [conda, "install", "-c", "conda-forge", "pomegranate", "-y", "-q"],
-                timeout=300,
+    margins: dict[str, np.ndarray] = {}
+    with np.load(npz_path, allow_pickle=False) as npz:
+        protein_names = [str(value) for value in npz["__protein_names__"]]
+        matrix_keys = [str(value) for value in npz["__matrix_keys__"]]
+        if len(protein_names) != len(matrix_keys):
+            raise ValueError(f"{npz_path}: protein/key metadata lengths differ")
+        if len(set(protein_names)) != len(protein_names):
+            raise ValueError(f"{npz_path}: duplicate protein names")
+        for name, key in zip(protein_names, matrix_keys):
+            mat = np.asarray(npz[key])
+            if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
+                raise ValueError(f"{npz_path}: {name} matrix is not square: {mat.shape}")
+            if not np.isfinite(mat).all():
+                raise ValueError(f"{npz_path}: {name} matrix contains nonfinite values")
+            margins[name] = mat.sum(axis=1).astype(np.float64)
+    return margins
+
+
+def extract_esmfluc_scores(
+    results_root: Path,
+    conditions: list[str],
+    seeds: list[int],
+    lengths: dict[str, int],
+) -> dict[str, pd.DataFrame]:
+    """
+    Average per-residue logit margins across seeds for each condition.
+    Returns {condition: DataFrame(name, res_idx, esmfluc_score)}.
+    """
+    out: dict[str, pd.DataFrame] = {}
+    for condition in conditions:
+        seed_margins: list[dict[str, np.ndarray]] = []
+        for seed in seeds:
+            npz_path = (
+                results_root / "runs" / condition / f"seed_{seed}"
+                / "flex_rigid_logit_contributions.npz"
             )
-        except Exception as e:
-            print(f"  [WARN] conda install pomegranate failed: {e}")
-    print("[INFO] Installing b2btools via pip …")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "b2btools", "-q"])
-    global B2B_AVAILABLE, SingleSeqAnalysis
-    from b2btools import SingleSeqAnalysis as _SSA  # noqa: F401
-    SingleSeqAnalysis = _SSA
-    B2B_AVAILABLE = True
+            if not npz_path.is_file():
+                raise FileNotFoundError(f"Missing required NPZ: {npz_path}")
+            margins = _load_npz_margins(npz_path)
+            if set(margins) != set(lengths):
+                raise ValueError(
+                    f"{condition} seed {seed}: protein set does not match test labels"
+                )
+            bad = [name for name, length in lengths.items()
+                   if len(margins[name]) != length]
+            if bad:
+                raise ValueError(
+                    f"{condition} seed {seed}: score/label length mismatch: {bad[:5]}"
+                )
+            seed_margins.append(margins)
+
+        rows = []
+        for name in sorted(lengths):
+            arrays = [sm[name] for sm in seed_margins]
+            mean_margin = np.mean(np.stack(arrays, axis=0), axis=0)
+            for i, score in enumerate(mean_margin):
+                rows.append({"name": name, "res_idx": i + 1, "esmfluc_score": float(score)})
+
+        out[condition] = pd.DataFrame(rows)
+        print(f"    {condition}: {len(lengths)} proteins, "
+              f"{len(seed_margins)}/{len(seeds)} seeds loaded")
+    return out
 
 
-def _run_b2btools_local(fasta_records):
-    """Run DynaMine + DisoMine via the installed b2btools package."""
-    rows = []
-    total = len(fasta_records)
-    for i, (name, seq) in enumerate(fasta_records.items(), 1):
-        if i % 50 == 0 or i == 1:
-            print(f"  [b2btools] {i}/{total}")
+def load_linear_precomputed(results_root: Path, condition: str) -> dict | None:
+    """
+    Read pre-computed pooled and macro metrics for the linear condition from
+    the analysis CSVs.  Returns a dict suitable for the comparison table, or
+    None if the files are not found.
+    """
+    pooled_csv = results_root / "analysis" / "pooled_residue_performance_across_seeds.csv"
+    macro_csv  = results_root / "analysis" / "protein_macro_performance_across_seeds.csv"
+    if not pooled_csv.exists():
+        return None
+    try:
+        pooled = pd.read_csv(pooled_csv)
+        macro  = pd.read_csv(macro_csv) if macro_csv.exists() else None
+        row = pooled[pooled["condition"] == condition]
+        if row.empty:
+            return None
+        r = row.iloc[0]
+        m: dict = {
+            "AUROC":          float(r["auroc_across_seed_mean"]),
+            "AUROC_std":      float(r["auroc_across_seed_std"]),
+            "AUPRC":          float(r["auprc_across_seed_mean"]),
+            "Spearman":       float(r["neq_score_spearman_across_seed_mean"]),
+            "score_source":   "pre-computed (no per-residue scores stored)",
+        }
+        if macro is not None:
+            mrow = macro[macro["condition"] == condition]
+            if not mrow.empty:
+                mr = mrow.iloc[0]
+                m["AUROC_macro"] = float(mr["auroc_mean_across_seed_mean"])
+                m["AUROC_macro_std"] = float(mr["auroc_mean_across_seed_std"])
+        return m
+    except Exception as exc:
+        print(f"    [WARN] Could not read pre-computed metrics for {condition}: {exc}")
+        return None
+
+
+# =============================================================================
+# DynaMine via Bio2Byte msatools API (async submit → poll → retrieve)
+# =============================================================================
+def _b2b_submit(session, sequences: dict[str, str], token: str) -> str:
+    """POST one batch. Returns hash_id."""
+    payload: dict = {"tool_list": ["dynamine"], "token": token}
+    payload.update(sequences)
+    resp = session.post(_B2B_API_BASE, json=payload, timeout=60)
+    resp.raise_for_status()
+    data = resp.json()
+    hash_id = data.get("hash_id")
+    if not hash_id:
+        raise RuntimeError(f"API did not return hash_id: {data}")
+    return str(hash_id)
+
+
+def _b2b_poll(session, hash_id: str, poll_interval: int, max_polls: int) -> list[dict]:
+    """Poll queue until complete, then retrieve and return results list."""
+    queue_url  = f"{_B2B_API_BASE}queue/{hash_id}/"
+    result_url = f"{_B2B_API_BASE}{hash_id}/"
+
+    for attempt in range(max_polls):
+        resp = session.get(queue_url, timeout=30, allow_redirects=False)
+        # 303 = explicit redirect to results.
+        # 200 = results ready (observed in practice; status field may be 200).
+        # 202 = still queued/processing.
+        if resp.status_code == 303:
+            break
         try:
-            analyzer = SingleSeqAnalysis()
-            analyzer.load_predictors(["dynamine", "disomine"])
-            preds = analyzer.query(seq)
-            bb   = preds.get("backbone", [None] * len(seq))
-            diso = preds.get("disoMine", [None] * len(seq))
-            for j in range(len(seq)):
-                rows.append({
-                    "name": name,
-                    "res_idx": j + 1,
-                    "dynamine_bb": float(bb[j]) if bb[j] is not None else np.nan,
-                    "disomine":    float(diso[j]) if diso[j] is not None else np.nan,
-                })
-        except Exception as e:
-            print(f"  [WARN] b2btools failed for {name}: {e}")
-            for j in range(len(seq)):
-                rows.append({"name": name, "res_idx": j + 1,
-                             "dynamine_bb": np.nan, "disomine": np.nan})
-    return rows
+            data = resp.json()
+        except Exception:
+            time.sleep(poll_interval)
+            continue
+        if data.get("status") == 500 or data.get("Failure"):
+            raise RuntimeError(f"Server-side prediction failure: {data.get('Failure')}")
+        http_status = data.get("status", resp.status_code)
+        # 202 means still processing; anything else (200, 303) means done.
+        if http_status != 202:
+            break
+        if attempt % 3 == 0:
+            remaining = data.get("request_text", "still processing")
+            print(f"      poll {attempt + 1}/{max_polls}: {remaining}")
+        time.sleep(poll_interval)
+    else:
+        raise TimeoutError(
+            f"DynaMine API timed out after {max_polls} polls "
+            f"({max_polls * poll_interval}s)"
+        )
+
+    resp = session.get(result_url, timeout=60)
+    resp.raise_for_status()
+    return resp.json().get("results", [])
 
 
-def _run_dynamine_api(fasta_records):
+def run_dynamine_api(
+    fasta_records: dict[str, str],
+    token: str,
+    batch_size: int = 40,
+    poll_interval: int = 20,
+    max_polls: int = 90,
+) -> pd.DataFrame:
     """
-    Fall back: call the DynaMine REST API at https://dynamine.ibsquare.be
-    POST a FASTA payload, parse the returned CSV.
-    Rate limit: submit one sequence at a time with a short sleep.
+    Submit test sequences to the Bio2Byte DynaMine API in batches.
+    Returns long DataFrame: name, res_idx (1-based), dynamine_bb.
+    Lower DynaMine backbone S² predictions indicate greater dynamics. Raw
+    regression output is retained even when it falls slightly outside [0, 1].
     """
-    import time
-    import io
     try:
         import requests
     except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "-q"])
+        import subprocess
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "requests", "-q"]
+        )
         import requests
 
-    API_URL = "https://dynamine.ibsquare.be/api/predictions"
-    # Suppress SSL warnings — the DynaMine server has a hostname-mismatch cert
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    rows = []
-    total = len(fasta_records)
-    for i, (name, seq) in enumerate(fasta_records.items(), 1):
-        if i % 25 == 0 or i == 1:
-            print(f"  [DynaMine API] {i}/{total}")
-        fasta_str = f">{name}\n{seq}\n"
+    batch_size = min(batch_size, _B2B_BATCH_MAX)
+    names = list(fasta_records.keys())
+    batches = [names[i: i + batch_size] for i in range(0, len(names), batch_size)]
+
+    session = requests.Session()
+    all_rows: list[dict] = []
+
+    for b_idx, batch_names in enumerate(batches, 1):
+        batch_seqs = {n: fasta_records[n] for n in batch_names}
+        print(f"    Batch {b_idx}/{len(batches)}: {len(batch_seqs)} sequences …")
         try:
-            resp = requests.post(
-                API_URL,
-                data={"fasta": fasta_str},
-                timeout=60,
-                verify=False,  # server cert has hostname mismatch (server-side issue)
-            )
-            resp.raise_for_status()
-            # DynaMine returns whitespace/tab-delimited data, possibly with
-            # comment lines starting with '#' at the top.
-            import csv as _csv
-            text = resp.text
-            lines = [l for l in text.splitlines() if l.strip() and not l.startswith("#")]
-            clean_text = "\n".join(lines)
-            df_api = pd.read_csv(
-                io.StringIO(clean_text),
-                sep=None,
-                engine="python",
-                header=0,
-                quoting=_csv.QUOTE_NONE,
-            )
-            df_api.columns = [c.strip().lower() for c in df_api.columns]
-            for j, row in enumerate(df_api.itertuples(), 1):
-                bb_val = getattr(row, "backbone", np.nan)
-                rows.append({
+            hash_id = _b2b_submit(session, batch_seqs, token)
+            results = _b2b_poll(session, hash_id, poll_interval, max_polls)
+        except Exception as exc:
+            print(f"      [WARN] Batch {b_idx} failed: {exc}")
+            for n in batch_names:
+                for j in range(len(fasta_records[n])):
+                    all_rows.append({"name": n, "res_idx": j + 1, "dynamine_bb": np.nan})
+            continue
+
+        # Index returned results by proteinID.
+        # The API returns per-predictor keys; DynaMine backbone S² is under
+        # "backbone", not "dynamine" ("dynamine" key does not exist).
+        result_index: dict[str, list] = {
+            r["proteinID"]: r.get("backbone", []) for r in results
+        }
+
+        for name in batch_names:
+            preds = result_index.get(name, [])
+            L_expected = len(fasta_records[name])
+            if not preds:
+                print(f"      [WARN] No predictions for {name}")
+                for j in range(L_expected):
+                    all_rows.append({"name": name, "res_idx": j + 1, "dynamine_bb": np.nan})
+                continue
+            for j, val in enumerate(preds[:L_expected]):
+                all_rows.append({
                     "name": name,
-                    "res_idx": j,
-                    "dynamine_bb": float(bb_val) if bb_val is not None else np.nan,
-                    "disomine": np.nan,  # not available from web API alone
+                    "res_idx": j + 1,
+                    "dynamine_bb": float(val) if val is not None else np.nan,
                 })
-        except Exception as e:
-            print(f"  [WARN] DynaMine API failed for {name}: {e}")
-            for j in range(len(seq)):
-                rows.append({"name": name, "res_idx": j + 1,
-                             "dynamine_bb": np.nan, "disomine": np.nan})
-        time.sleep(0.3)  # be polite to the server
-    return rows
+
+    return pd.DataFrame(all_rows)
 
 
-def run_b2btools(fasta_records, cache_path=None, force_api=False):
-    """
-    Return long DataFrame with columns: name, res_idx, dynamine_bb, disomine.
-    Priority:
-      1. Load from cache if it exists.
-      2. Use installed b2btools package (try to install if missing).
-      3. Fall back to DynaMine web API if b2btools installation fails.
-    Set force_api=True to skip local install and go straight to the web API.
-    """
-    if cache_path and Path(cache_path).exists():
-        print(f"[INFO] Loading b2btools cache from {cache_path}")
-        return pd.read_csv(cache_path)
-
-    rows = []
-    used_api = False
-
-    if not force_api:
-        if not B2B_AVAILABLE:
-            # b2btools requires pomegranate which needs Cython compilation —
-            # pre-built wheels rarely exist for Python 3.11.  Skip the install
-            # attempt and go straight to the DynaMine web API.
-            print("  [INFO] b2btools not installed; using DynaMine web API directly.")
-            force_api = True
-
-    if force_api or not B2B_AVAILABLE:
-        print("[INFO] Using DynaMine web API …")
-        rows = _run_dynamine_api(fasta_records)
-        used_api = True
-    else:
-        rows = _run_b2btools_local(fasta_records)
-
-    df = pd.DataFrame(rows)
-    if used_api:
-        print("  [NOTE] DisoMine scores unavailable via web API (b2btools only).")
-    if cache_path:
-        df.to_csv(cache_path, index=False)
-        print(f"[INFO] Cached predictions → {cache_path}")
-    return df
-
-
-# =============================================================================
-# ESMfluc model inference
-# =============================================================================
-EXPERIMENTS = [
-    # (exp_name,       is_esm3, frozen)
-    ("esm2_binary_frozen",    False, True),
-    ("esm2_binary_unfrozen",  False, False),
-    ("esm3_binary_frozen",    True,  True),
-    ("esm3_binary_unfrozen",  True,  False),
-]
+def validate_score_table(
+    scores: pd.DataFrame,
+    lengths: dict[str, int],
+    score_col: str,
+    source: str,
+) -> dict:
+    required = {"name", "res_idx", score_col}
+    missing = required - set(scores.columns)
+    if missing:
+        raise ValueError(f"{source} is missing columns: {sorted(missing)}")
+    table = scores[["name", "res_idx", score_col]].copy()
+    table["name"] = table["name"].astype(str)
+    if table.duplicated(["name", "res_idx"]).any():
+        raise ValueError(f"{source} contains duplicate residue keys")
+    if not np.isfinite(table[score_col].astype(float)).all():
+        raise ValueError(f"{source} contains missing or nonfinite scores")
+    expected_keys = {
+        (name, position)
+        for name, length in lengths.items()
+        for position in range(1, length + 1)
+    }
+    actual_keys = set(zip(table["name"], table["res_idx"].astype(int)))
+    if actual_keys != expected_keys:
+        raise ValueError(
+            f"{source} residue keys do not match labels: "
+            f"missing={len(expected_keys-actual_keys)}, extra={len(actual_keys-expected_keys)}"
+        )
+    values = table[score_col].astype(float)
+    return {
+        "source": source,
+        "protein_count": len(lengths),
+        "residue_count": len(table),
+        "duplicate_residue_keys": 0,
+        "nonfinite_scores": 0,
+        "score_min": float(values.min()),
+        "score_max": float(values.max()),
+        "scores_below_zero": int((values < 0).sum()),
+        "scores_above_one": int((values > 1).sum()),
+        "exact_key_alignment": True,
+    }
 
 
-def build_esm2_model(device):
-    assert HF_AVAILABLE, "transformers not installed"
-    backbone = EsmModel.from_pretrained("facebook/esm2_t33_650M_UR50D").to(device)
-    tokenizer = EsmTokenizer.from_pretrained("facebook/esm2_t33_650M_UR50D")
-    model = BiLSTMWithSelfAttentionModel(
-        embedding_model=backbone,
-        hidden_size=512,
-        num_layers=3,
-        num_classes=2,
-        dropout=0.3,
-        bidirectional=1,
-    ).to(device)
-    return model, tokenizer
-
-
-def build_esm3_model(device):
-    assert ESM3_AVAILABLE, "esm package not installed"
-    raw = ESM3_sm_open_v0("cpu")
-    wrapper = ESM3Wrapper(raw).to(device)
-    tokenizer = EsmSequenceTokenizer()
-    model = BiLSTMWithSelfAttentionModel(
-        embedding_model=wrapper,
-        hidden_size=512,
-        num_layers=3,
-        num_classes=2,
-        dropout=0.3,
-        bidirectional=1,
-    ).to(device)
-    return model, tokenizer
-
-
-def load_checkpoint(model, ckpt_path, device):
-    ckpt = torch.load(ckpt_path, map_location=device)
-    state = (ckpt.get("state_dict") or ckpt.get("model_state_dict") or ckpt)
-    model.load_state_dict(state, strict=False)
-    model.eval()
-    return model
-
-
-def predict_sequence_esm2(model, tokenizer, seq, device):
-    enc = tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False)
-    input_ids = enc["input_ids"].to(device)
-    attn_mask = enc["attention_mask"].to(device)
-    with torch.no_grad():
-        logits, _ = model(input_ids, attn_mask, return_attention=False)
-    probs = torch.softmax(logits, dim=-1)[0, :, 1].cpu().numpy()
-    return probs  # P(flexible) per residue
-
-
-def predict_sequence_esm3(model, tokenizer, seq, device):
-    tokens = tokenizer.encode(seq)
-    input_ids = torch.tensor([tokens], dtype=torch.long).to(device)
-    attn_mask = torch.ones_like(input_ids)
-    with torch.no_grad():
-        logits, _ = model(input_ids, attn_mask, return_attention=False)
-    L_model = logits.shape[1]
-    L_seq   = len(seq)
-    # ESM3 tokenizer may add BOS/EOS tokens – trim to match sequence length
-    if L_model > L_seq:
-        offset = L_model - L_seq
-        logits = logits[:, offset // 2: offset // 2 + L_seq, :]
-    probs = torch.softmax(logits, dim=-1)[0, :, 1].cpu().numpy()
-    return probs
-
-
-def run_esmfluc_inference(results_root, fasta_records, device, cache_dir):
-    """Return dict: exp_name → long DataFrame (name, res_idx, prob_flex)."""
-    results_root = Path(results_root)
-    cache_dir = Path(cache_dir)
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    all_preds = {}
-    for exp_name, is_esm3, frozen in EXPERIMENTS:
-        cache_csv = cache_dir / f"{exp_name}_probs.csv"
-        if cache_csv.exists():
-            print(f"[INFO] Loading cached inference: {exp_name}")
-            all_preds[exp_name] = pd.read_csv(cache_csv)
-            continue
-
-        ckpt_path = results_root / exp_name / "best_model.pth"
-        if not ckpt_path.exists():
-            print(f"[WARN] Checkpoint not found, skipping: {ckpt_path}")
-            continue
-
-        print(f"[INFO] Running inference: {exp_name}")
-        if is_esm3:
-            if not ESM3_AVAILABLE:
-                print(f"  [SKIP] ESM3 not available")
-                continue
-            model, tokenizer = build_esm3_model(device)
-            predict_fn = predict_sequence_esm3
-        else:
-            if not HF_AVAILABLE:
-                print(f"  [SKIP] transformers not available")
-                continue
-            model, tokenizer = build_esm2_model(device)
-            predict_fn = predict_sequence_esm2
-
-        load_checkpoint(model, ckpt_path, device)
-
-        rows = []
-        for i, (name, seq) in enumerate(fasta_records.items(), 1):
-            if i % 50 == 0:
-                print(f"    [{i}/{len(fasta_records)}]")
-            try:
-                probs = predict_fn(model, tokenizer, seq, device)
-                L = min(len(probs), len(seq))
-                for j in range(L):
-                    rows.append({"name": name, "res_idx": j + 1, "prob_flex": float(probs[j])})
-            except Exception as e:
-                print(f"    [WARN] Failed {name}: {e}")
-
-        df = pd.DataFrame(rows)
-        df.to_csv(cache_csv, index=False)
-        all_preds[exp_name] = df
-
-        # free GPU memory
-        del model
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-    return all_preds
+def merge_scores_exact(
+    labels: pd.DataFrame, scores: pd.DataFrame, score_col: str, source: str
+) -> pd.DataFrame:
+    merged = labels.merge(
+        scores[["name", "res_idx", score_col]],
+        on=["name", "res_idx"], how="left", validate="one_to_one",
+    )
+    if len(merged) != len(labels) or merged[score_col].isna().any():
+        raise ValueError(f"{source} failed exact merge with test labels")
+    return merged
 
 
 # =============================================================================
 # Metrics
 # =============================================================================
-def youden_threshold(y_true, scores):
-    """Find threshold maximising Youden's J (sensitivity + specificity - 1)."""
-    fpr, tpr, thresholds = roc_curve(y_true, scores)
-    j = tpr - fpr
-    best_idx = np.argmax(j)
-    return float(thresholds[best_idx])
-
-
-def compute_metrics(y_true, scores, neq_continuous=None):
-    """
-    y_true   : binary array  (1 = flexible)
-    scores   : continuous predictor  (higher = more flexible)
-    neq_continuous : continuous Neq values (for Spearman, optional)
-    """
-    m = {}
+def compute_metrics(
+    y_true: np.ndarray,
+    scores: np.ndarray,
+    neq_continuous: np.ndarray | None = None,
+) -> dict:
+    nan_result = {k: np.nan for k in
+                  ["AUROC", "AUPRC", "Spearman", "n", "n_pos"]}
     if len(np.unique(y_true)) < 2 or len(scores) < 5:
-        return {k: np.nan for k in ["AUC_ROC", "AUC_PR", "F1", "MCC", "Spearman", "n", "n_pos"]}
-
-    m["n"]     = int(len(y_true))
-    m["n_pos"] = int(y_true.sum())
-
+        return nan_result
+    m: dict = {"n": int(len(y_true)), "n_pos": int(y_true.sum())}
     try:
-        m["AUC_ROC"] = float(roc_auc_score(y_true, scores))
+        m["AUROC"] = float(roc_auc_score(y_true, scores))
     except Exception:
-        m["AUC_ROC"] = np.nan
-
+        m["AUROC"] = np.nan
     try:
-        m["AUC_PR"] = float(average_precision_score(y_true, scores))
+        m["AUPRC"] = float(average_precision_score(y_true, scores))
     except Exception:
-        m["AUC_PR"] = np.nan
-
-    try:
-        thresh = youden_threshold(y_true, scores)
-        y_pred = (scores >= thresh).astype(int)
-        m["F1"]  = float(f1_score(y_true, y_pred, zero_division=0))
-        m["MCC"] = float(matthews_corrcoef(y_true, y_pred))
-        m["threshold"] = thresh
-    except Exception:
-        m["F1"] = m["MCC"] = m["threshold"] = np.nan
-
+        m["AUPRC"] = np.nan
     if neq_continuous is not None:
         try:
             rho, _ = spearmanr(neq_continuous, scores, nan_policy="omit")
@@ -557,24 +520,21 @@ def compute_metrics(y_true, scores, neq_continuous=None):
             m["Spearman"] = np.nan
     else:
         m["Spearman"] = np.nan
-
     return m
 
 
-def evaluate_method(df_long, score_col, label_col="label", neq_col="Neq"):
-    """
-    Compute global + per-protein metrics.
-    Returns (global_dict, per_protein_df).
-    """
-    # global
+def evaluate_method(
+    df_long: pd.DataFrame,
+    score_col: str,
+    label_col: str = "label",
+    neq_col: str = "Neq",
+) -> tuple[dict, pd.DataFrame]:
+    """Global and per-protein metrics. Returns (global_dict, per_protein_df)."""
     valid = df_long[[score_col, label_col, neq_col]].dropna()
     global_m = compute_metrics(
-        valid[label_col].values,
-        valid[score_col].values,
-        valid[neq_col].values,
+        valid[label_col].values, valid[score_col].values, valid[neq_col].values
     )
 
-    # per-protein
     recs = []
     for name, g in df_long.groupby("name"):
         g2 = g[[score_col, label_col, neq_col]].dropna()
@@ -582,205 +542,420 @@ def evaluate_method(df_long, score_col, label_col="label", neq_col="Neq"):
         recs.append({"name": name, **m})
     per_protein = pd.DataFrame(recs)
 
-    # bootstrap 95% CI on AUC-ROC (1000 resamples of per-protein means)
-    auc_vals = per_protein["AUC_ROC"].dropna().values
+    auc_vals = per_protein["AUROC"].dropna().values
+    global_m["AUROC_macro"] = float(np.mean(auc_vals)) if len(auc_vals) else np.nan
     if len(auc_vals) >= 10:
         rng = np.random.default_rng(42)
-        boots = [rng.choice(auc_vals, len(auc_vals), replace=True).mean() for _ in range(1000)]
-        global_m["AUC_ROC_CI95_lo"] = float(np.percentile(boots, 2.5))
-        global_m["AUC_ROC_CI95_hi"] = float(np.percentile(boots, 97.5))
+        boots = [
+            rng.choice(auc_vals, len(auc_vals), replace=True).mean()
+            for _ in range(2000)
+        ]
+        global_m["AUROC_macro_CI95_lo"] = float(np.percentile(boots, 2.5))
+        global_m["AUROC_macro_CI95_hi"] = float(np.percentile(boots, 97.5))
 
     return global_m, per_protein
+
+
+def paired_bootstrap_auroc_difference(
+    esm: pd.Series,
+    dynamine: pd.Series,
+    n_bootstrap: int,
+    random_seed: int,
+) -> dict:
+    paired = pd.concat(
+        [esm.rename("esm"), dynamine.rename("dynamine")], axis=1, join="inner"
+    ).dropna().sort_index()
+    if len(paired) < 10:
+        raise ValueError("At least ten paired proteins are required")
+    differences = (paired["esm"] - paired["dynamine"]).to_numpy(dtype=float)
+    rng = np.random.default_rng(random_seed)
+    indices = rng.integers(0, len(differences), size=(n_bootstrap, len(differences)))
+    sampled = differences[indices]
+    boot_mean = sampled.mean(axis=1)
+    boot_median = np.median(sampled, axis=1)
+    return {
+        "n_proteins": len(differences),
+        "mean_delta_AUROC": float(differences.mean()),
+        "mean_delta_AUROC_CI95_lo": float(np.quantile(boot_mean, 0.025)),
+        "mean_delta_AUROC_CI95_hi": float(np.quantile(boot_mean, 0.975)),
+        "median_delta_AUROC": float(np.median(differences)),
+        "median_delta_AUROC_CI95_lo": float(np.quantile(boot_median, 0.025)),
+        "median_delta_AUROC_CI95_hi": float(np.quantile(boot_median, 0.975)),
+        "proteins_ESMfluc_better": int((differences > 0).sum()),
+        "proteins_DynaMine_better": int((differences < 0).sum()),
+        "proteins_tied": int((differences == 0).sum()),
+        "bootstrap_repetitions": n_bootstrap,
+        "bootstrap_unit": "test_protein",
+    }
+
+
+def benjamini_hochberg(values: list[float]) -> np.ndarray:
+    p = np.asarray(values, dtype=float)
+    order = np.argsort(p)
+    adjusted = np.empty(len(p), dtype=float)
+    running = 1.0
+    for rank in range(len(p) - 1, -1, -1):
+        index = order[rank]
+        running = min(running, p[index] * len(p) / (rank + 1))
+        adjusted[index] = running
+    return np.minimum(adjusted, 1.0)
+
+
+# =============================================================================
+# CLI
+# =============================================================================
+def parse_args() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--results_root", required=True,
+                    help="Path to results/publication_comparable_v2")
+    ap.add_argument("--neq_csv", required=True,
+                    help="CSV with columns: name, sequence, neq (list string)")
+    ap.add_argument("--fasta", required=True,
+                    help="FASTA of test sequences for DynaMine submission")
+    ap.add_argument("--output_dir", default="results/benchmark")
+    ap.add_argument("--neq_thresh", type=float, default=1.0,
+                    help="Neq > thresh → flexible (label 1). Default 1.0")
+    ap.add_argument("--dynamine_cache", default=None,
+                    help="Pre-cached DynaMine CSV (name, res_idx, dynamine_bb). "
+                         "Skips API call if the file exists.")
+    ap.add_argument("--skip_dynamine", action="store_true",
+                    help="Skip DynaMine entirely; output ESMfluc-only table.")
+    ap.add_argument("--batch_size", type=int, default=40,
+                    help=f"Sequences per API request (max {_B2B_BATCH_MAX}, default 40).")
+    ap.add_argument("--poll_interval", type=int, default=20,
+                    help="Seconds between queue polls (default 20).")
+    ap.add_argument("--max_polls", type=int, default=90,
+                    help="Maximum queue polls before giving up (default 90).")
+    ap.add_argument("--n_bootstrap", type=int, default=2000,
+                    help="Paired protein bootstrap repetitions (default 2000).")
+    ap.add_argument("--random_seed", type=int, default=42,
+                    help="Random seed for protein bootstrap (default 42).")
+    return ap.parse_args()
 
 
 # =============================================================================
 # Main
 # =============================================================================
-def main():
+def main() -> None:
     args = parse_args()
+    if args.n_bootstrap < 100:
+        raise ValueError("--n_bootstrap must be at least 100")
+    results_root = Path(args.results_root)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    cache_dir = out_dir / "cache"
-    cache_dir.mkdir(exist_ok=True)
 
-    print("=" * 70)
-    print("ESMfluc Benchmark vs DynaMine")
-    print("=" * 70)
+    session_token = _random_token(10)
 
-    # ── Load ground truth ────────────────────────────────────────────────────
-    print("\n[1/5] Loading ground truth …")
-    df_neq = load_neq_csv(args.neq_csv, args.neq_thresh)
-    print(f"  {df_neq['name'].nunique()} proteins, {len(df_neq)} residues")
-    print(f"  Flexible (Neq>{args.neq_thresh}): {df_neq['label'].mean()*100:.1f}% of residues")
+    print("=" * 72)
+    print("ESMfluc vs DynaMine — publication benchmark")
+    print("=" * 72)
 
-    df_nsp3 = load_nsp3(args.nsp3_csv)
-
+    # ── 1. Ground truth ──────────────────────────────────────────────────────
+    print("\n[1/4] Loading test-set labels …")
+    df_labels = load_neq_labels(args.neq_csv, args.neq_thresh)
+    lengths = expected_lengths(df_labels)
     fasta_records = parse_fasta(args.fasta)
-    print(f"  FASTA: {len(fasta_records)} sequences")
+    validate_fasta_against_labels(fasta_records, lengths)
+    n_prot = df_labels["name"].nunique()
+    n_res  = len(df_labels)
+    n_pos  = int(df_labels["label"].sum())
+    print(f"  {n_prot} proteins, {n_res} residues")
+    print(f"  Flexible (Neq > {args.neq_thresh}): {n_pos / n_res * 100:.1f}%")
 
-    # Merge Neq + NSP3 disorder
-    df_base = df_neq.merge(df_nsp3, on=["name", "res_idx"], how="inner")
-    print(f"  After merging with NSP3: {len(df_base)} rows")
-
-    # ── b2btools / DynaMine ──────────────────────────────────────────────────
-    print("\n[2/5] Running b2btools (DynaMine + DisoMine) …")
-    if args.skip_b2b:
-        print("  Skipped (--skip_b2b)")
-        df_b2b = None
-    else:
-        b2b_cache = args.b2b_cache or str(cache_dir / "b2btools_preds.csv")
-        df_b2b = run_b2btools(fasta_records, cache_path=b2b_cache,
-                              force_api=getattr(args, "force_api", False))
-
-    # ── ESMfluc inference ────────────────────────────────────────────────────
-    print("\n[3/5] Running ESMfluc inference …")
-    esmfluc_preds = run_esmfluc_inference(
-        args.results_root, fasta_records, args.device, cache_dir
+    # ── 2. ESMfluc scores ────────────────────────────────────────────────────
+    print("\n[2/4] Extracting ESMfluc per-residue scores …")
+    esmfluc_dfs = extract_esmfluc_scores(
+        results_root, _NPZ_CONDITIONS, SEEDS, lengths
     )
+    score_audits = {
+        condition: validate_score_table(
+            scores, lengths, "esmfluc_score", f"ESMfluc {condition}"
+        )
+        for condition, scores in esmfluc_dfs.items()
+    }
 
-    # ── Build merged long table ──────────────────────────────────────────────
-    print("\n[4/5] Merging all predictions …")
-    df_long = df_base.copy()
+    # Pre-computed metrics for the linear condition (no npz)
+    linear_precomputed = load_linear_precomputed(results_root, _LINEAR_CONDITION)
+    if linear_precomputed:
+        print(f"    {_LINEAR_CONDITION}: pre-computed metrics loaded "
+              f"(AUROC={linear_precomputed['AUROC']:.4f})")
+    else:
+        print(f"    [WARN] Could not load pre-computed metrics for {_LINEAR_CONDITION}")
 
-    # Add NSP3 disorder as a predictor (higher = more disordered = more flexible)
-    # Already in df_base as nsp3_disorder
+    # ── 3. DynaMine ──────────────────────────────────────────────────────────
+    df_dynamine: pd.DataFrame | None = None
+    cache_path: Path | None = None
+    if not args.skip_dynamine:
+        cache_path = (
+            Path(args.dynamine_cache)
+            if args.dynamine_cache
+            else out_dir / "cache_dynamine.csv"
+        )
+        if cache_path.exists():
+            print(f"\n[3/4] Loading cached DynaMine predictions from {cache_path} …")
+            df_dynamine = pd.read_csv(cache_path)
+            print(f"  {df_dynamine['name'].nunique()} proteins, "
+                  f"{df_dynamine['dynamine_bb'].notna().sum()} valid scores")
+        else:
+            print(f"\n[3/4] Fetching DynaMine predictions (token: {session_token}) …")
+            test_names = set(df_labels["name"].unique())
+            fasta_filtered = {n: s for n, s in fasta_records.items() if n in test_names}
+            print(f"  Submitting {len(fasta_filtered)} sequences in batches of "
+                  f"{min(args.batch_size, _B2B_BATCH_MAX)} …")
+            df_dynamine = run_dynamine_api(
+                fasta_filtered,
+                token=session_token,
+                batch_size=args.batch_size,
+                poll_interval=args.poll_interval,
+                max_polls=args.max_polls,
+            )
+            df_dynamine.to_csv(cache_path, index=False)
+            n_valid = df_dynamine["dynamine_bb"].notna().sum()
+            print(f"  Done — {n_valid} scores; cached to {cache_path}")
+        score_audits["DynaMine"] = validate_score_table(
+            df_dynamine, lengths, "dynamine_bb", "DynaMine cache"
+        )
+        above_one = score_audits["DynaMine"]["scores_above_one"]
+        if above_one:
+            print(f"  Note: {above_one} raw DynaMine predictions exceed 1; "
+                  "values are retained because rank metrics do not require clipping")
+    else:
+        print("\n[3/4] DynaMine skipped (--skip_dynamine).")
 
-    # Add b2btools
-    if df_b2b is not None:
-        df_long = df_long.merge(df_b2b, on=["name", "res_idx"], how="left")
-        # DynaMine backbone S2: low = flexible → invert for scoring
-        if "dynamine_bb" in df_long.columns:
-            df_long["dynamine_flex"] = 1.0 - df_long["dynamine_bb"]
+    # ── 4. Compute and save metrics ──────────────────────────────────────────
+    print("\n[4/4] Computing metrics …")
 
-    # Add ESMfluc probabilities
-    for exp_name, df_pred in esmfluc_preds.items():
-        df_pred = df_pred.rename(columns={"prob_flex": exp_name})
-        df_long = df_long.merge(df_pred, on=["name", "res_idx"], how="left")
+    all_global: list[dict] = []
+    all_per_protein: dict[str, pd.DataFrame] = {}
 
-    df_long.to_csv(out_dir / "benchmark_long.csv", index=False)
-    print(f"  Merged table saved → {out_dir / 'benchmark_long.csv'}")
-
-    # ── Evaluate all methods ─────────────────────────────────────────────────
-    print("\n[5/5] Computing metrics …")
-
-    # Define method columns and display names
-    method_cols = {}
-    if "nsp3_disorder" in df_long.columns:
-        method_cols["NSP3-Disorder"] = "nsp3_disorder"
-    if "dynamine_flex" in df_long.columns:
-        method_cols["DynaMine"] = "dynamine_flex"
-    if "disomine" in df_long.columns:
-        method_cols["DisoMine"] = "disomine"
-    for exp_name in [e[0] for e in EXPERIMENTS]:
-        if exp_name in df_long.columns:
-            display = {
-                "esm2_binary_frozen":    "ESMfluc-ESM2-frozen",
-                "esm2_binary_unfrozen":  "ESMfluc-ESM2-unfrozen",
-                "esm3_binary_frozen":    "ESMfluc-ESM3-frozen",
-                "esm3_binary_unfrozen":  "ESMfluc-ESM3-unfrozen",
-            }[exp_name]
-            method_cols[display] = exp_name
-
-    all_global = []
-    all_perseq_dfs = {}
-    for display_name, col in method_cols.items():
-        print(f"  Evaluating: {display_name}")
-        g_m, pp_df = evaluate_method(df_long, score_col=col)
-        g_m["method"] = display_name
+    # DynaMine
+    if df_dynamine is not None:
+        df_dm = merge_scores_exact(
+            df_labels, df_dynamine, "dynamine_bb", "DynaMine"
+        )
+        # Lower S² means greater dynamics. Negation preserves the full raw
+        # ordering without implying that every API prediction lies in [0, 1].
+        df_dm["dynamine_flex"] = -df_dm["dynamine_bb"]
+        g_m, pp_df = evaluate_method(df_dm, score_col="dynamine_flex")
+        g_m["method"] = "DynaMine"
+        g_m["score_source"] = "Bio2Byte msatools API (negative raw backbone S² prediction)"
+        g_m["target_relation"] = "external sequence-only NMR-order-parameter predictor; not trained on ATLAS Neq"
         all_global.append(g_m)
-        all_perseq_dfs[display_name] = pp_df
+        all_per_protein["DynaMine"] = pp_df
 
+    # ESMfluc bilstm_attn conditions (from npz)
+    for condition in _NPZ_CONDITIONS:
+        if condition not in esmfluc_dfs:
+            continue
+        df_esm = merge_scores_exact(
+            df_labels, esmfluc_dfs[condition], "esmfluc_score", condition
+        )
+        g_m, pp_df = evaluate_method(df_esm, score_col="esmfluc_score")
+        g_m["method"] = _DISPLAY.get(condition, condition)
+        g_m["score_source"] = "mean across three seed-specific row-sum logit margins from exact C_ij"
+        g_m["target_relation"] = "supervised ATLAS Neq binary target"
+        all_global.append(g_m)
+        all_per_protein[g_m["method"]] = pp_df
+
+    # ESMfluc linear (pre-computed)
+    if linear_precomputed:
+        g_m = dict(linear_precomputed)
+        g_m["method"] = _DISPLAY.get(_LINEAR_CONDITION, _LINEAR_CONDITION)
+        g_m["target_relation"] = "supervised ATLAS Neq binary target"
+        g_m["comparison_note"] = (
+            "seed-summary metrics only; no residue-level scores available for paired comparison"
+        )
+        all_global.append(g_m)
+        # No per-protein df; Wilcoxon test will skip it
+
+    # Save
     df_global = pd.DataFrame(all_global).set_index("method")
-
-    # ── Save and print ───────────────────────────────────────────────────────
     df_global.to_csv(out_dir / "benchmark_global_metrics.csv")
 
-    per_seq_long = []
-    for method, df_pp in all_perseq_dfs.items():
-        df_pp["method"] = method
-        per_seq_long.append(df_pp)
-    pd.concat(per_seq_long, ignore_index=True).to_csv(
-        out_dir / "benchmark_per_protein_metrics.csv", index=False
-    )
+    if all_per_protein:
+        per_prot_long = pd.concat(
+            [df.assign(method=m) for m, df in all_per_protein.items()],
+            ignore_index=True,
+        )
+        per_prot_long.to_csv(out_dir / "benchmark_per_protein_metrics.csv", index=False)
 
-    # ── Wilcoxon test: best ESMfluc vs best baseline ─────────────────────────
-    from scipy.stats import wilcoxon
+    # Paired protein comparisons: synchronized protein bootstrap plus Wilcoxon.
+    comparison_rows: list[dict] = []
+    if "DynaMine" in all_per_protein:
+        dm_pp = all_per_protein["DynaMine"].set_index("name")["AUROC"].dropna()
+        for method, pp_df in all_per_protein.items():
+            if method == "DynaMine":
+                continue
+            esm_pp = pp_df.set_index("name")["AUROC"].dropna()
+            summary = paired_bootstrap_auroc_difference(
+                esm_pp, dm_pp, args.n_bootstrap, args.random_seed
+            )
+            common = dm_pp.index.intersection(esm_pp.index).sort_values()
+            diff = esm_pp.loc[common].to_numpy() - dm_pp.loc[common].to_numpy()
+            stat, pval = wilcoxon(diff, alternative="greater")
+            comparison_rows.append({
+                "ESMfluc_condition": method,
+                **summary,
+                "wilcoxon_stat": float(stat),
+                "wilcoxon_p_one_sided": float(pval),
+            })
 
-    baseline_methods = [m for m in all_perseq_dfs if "ESMfluc" not in m]
-    esmfluc_methods  = [m for m in all_perseq_dfs if "ESMfluc" in m]
-
-    wilcoxon_rows = []
-    if baseline_methods and esmfluc_methods:
-        # pick best ESMfluc by global AUC-ROC
-        best_esm = max(esmfluc_methods,
-                       key=lambda m: df_global.loc[m, "AUC_ROC"] if m in df_global.index else 0)
-        esm_aucs = all_perseq_dfs[best_esm]["AUC_ROC"].dropna().values
-
-        for bl in baseline_methods:
-            bl_aucs = all_perseq_dfs[bl]["AUC_ROC"].dropna().values
-            # align on common proteins
-            common_names = set(all_perseq_dfs[best_esm]["name"]) & set(all_perseq_dfs[bl]["name"])
-            a = all_perseq_dfs[best_esm].set_index("name").loc[list(common_names), "AUC_ROC"].dropna()
-            b = all_perseq_dfs[bl].set_index("name").loc[list(common_names), "AUC_ROC"].dropna()
-            idx = a.index.intersection(b.index)
-            a, b = a.loc[idx].values, b.loc[idx].values
-            diff = a - b
-            if len(diff) > 10 and not np.all(diff == 0):
-                try:
-                    stat, pval = wilcoxon(diff, alternative="greater")
-                    wilcoxon_rows.append({
-                        "comparison": f"{best_esm} vs {bl}",
-                        "n_proteins": len(diff),
-                        "median_delta_AUC": float(np.median(diff)),
-                        "wilcoxon_stat": float(stat),
-                        "p_value": float(pval),
-                    })
-                except Exception as e:
-                    print(f"  [WARN] Wilcoxon failed for {bl}: {e}")
-
-    if wilcoxon_rows:
-        df_wil = pd.DataFrame(wilcoxon_rows)
-        df_wil.to_csv(out_dir / "benchmark_wilcoxon.csv", index=False)
-
-    # ── Print summary table ──────────────────────────────────────────────────
-    cols_to_show = ["AUC_ROC", "AUC_PR", "F1", "MCC", "Spearman"]
-    df_show = df_global[[c for c in cols_to_show if c in df_global.columns]].copy()
-    df_show = df_show.sort_values("AUC_ROC", ascending=False)
-
-    print("\n")
-    print("=" * 80)
-    print("BENCHMARK RESULTS  (Neq > {:.1f} = flexible, 277 test proteins)".format(args.neq_thresh))
-    print("=" * 80)
-
-    header = f"{'Method':<30}  {'AUC-ROC':>8}  {'AUC-PR':>8}  {'F1':>8}  {'MCC':>8}  {'Spearman':>9}"
-    print(header)
-    print("-" * len(header))
-    for method, row in df_show.iterrows():
-        ci_str = ""
-        if "AUC_ROC_CI95_lo" in df_global.columns:
-            lo = df_global.loc[method, "AUC_ROC_CI95_lo"]
-            hi = df_global.loc[method, "AUC_ROC_CI95_hi"]
-            if not np.isnan(lo):
-                ci_str = f" [{lo:.3f}–{hi:.3f}]"
-        auc_str = f"{row['AUC_ROC']:.4f}{ci_str}" if not np.isnan(row["AUC_ROC"]) else "   N/A"
-        print(
-            f"  {method:<28}  {auc_str:>18}"
-            f"  {row.get('AUC_PR', np.nan):>8.4f}"
-            f"  {row.get('F1', np.nan):>8.4f}"
-            f"  {row.get('MCC', np.nan):>8.4f}"
-            f"  {row.get('Spearman', np.nan):>9.4f}"
+    if comparison_rows:
+        adjusted = benjamini_hochberg(
+            [row["wilcoxon_p_one_sided"] for row in comparison_rows]
+        )
+        for row, q_value in zip(comparison_rows, adjusted):
+            row["wilcoxon_BH_FDR_q"] = float(q_value)
+        comparison = pd.DataFrame(comparison_rows)
+        comparison.to_csv(
+            out_dir / "benchmark_paired_vs_dynamine.csv", index=False
+        )
+        # Retain the historical filename, now with the corrected, richer schema.
+        comparison.to_csv(
+            out_dir / "benchmark_wilcoxon_vs_dynamine.csv", index=False
         )
 
-    if wilcoxon_rows:
-        print("\nPairwise Wilcoxon (per-protein AUC-ROC, one-sided: ESMfluc > baseline):")
-        for r in wilcoxon_rows:
-            sig = "***" if r["p_value"] < 0.001 else ("**" if r["p_value"] < 0.01 else ("*" if r["p_value"] < 0.05 else "ns"))
-            print(f"  {r['comparison']}: median ΔAUC={r['median_delta_AUC']:+.4f}, "
-                  f"p={r['p_value']:.4f} {sig}  (n={r['n_proteins']})")
+    npz_provenance = []
+    for condition in _NPZ_CONDITIONS:
+        for seed in SEEDS:
+            path = (
+                results_root / "runs" / condition / f"seed_{seed}"
+                / "flex_rigid_logit_contributions.npz"
+            ).resolve()
+            stat = path.stat()
+            npz_provenance.append({
+                "condition": condition, "seed": seed, "path": str(path),
+                "size_bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns,
+            })
+    methodology = {
+        "schema": "esmfluc.dynamine_benchmark.methodology.v2",
+        "test_target": f"ATLAS Neq > {args.neq_thresh}",
+        "test_proteins": n_prot,
+        "test_residues": n_res,
+        "reported_metrics": ["AUROC", "AUPRC", "Spearman", "protein_macro_AUROC"],
+        "excluded_metrics": {
+            "F1": "omitted because no decision threshold was selected independently of test data",
+            "MCC": "omitted because no decision threshold was selected independently of test data",
+        },
+        "ESMfluc_ensemble": (
+            "arithmetic mean of the three seed-specific flexible-minus-rigid "
+            "logit margins reconstructed as row sums of exact contribution matrices; "
+            "run-wide classifier biases do not affect residue ranking"
+        ),
+        "DynaMine_score": (
+            "negative raw Bio2Byte backbone S2 prediction; no clipping or calibration"
+        ),
+        "DynaMine_target_caveat": (
+            "DynaMine is trained on NMR-derived backbone order parameters, not ATLAS Neq"
+        ),
+        "linear_baseline_caveat": (
+            "only precomputed seed-summary metrics are available; it is excluded "
+            "from residue-level paired comparisons"
+        ),
+        "paired_inference": {
+            "unit": "test protein",
+            "bootstrap_repetitions": args.n_bootstrap,
+            "random_seed": args.random_seed,
+            "interval": "paired percentile 95% interval for mean and median AUROC difference",
+            "test": "one-sided paired Wilcoxon signed-rank, BH corrected across six conditions",
+        },
+        "sources": {
+            "neq_csv": {"path": str(Path(args.neq_csv).resolve()), "sha256": sha256(args.neq_csv)},
+            "fasta": {"path": str(Path(args.fasta).resolve()), "sha256": sha256(args.fasta)},
+            "dynamine_cache": (
+                {"path": str(cache_path.resolve()), "sha256": sha256(cache_path)}
+                if cache_path is not None and cache_path.is_file() else None
+            ),
+            "ESMfluc_npz": npz_provenance,
+        },
+        "score_table_audits": score_audits,
+    }
+    methodology_path = out_dir / "benchmark_methodology.json"
+    methodology_path.write_text(
+        json.dumps(methodology, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+    )
 
-    print(f"\nAll outputs saved to: {out_dir}")
+    required_outputs = [
+        "benchmark_global_metrics.csv", "benchmark_per_protein_metrics.csv",
+        "benchmark_paired_vs_dynamine.csv", "benchmark_wilcoxon_vs_dynamine.csv",
+        "benchmark_methodology.json",
+    ] if df_dynamine is not None else [
+        "benchmark_global_metrics.csv", "benchmark_per_protein_metrics.csv",
+        "benchmark_methodology.json",
+    ]
+    checks = {
+        "fixed_test_counts": n_prot == 208 and n_res == 47751,
+        "six_complete_ESMfluc_score_tables": len(esmfluc_dfs) == 6,
+        "all_score_tables_exactly_aligned": all(
+            item["exact_key_alignment"] for item in score_audits.values()
+        ),
+        "test_optimized_threshold_metrics_absent": not {"F1", "MCC"} & set(df_global.columns),
+        "expected_global_rows": len(df_global) == (
+            6 + int(linear_precomputed is not None) + int(df_dynamine is not None)
+        ),
+        "expected_paired_comparisons": len(comparison_rows) == (
+            6 if df_dynamine is not None else 0
+        ),
+        "paired_intervals_above_zero": all(
+            row["mean_delta_AUROC_CI95_lo"] > 0 for row in comparison_rows
+        ),
+        "required_outputs_present": all((out_dir / name).is_file() for name in required_outputs),
+    }
+    completion = {
+        "schema": "esmfluc.dynamine_benchmark.audit.v2",
+        "passed": all(checks.values()),
+        "checks": checks,
+        "required_outputs": required_outputs,
+        "output_sha256": {
+            name: sha256(out_dir / name) for name in required_outputs
+        },
+    }
+    (out_dir / "benchmark_complete_audit.json").write_text(
+        json.dumps(completion, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+    )
+    if not completion["passed"]:
+        raise ValueError("Benchmark completion audit failed")
+
+    # ── Print summary ─────────────────────────────────────────────────────────
+    show_cols = [c for c in ["AUROC", "AUROC_macro", "AUPRC", "Spearman"]
+                 if c in df_global.columns]
+    df_show = df_global[show_cols].sort_values("AUROC", ascending=False, na_position="last")
+
+    print()
+    print("=" * 80)
+    print(f"BENCHMARK  (atlas_grouped_v1 test set, 208 proteins, Neq > {args.neq_thresh} = flexible)")
+    print("=" * 80)
+    hdr = f"{'Method':<36}  {'AUROC':>7}  {'macro':>7}  {'AUPRC':>7}  {'Spearman':>9}"
+    print(hdr)
+    print("-" * len(hdr))
+    for method, row in df_show.iterrows():
+        auroc_str = f"{row['AUROC']:.4f}" if not np.isnan(row.get("AUROC", np.nan)) else "  —   "
+        macro_str = f"{row['AUROC_macro']:.4f}" if "AUROC_macro" in row and not np.isnan(row["AUROC_macro"]) else "  —   "
+        auprc_str = f"{row.get('AUPRC', np.nan):.4f}" if not np.isnan(row.get("AUPRC", np.nan)) else "  —   "
+        spear_str = f"{row.get('Spearman', np.nan):.4f}" if not np.isnan(row.get("Spearman", np.nan)) else "   —    "
+        print(f"  {method:<34}  {auroc_str:>7}  {macro_str:>7}  {auprc_str:>7}  {spear_str:>9}")
+
+    if comparison_rows:
+        print()
+        print("Paired protein AUROC comparison against DynaMine:")
+        for r in comparison_rows:
+            sig = ("***" if r["wilcoxon_BH_FDR_q"] < 0.001
+                   else "**" if r["wilcoxon_BH_FDR_q"] < 0.01
+                   else "*" if r["wilcoxon_BH_FDR_q"] < 0.05
+                   else "ns")
+            print(f"  {r['ESMfluc_condition']:<36}  "
+                  f"mean Δ={r['mean_delta_AUROC']:+.4f} "
+                  f"[{r['mean_delta_AUROC_CI95_lo']:+.4f}, "
+                  f"{r['mean_delta_AUROC_CI95_hi']:+.4f}]  "
+                  f"q={r['wilcoxon_BH_FDR_q']:.3g} {sig}  "
+                  f"(n={r['n_proteins']})")
+
+    print(f"\nOutputs saved to: {out_dir}/")
     print("=" * 80)
 
 
 if __name__ == "__main__":
     main()
+
+
+# ── legacy stub to prevent import errors from old code references ─────────────
