@@ -216,6 +216,11 @@ sigma_MAD = 1.4826 * median(|I_j - median(I)|)
 R_p = |I_p| / sigma_MAD
 ```
 
+The median and MAD are calculated over the detector's eligible profile slice.
+Because both numerator and denominator scale together, the detector is exactly
+invariant to multiplying a complete profile by a positive constant. It detects
+relative profile shape, not absolute influence magnitude.
+
 Algorithm:
 
 1. Find positive local maxima and negative local minima in the raw `I_j`
@@ -387,7 +392,7 @@ results/publication_comparable_v2/
 Test-only confirmatory analyses may use the identical test subset under
 `reproducibility_interval_iou05_null_fixed_test/`.
 
-### 1E. Uniform-attention control
+### 1E. Evidence-only and shifted-attention controls
 
 The observed influence profile combines two learned quantities:
 
@@ -403,20 +408,31 @@ attention received by residue \(j\), and \(L\) is the protein length. The
 observed profile can therefore highlight a residue because it carries strong
 evidence, because attention routes many queries toward it, or because of both.
 
-The uniform-attention control asks a simple question: if the same learned
-evidence were consulted equally across the protein, would the same bands still
-be detected? Under uniform attention, every key receives \(1/L\), so the
-control profile is:
+Two post hoc controls separate different explanations for band localization.
+The uniform-attention control asks whether the learned evidence alone is
+sufficient. Under uniform attention, every key receives \(1/L\):
 
 \[
 I_j^{\mathrm{uniform}} = \frac{s_j}{L}.
 \]
 
-This is a post hoc control built from the saved model quantities. It is not a
-new model and does not require retraining. It also is not a causal attention
-ablation, because \(s_j\) was produced by the original trained model. It
-separates the localization already present in the learned evidence from the
-additional localization produced by nonuniform attention routing.
+The shifted-attention control retains the learned shape and variation of
+\(B_j\), but breaks its residue-wise alignment with \(s_j\):
+
+\[
+I_j^{\mathrm{shifted}} = s_j\,
+\operatorname{circularShift}(B_j).
+\]
+
+Each protein and model condition receives a reproducible nonzero circular
+shift. The same shift is used for all three training seeds so that the control
+does not manufacture seed instability. This is a fairer control for the fact
+that multiplying by any nonuniform positive profile can create or amplify
+local extrema.
+
+Both controls use saved quantities from the original model. Neither is a
+retrained model or a causal attention ablation, because \(s_j\) and \(B_j\)
+were produced together by the trained network.
 
 The attention amplification factor is:
 
@@ -436,16 +452,16 @@ signed_band_analysis/build_uniform_attention_control_profiles.py
 signed_band_analysis/compare_observed_uniform_bands.py
 ```
 
-The analysis used the following steps:
+The same procedure was used for both controls:
 
-1. Build \(s_j/L\) profiles for every seed, model condition, split and protein.
-2. Average the three uniform profiles for each model and protein.
+1. Build the control profile for every seed, model condition, split and protein.
+2. Average the three control profiles for each model and protein.
 3. Apply the same locked Phase 1 detector used for the observed profiles:
    raw residue-level profiles, \(R_p\geq2\), and same-sign half-height band
    boundaries.
 4. Apply the same seed-stability rule: interval IoU at least 0.5 and support in
    at least two of three seeds.
-5. Compare observed and uniform profiles, band masks, apex locations, catalog
+5. Compare observed and control profiles, band masks, apex locations, catalog
    sizes and seed support within the same model, split, protein and sign.
 
 No test-set result was used to choose the detector or matching parameters. The
@@ -463,6 +479,15 @@ results/publication_comparable_v2/
     bands/mean_uniform/
     stability_uniform_interval_iou05_null_fixed/
     final_observed_uniform_comparison/
+
+  analysis_shifted_attention_control_raw_mad2/
+    profiles/
+    seed_averaged_profiles/
+    profile_comparison/
+    bands/per_seed_shifted/
+    bands/mean_shifted/
+    stability_shifted_interval_iou05/
+    final_observed_shifted_comparison/
 ```
 
 Across all six models and all three data splits, the uniform control produced
@@ -502,17 +527,46 @@ were 3.28–3.75 observed versus 0.76–2.00 uniform for negative bands, and
 also had lower three-seed support overall, especially for positive bands.
 
 The uniform bands therefore form a relatively small subset of the observed
-bands. Evidence \(s_j\) alone explains some localization, particularly for
-negative bands, but nonuniform learned attention substantially sharpens or
-adds localization. This effect is strongest for positive bands. The result
-supports a role for attention routing in the model's decision pattern, but it
-does not by itself establish a causal biological communication network.
+bands. This shows that \(s_j\) contains much of the broad residue ranking, but
+does not by itself reproduce most detected bands.
 
-This control answers a different question from Phase 3C. Phase 3C starts from
+The shifted-attention control gives a more conservative comparison. On the
+test set, the observed profiles produced 11,740 seed-averaged candidate bands
+and 11,039 seed-stable bands. The shifted profiles produced 5,629 candidates
+and 3,630 stable bands. These totals are summed across the six model
+conditions, not counts of unique biological regions.
+
+Test-set residue-level overlap with the shifted control was:
+
+| Catalog | Sign | Jaccard range | Observed residues covered by shifted control | Shifted-control residues covered by observed |
+|:---|---:|---:|---:|---:|
+| Seed-averaged candidates | Negative | 0.357–0.402 | 0.506–0.620 | 0.542–0.650 |
+| Seed-averaged candidates | Positive | 0.156–0.222 | 0.184–0.265 | 0.640–0.732 |
+| Seed-stable bands | Negative | 0.265–0.333 | 0.369–0.440 | 0.569–0.658 |
+| Seed-stable bands | Positive | 0.095–0.163 | 0.108–0.197 | 0.645–0.743 |
+
+An apex-level diagnostic on the current ESM3 top-28 test catalog clarifies the
+mechanism. Among 1,868 seed-stable observed apices, 91.4% were also a
+sign-appropriate raw local extremum of \(s_j\), 97.3% were a raw local maximum
+of \(B_j\), 89.3% were both and 0.6% were neither. Yet applying the locked
+detector to \(s_j/L\) produced only 346 seed-averaged candidates, 17.1% of the
+2,029 observed candidates for this condition. Thus, the component profiles
+already contain nearly all candidate apex locations, while their learned
+alignment determines which candidates become strong and stable enough to pass
+the \(R_p\geq2\) detector.
+
+Thus, much of the shifted-control catalog is contained within the observed
+catalog, while many observed locations are lost when the alignment between
+\(s_j\) and \(B_j\) is broken. Learned alignment contributes localization,
+especially for positive bands, but the effect is smaller than the uniform
+control alone suggested. The defensible interpretation is that attention
+selects and amplifies evidence-bearing candidate locations; these controls do
+not show that attention creates a biological communication network.
+
+These controls answer a different question from Phase 3C. Phase 3C starts from
 the observed bands and asks whether their strength is associated with
-attention routing, signed evidence, or both. The uniform control instead
-rebuilds the full profile without nonuniform routing, detects a new band
-catalog, and tests directly whether the same locations remain detectable.
+attention routing, signed evidence, or both. Phase 1E instead rebuilds complete
+counterfactual profiles and asks which locations remain detectable.
 
 ## PHASE 2: BIOPHYSICAL ENRICHMENT, NONRANDOMNESS AND IDENTIFIER ANALYSIS
 
@@ -563,11 +617,14 @@ Annotation outputs:
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_band_biophysics/annotations/
+  analysis_phase2_interval_iou05_test/annotations/
     residue_biophysical_annotations.csv.gz
     signed_bands_biophysical_annotations.csv.gz
     annotation_audit.json
 ```
+
+The equivalent all-split residue annotation table used by later phases is
+under `analysis_phase2_upgraded_raw_mad2/annotations/`.
 
 Derived annotations include:
 
@@ -663,6 +720,10 @@ Interpretation:
 - These raw differences do not establish a specialized control mechanism
   because they partly reflect the flexible/rigid state associated with the
   signed contribution.
+
+Accordingly, Phase 2B is treated as a model-localization and accuracy
+diagnostic. The strict matched analysis in Phase 2D, especially external MD
+strain, carries the main biological interpretation.
 
 The script also performs paired positive-versus-negative protein-level
 contrasts. The current outputs are stored in:
@@ -787,7 +848,15 @@ The stricter schemes add:
 - up to five nearest eligible controls per apex
 
 Control reuse is allowed across different apex match sets but not within one
-set.
+set. Candidate controls are ordered first by matching distance. Exact ties are
+resolved by a reproducible SHA-256-derived random value keyed by the analysis
+seed, condition, protein, band and candidate residue. Residue index is not used
+as the tie-break, avoiding systematic selection toward the N terminus.
+
+Neq, RSA and normalized position remain in the balance tables for every
+scheme. They are omitted from the inferential outcome table whenever that
+variable was used for matching. A residual difference inside a matching
+caliper is therefore not reported as a biological finding.
 
 The q3_only results are stored compactly as one case row containing the number
 and means of all eligible controls. More than one million redundant
@@ -814,76 +883,54 @@ Coverage under the stricter schemes:
 The 11,039 total is an aggregate over six model conditions. The stricter schemes lose cases when no non-band
 residue satisfies all required calipers.
 
-Inference:
+Effects are calculated within protein. For the primary analysis, protein
+effects are then averaged inside the sequence/domain union groups used to
+construct the fixed split, and union groups receive equal weight. Confidence
+intervals resample whole union groups. Two-sided sign-flip tests also operate
+on union-group effects.
 
-- calculate case-minus-control effects within each protein
-- give proteins equal weight
-- use protein-level sign flips
-- use protein bootstrap confidence intervals
-- apply Benjamini-Hochberg correction
+One primary Phase 2 family was declared:
 
-Dominant test-set findings:
+- six model conditions;
+- two contribution signs;
+- three headline outcomes: torsional change, distance to the nearest Q3
+  boundary and MD strain;
+- 36 two-sided tests in total, with one Benjamini-Hochberg correction across
+  all 36.
 
-Positive Q3-C apices versus same-protein Q3-C non-band controls:
+The remaining annotation tests are exploratory. Their upper, lower and
+two-sided p-values are retained for diagnostics but are not additional primary
+families.
 
-- Neq: +0.531 to +0.625
-- RSA: +0.123 to +0.146
-- torsional change: +14.20 to +22.79 degrees
-- Q8-S enrichment: +4.45 to +6.50 percentage points
-- structured-linker enrichment: +0.62 to +12.67 percentage points
-- Neq-peak enrichment: +6.26 to +13.82 percentage points
+Under the strict Q3 + Neq + RSA + position match, the union-group-weighted
+test-set effects across the six models were:
 
-The Neq, RSA, torsion, Q8-S and Neq-peak effects were significant after
-multiple-testing correction in all six models. Structured-linker enrichment
-was more model-dependent and was significant in five of six models.
+| Sign | Torsional change | Distance to Q3 boundary | MD strain |
+|:---|---:|---:|---:|
+| Negative | -20.83 to -16.19 degrees | +2.14 to +2.96 residues | -0.0085 to -0.0044 |
+| Positive | +18.07 to +26.18 degrees | +0.35 to +0.84 residues | +0.0060 to +0.0153 |
 
-Negative Q3-H apices versus same-protein Q3-H controls:
+Torsional change remained significant in all six conditions for both signs.
+Negative boundary distance and negative strain were significant in all six.
+Positive boundary distance was significant in five of six conditions, and
+positive strain in four of six. Depending on feature availability and match
+coverage, 77–81 independent test union groups contributed to each comparison.
 
-- Neq: -0.144 to -0.131
-- RSA: -0.133 to -0.042
-- torsional change: -23.06 to -20.23 degrees
-- Q8-H enrichment: +7.91 to +9.33 percentage points
-- 59.37–67.06 percentage points less likely to be within two residues of a Q3
-  boundary
+For ESM3 top-28 specifically, the corrected effects were +23.56 degrees and
++0.0153 strain for positive apices, and -20.83 degrees, -0.0067 strain and
++2.75 residues from a Q3 boundary for negative apices.
 
-All five effects were significant after multiple-testing correction in all six
-models.
-
-Negative Q3-E apices versus same-protein Q3-E controls:
-
-- Neq: -0.158 to -0.129
-- RSA: -0.145 to -0.037
-- torsional change: -23.73 to -0.96 degrees
-- Q8-E enrichment: +0.25 to +1.13 percentage points
-- 45.06–82.39 percentage points less likely to be within two residues of a Q3
-  boundary
-
-These strand effects have consistent directions but are not consistently
-significant across models. The updated catalog contains only 3–34 negative
-Q3-E apices from 3–25 proteins per model, so they should be treated as
-descriptive rather than as a robust cross-model result.
-
-Normalized sequence-position effects were generally weak or model-dependent.
-
-Interpretation:
-
-Q3 alone does not explain selection. Within the same protein and Q3 class:
-
-- positive coil apices are more flexible, exposed and torsionally active than
-  non-band coils
-- negative helical apices are more rigid, buried and internally positioned
-  within helices than matched non-band helical residues
-- negative strand apices show similar directions, but their small sample sizes
-  do not support the same strength of conclusion
-
-The stricter schemes ask conditional questions such as whether Q8 subtype,
-torsion or boundary geometry remains different after additionally holding Neq,
-RSA and position approximately constant.
+The raw circular-shift analysis in Phase 2B remains useful for showing that
+apex locations are not arbitrary. Because the model predicts the Neq-derived
+target accurately and \(s_j\) is closely related to its local decision
+evidence, the broad raw enrichments for flexibility, exposure and Q3/Q8 state
+are primarily model-localization diagnostics. The stricter matched torsion,
+boundary and external-strain effects are the main biological results.
 
 Current outputs:
 
 ```text
-results/publication_comparable_v2/analysis_phase2_interval_iou05_test/
+results/publication_comparable_v2/analysis_phase2_interval_iou05_test_corrected/
   enrichment_with_test_strain/
     within_q3_match_coverage_summary.csv
     within_q3_match_balance.csv
@@ -891,7 +938,14 @@ results/publication_comparable_v2/analysis_phase2_interval_iou05_test/
     within_q3_matched_controls.csv.gz
     within_q3_matched_effects_by_protein.csv.gz
     within_q3_matched_enrichment_summary.csv
+    headline_union_group_inference.csv
+
+  pipeline_audit_with_test_strain.json
 ```
+
+The corrected audit passed all 48 checks. The expensive Phase 2B circular-shift
+null was reused without recomputation because the correction affected only
+control matching and downstream inference, not apex locations or annotations.
 
 ### 2E. Test-set strain extension
 
@@ -1007,31 +1061,11 @@ been replicated on independent train/validation strain datasets.
 
 ### 2F. Outputs, visualization and audit
 
-Primary non-strain enrichment outputs:
+The authoritative corrected strain-aware outputs are:
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_band_biophysics/enrichment/
-    apex_metrics_by_protein.csv.gz
-    apex_circular_shift_null.csv.gz
-    apex_circular_shift_enrichment_summary.csv
-    paired_flex_vs_rigid_summary.csv
-    annotation_band_coverage_by_protein.csv.gz
-    annotation_band_coverage_identifier_summary.csv
-    within_q3_matched_cases.csv.gz
-    within_q3_matched_controls.csv.gz
-    within_q3_match_coverage_summary.csv
-    within_q3_match_balance.csv
-    within_q3_matched_effects_by_protein.csv.gz
-    within_q3_matched_enrichment_summary.csv
-    biophysical_enrichment_parameters.json
-```
-
-Strain-aware outputs:
-
-```text
-results/publication_comparable_v2/
-  analysis_seed_averaged_band_biophysics/
+  analysis_phase2_interval_iou05_test_corrected/
     enrichment_with_test_strain/
       apex_metrics_by_protein.csv.gz
       apex_circular_shift_null.csv.gz
@@ -1045,8 +1079,10 @@ results/publication_comparable_v2/
       within_q3_match_balance.csv
       within_q3_matched_effects_by_protein.csv.gz
       within_q3_matched_enrichment_summary.csv
+      headline_union_group_inference.csv
       strain_input_audit.csv
       biophysical_enrichment_parameters.json
+    pipeline_audit_with_test_strain.json
 ```
 
 Visualization script:
@@ -1055,11 +1091,12 @@ Visualization script:
 signed_band_analysis/plot_signed_band_phase2_results.py
 ```
 
-Existing figures:
+The existing figures predate the matching correction and are not authoritative
+for corrected p-values or matched-effect labels:
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_band_biophysics/phase2_figures/
+  analysis_phase2_interval_iou05_test/phase2_figures/
 ```
 
 These include:
@@ -1071,9 +1108,7 @@ These include:
 - matching-control availability diagnostics
 - stricter matching diagnostics
 
-The currently generated figure directory predates the strain extension.
-Strain results are currently available in the strain-aware tabular outputs but
-have not yet been added to the existing Phase 2 figures.
+Publication figures should be regenerated from the corrected directory.
 
 Pipeline scripts:
 
@@ -1085,34 +1120,23 @@ signed_band_analysis/run_signed_band_biophysical_pipeline.sh
 signed_band_analysis/audit_signed_band_biophysical_pipeline.py
 ```
 
-Original non-strain audit:
+Final corrected audit:
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_band_biophysics/pipeline_audit.json
-```
-
-- passed
-- 42 checks
-- 0 failures
-
-Final strain-aware audit:
-
-```text
-results/publication_comparable_v2/
-  analysis_seed_averaged_band_biophysics/
+  analysis_phase2_interval_iou05_test_corrected/
     pipeline_audit_with_test_strain.json
 ```
 
 - passed
-- 45 checks
+- 48 checks
 - 0 failures
-- all 97,198 bands preserved
-- all 319,199 residue annotations preserved
 - all 208 test strain files valid
 - controls confirmed outside all band intervals
 - Q3 matches and matching calipers independently verified
 - summary statistics independently recomputed
+- matching covariates absent from inferential outcome rows
+- one 36-test primary p-value family confirmed
 
 ## PHASE 3A: WHY SOME Q8 SEGMENTS ARE SELECTED (only exploratory, not to be used as a main result)
 
@@ -1347,14 +1371,16 @@ four control sets as Phase 2:
 The Q3-only comparison uses all eligible controls. The other comparisons use
 the five nearest eligible controls. Position is not part of the initial
 matching. It is included only in the final sensitivity analysis to check
-whether terminal location explains an effect.
+whether terminal location explains an effect. Exact distance ties use the same
+reproducible randomized tie-break as Phase 2 rather than residue order.
 
 The statistics also follow Phase 2. Apex-minus-control effects are averaged
-within each protein so that proteins with many bands do not receive extra
-weight. The mean protein effect is tested by randomly reversing each protein's
-effect sign 10,000 times. Whole proteins are resampled 2,000 times to obtain a
-95% confidence interval. Benjamini-Hochberg correction is applied to the
-resulting tests.
+within protein and then within the fixed-split union groups. Union groups
+receive equal weight, are resampled for confidence intervals and are the units
+of the two-sided sign-flip tests. The primary structural family contains 60
+strict-match tests: six conditions, two signs and five predeclared contact
+features. Benjamini-Hochberg correction is applied once across those 60 tests.
+The larger protein-level feature table remains exploratory.
 
 The audit passed. The six model catalogs contain 11,039 test-set apices, of
 which 10,804 have mapped PDB coordinates. Control coverage was:
@@ -1366,23 +1392,20 @@ which 10,804 have mapped PDB coordinates. Control coverage was:
 | Q3 + Neq + RSA | 99.85–100% | 79.10–80.93% |
 | Q3 + Neq + RSA + position | 99.44–100% | 64.48–67.84% |
 
-In the Q3-only comparison, positive apices had fewer contacts, lower packing
-and centrality, and greater mean contact distance than non-band controls in all
-six models. Negative apices showed the opposite contact-network pattern in all
-six models.
+The positive-apex pattern survived strict matching and union-group inference.
+Across the six conditions, positive apices had 0.58–0.97 fewer contacts and a
+0.10–0.16 lower packing index. Both effects were significant in all six
+conditions. Participation coefficient was also lower in all six. Lower
+betweenness was significant in four conditions and lower closeness in three.
+For ESM3 top-28, all five effects were significant: contact degree -0.97,
+packing index -0.163, betweenness -0.0055, closeness -0.0164 and participation
+-0.0427.
 
-The positive-apex pattern remained under the strictest matching. Positive
-apices had 0.63–0.97 fewer contacts, lower packing, betweenness, participation
-and community-boundary frequency, and 0.14–0.22 Å greater mean contact distance.
-Each of these results was significant after correction in all six models.
-
-The negative result was more sensitive to matching. Under the strictest
-comparison, negative apices had 1.35–1.75 degrees greater curvature, 4.11–5.17
-degrees lower absolute virtual torsion and 0.10–0.14 Å shorter mean contact
-distance in all six models. Contact degree was slightly lower, rather than
-higher, and significant in only three models; betweenness and closeness were
-not significant. Therefore, the exact negative apex should not be described as
-a consistently dense network hub after accounting for Neq and RSA.
+The negative-apex hub interpretation did not survive. Negative contact degree
+and packing were significant in only one of six conditions, while betweenness
+and closeness were significant in none. Participation coefficient was higher
+in four conditions, but this isolated effect is not evidence that the exact
+negative apex is a general dense or central network hub.
 
 The same script tests whether stronger bands, measured by
 `log2(R_p / 2)`, have stronger structural signatures. After protein adjustment
@@ -1395,15 +1418,19 @@ Primary outputs:
 
 ```text
 results/publication_comparable_v2/
-  analysis_apex_structure_phase2_consistent_test/
+  analysis_apex_structure_phase2_consistent_test_corrected/
     stable_apex_structure_features.csv.gz
     matched_nonband_controls.csv.gz
+    matched_apex_control_effects_by_protein.csv.gz
     matched_apex_control_effect_summary.csv
+    headline_union_group_network_inference.csv
     importance_R_structure_X_associations.csv
     match_coverage_balance.csv
     structural_feature_coverage.csv
     run_audit.json
 ```
+
+The corrected structural run passed its internal audit.
 
 #### Full-band interval sensitivity
 
@@ -1828,10 +1855,9 @@ results/publication_comparable_v2/
 
 ## PHASE 4: QUERY RECEIVERS OF SIGNED BAND CONTRIBUTIONS
 
-Scientific question:
-
-For one fixed influential source band, why does one query residue receive a
-large contribution while another query in the same protein receives little?
+Phase 4 asks why, for one fixed source band, some query residues receive a
+large sign-aligned contribution while other queries in the same protein
+receive little.
 
 For query residue i and source band b:
 
@@ -1848,35 +1874,31 @@ Because s_j is constant across queries, query-to-query variation for that key
 comes from attention A_ij. For a multi-residue band, the receiver profile sums
 the contributions from all keys in the band.
 
-### 4.1 Script and inputs
+### 4.1 Scripts and current inputs
 
 Script:
 
 ```text
 signed_band_analysis/analyze_signed_band_query_receivers.py
+signed_band_analysis/build_band_query_structural_water_features.py
 ```
 
-Inputs:
+The upgraded run uses the all-split contribution manifest, the current
+seed-stable Phase 1 catalog, Phase 2 residue annotations, the corrected
+all-split Phase 3C mechanism table, alignment-audited experimental structures
+and ECOD annotations.
 
-- Contribution manifest:
-  results/publication_comparable_v2/
-    all_split_signed_contributions_manifest.tsv
-
-- Final averaged bands and eligible intervals:
-  results/publication_comparable_v2/
-    analysis_seed_averaged_signed_bands/
-      signed_bands.csv
-      signed_band_protein_summary.csv
-
-- Residue annotations:
-  results/publication_comparable_v2/
-    analysis_seed_averaged_band_biophysics/annotations/
-      residue_biophysical_annotations.csv.gz
-
-- Phase 3C mechanism classes:
-  results/publication_comparable_v2/
-    analysis_seed_averaged_band_phase3c/
-      mechanism_by_band_seed_averaged.csv.gz
+```text
+results/publication_comparable_v2/
+  all_split_signed_contributions_manifest.tsv
+  analysis_phase1_upgraded_raw_mad2/
+    reproducibility_interval_iou05/stable_signed_bands.csv
+    mean/signed_band_protein_summary.csv
+  analysis_phase2_upgraded_raw_mad2/annotations/
+    residue_biophysical_annotations.csv.gz
+  analysis_phase3c_interval_iou05_stable_all_splits/
+    mechanism_by_band_seed_averaged.csv.gz
+```
 
 Query features:
 
@@ -1888,6 +1910,18 @@ Query features:
 - coarse amino-acid class
 - normalized sequence position
 - whether the query lies inside any signed band
+
+Experimental pair features include 3D geometry, backbone orientation, direct
+C-alpha contacts, ordinary and nonlocal contact-network paths, contact
+communities, ECOD relationships, putative polar contacts and
+crystallographic-water paths.
+
+A putative polar contact is an N/O/S heavy-atom separation of at most 3.5 Å;
+it is not labelled as a hydrogen bond. The primary water analysis uses
+quality-filtered waters from X-ray structures at resolution at most 2.5 Å,
+with occupancy at least 0.5, 3.4 Å protein-water contacts and 3.2 Å
+water-water contacts. A water path contains no intervening protein nodes and
+is a static geometric compatibility measure, not solution-state persistence.
 
 ### 4.2 Receiver profiles and matching
 
@@ -1931,17 +1965,19 @@ with equal protein weighting.
 
 ### 4.3 Data coverage
 
-All six model conditions were analyzed separately.
+All six conditions and all three fixed splits were analyzed separately. The
+upgraded receiver tables contain 24,665,261 band-query pairs:
 
-Total band-query rows:
+- ESM2 frozen: 3,880,584
+- ESM2 top4: 4,263,287
+- ESM2 top28: 4,005,525
+- ESM3 frozen: 4,165,284
+- ESM3 top4: 4,112,398
+- ESM3 top28: 4,238,183
 
-- ESM2 frozen: 5,861,284
-- ESM2 top4: 5,415,005
-- ESM2 top28: 5,155,195
-- ESM3 frozen: 5,628,953
-- ESM3 top4: 5,427,178
-- ESM3 top28: 5,660,699
-- total: 33,148,314
+The structural feature store contains 24,642,897 eligible pair rows in 8,208
+atomic protein/model/split partitions. Missing coordinates are stored as
+missing values, never as zero distance or no contact.
 
 For predictive modeling, high and low receivers are balanced within each
 band/Q8/distance stratum, with at most 50 rows per receiver class and protein.
@@ -1962,59 +1998,48 @@ Stages:
 
 2. Add query biophysical features.
 
-3. Add source-band Phase 3C mechanism class.
+3. Add experimental 3D geometry.
+4. Add contact-network features.
+5. Add community and ECOD-domain features.
+6. Add putative polar-contact geometry.
+7. Add crystallographic-water features on a fixed water-eligible cohort.
+8. Add source-mechanism interactions.
 
-Mean test AUROC across six conditions:
-
-| Stage | Negative source | Positive source |
-|---|---:|---:|
-| Distance/Q8 baseline | 0.507 | 0.514 |
-| Add query features | 0.883 | 0.810 |
-| Add source mechanism | 0.883 | 0.811 |
-
-Validation performance was similar:
-
-- negative mean AUROC: 0.882
-- positive mean AUROC: 0.816
+On the test set, the baseline AUROC was 0.496–0.517 for negative sources and
+0.499–0.527 for positive sources. Adding query biophysics increased AUROC to
+0.951–0.976 and 0.865–0.957, respectively.
 
 The baseline is near chance because high and low examples were deliberately
 balanced within Q8 and distance strata. The large improvement therefore comes
 from query biophysics rather than simple sequence proximity or Q8 identity.
 
-Adding source mechanism class changed mean test AUROC by only:
-
-- negative: +0.00007
-- positive: +0.00038
-
-The mechanism-class main effect therefore contributes almost no additional
-receiver discrimination once query properties are known. Mechanism-by-query
-interactions were not tested.
+Source-mechanism interactions changed test AUROC by -0.0003 to +0.0053 for
+negative sources and -0.0010 to +0.0007 for positive sources. They therefore
+add little discrimination once query properties are known.
 
 ### 4.5 Feature importance
 
-Mean test AUROC changes:
+Test AUROC changes across the six conditions:
 
 | Feature | Negative: single / unique | Positive: single / unique |
 |---|---:|---:|
-| Neq | +0.296 / +0.061 | +0.252 / +0.061 |
-| RSA | +0.165 / +0.008 | +0.130 / +0.028 |
-| Torsional change | +0.324 / +0.037 | +0.069 / +0.003 |
-| Query lies in any band | +0.101 / +0.008 | +0.137 / +0.015 |
-| Disorder | +0.153 / +0.001 | -0.005 / +0.011 |
-| Amino-acid class | +0.100 / +0.004 | +0.078 / +0.001 |
+| Query lies in any band | +0.299 to +0.405 / +0.031 to +0.050 | +0.247 to +0.401 / +0.062 to +0.140 |
+| Neq | +0.287 to +0.341 / +0.006 to +0.025 | +0.249 to +0.293 / +0.015 to +0.041 |
+| Torsional change | +0.370 to +0.412 / +0.008 to +0.023 | +0.066 to +0.085 / +0.001 to +0.003 |
+| RSA | +0.156 to +0.188 / approximately zero | +0.108 to +0.170 / +0.006 to +0.019 |
+| Disorder | +0.195 to +0.253 / approximately zero | -0.012 to +0.016 / +0.004 to +0.016 |
+| Amino-acid class | +0.081 to +0.123 / approximately zero | +0.062 to +0.097 / +0.0004 to +0.0018 |
 | Normalized position | approximately zero | approximately zero |
 
 “Single” is the gain from adding one feature to the baseline.
 
 “Unique” is the loss from removing that feature from the full query model.
 
-Interpretation:
-
-- Neq is the largest unique predictor for both signs.
-- Torsional change is the second-largest unique predictor for negative
-  receivers.
-- RSA is the second-largest unique predictor for positive receivers.
-- Amino-acid class and normalized position provide almost no unique information.
+Query-in-band status is the largest unique predictor, followed by Neq and, for
+negative receivers, torsional change. Query-in-band status comes from the same
+model contribution catalog, so it describes internal organization rather than
+independent biology. Amino-acid class and normalized position provide almost
+no unique information.
 
 ### 4.6 Matched high-versus-low effects
 
@@ -2022,19 +2047,18 @@ After exact query-Q8 and distance-bin matching:
 
 Positive-band high receivers versus low receivers:
 
-- Neq: +0.592 to +0.711
-- RSA: +0.087 to +0.115
-- torsional change: +14.7 to +21.1 degrees
-- probability of lying in any band: +18.6 to +32.6 percentage points
-- disorder: -0.042 to -0.030
+- Neq: +0.633 to +0.797
+- RSA: +0.096 to +0.129
+- torsional change: +15.7 to +23.1 degrees
+- probability of lying in any band: +39.6 to +72.7 percentage points
 - normalized position: weak and inconsistent
 
 Negative-band high receivers versus low receivers:
 
-- Neq: -0.463 to -0.397
-- RSA: -0.136 to -0.103
-- torsional change: -38.0 to -34.1 degrees
-- probability of lying in any band: +10.1 to +18.0 percentage points
+- Neq: -0.402 to -0.363
+- RSA: -0.156 to -0.116
+- torsional change: -46.6 to -41.3 degrees
+- probability of lying in any band: +49.4 to +68.1 percentage points
 - normalized position: weak and inconsistent
 
 Conclusion:
@@ -2043,11 +2067,41 @@ Conclusion:
   changing queries.
 - Negative bands preferentially influence rigid, buried and torsionally stable
   queries.
-- High receivers are more likely to lie in another band interval, but dense
-  and overlapping band intervals prevent interpreting this alone as a discrete
-  band-to-band signaling network.
+- High receivers are more likely to lie in another band interval, but shared
+  flexibility class and model-derived band overlap can explain much of this
+  association. It is not evidence of a discrete signaling network.
 
-### 4.7 Long-range receivers
+### 4.7 Experimental structure and water
+
+Matched high-versus-low receivers show independent structural associations:
+
+- high negative-band receivers were 2.22–2.77 Å closer to the source band and
+  5.4–13.0 percentage points more likely to make a direct C-alpha contact;
+- high positive-band receivers were 0.30–1.12 Å farther away on average, but
+  were still 1.6–9.1 percentage points more likely to make a direct C-alpha
+  contact;
+- direct putative polar contacts were 1.6–6.0 percentage points more frequent
+  for negative receivers and 2.0–8.1 points more frequent for positive
+  receivers.
+
+Direct-contact and polar-contact directions were consistent across models.
+Community and ECOD co-membership were weak or inconsistent. One-water bridges
+and longer crystallographic-water paths were not consistent across models.
+
+These associations add little held-out discrimination beyond query
+biophysics. On the fixed all-query water-eligible cohort, ordinary structure
+added 0.0012–0.0028 AUROC for negative sources and 0.0012–0.0072 for positive
+sources. Adding water changed AUROC by -0.0006 to -0.0001 and -0.0008 to
++0.0011, respectively. Structural and water increments were also small and
+inconsistent for queries at least 21 residues away, including after direct
+C-alpha contacts were removed.
+
+Phase 4 therefore shows that strong receivers can have spatial and chemical
+associations with their source bands. It does not establish a general
+contact-network or water-mediated pathway, and query biophysics explains
+nearly all held-out discrimination.
+
+### 4.8 Long-range receivers
 
 Long range is defined as at least 21 residues from the source-band interval.
 
@@ -2055,70 +2109,81 @@ Fraction of test high receivers at long range:
 
 | Source mechanism | Negative source | Positive source |
 |---|---:|---:|
-| Combined | 55.4–60.4% | 59.4–64.0% |
-| Evidence-dominated | 66.6–69.4% | 74.4–81.6% |
+| Combined | 57.5–62.7% | 60.9–66.7% |
 
 Mean fraction of directional contribution mass at long range:
 
-- negative combined: 65.9%
-- negative evidence-dominated: 70.2%
-- positive combined: 71.0%
-- positive evidence-dominated: 79.3%
+- negative combined: 65.9–70.8%
+- positive combined: 72.4–75.0%
 
 A majority of high receivers and directional contribution mass can therefore
-be distant in sequence. Evidence-dominated bands show the greatest long-range
-fractions.
+be distant in sequence.
 
 These are absolute fractions, not enrichment relative to the number of
-available long-range query residues.
+available long-range query residues. Long sequence distance is not equivalent
+to long spatial distance.
 
-### 4.8 Outputs
+### 4.9 Outputs and audit
 
 Output root:
 
 ```text
 results/publication_comparable_v2/
-  analysis_seed_averaged_band_query_receivers/<condition>/
+  analysis_phase4_interval_iou05_stable_query_receivers_upgraded/
+    feature_store_primary/
+    primary/<condition>/
+    audit_primary_features.json
+    audit_primary_complete.json
 ```
 
 Important outputs:
 
-- per_seed_query_profile_cache/
-- band_query_profiles/
-- band_query_pairs.csv.gz
+- band_query_pair_manifest.csv
 - receiver_feature_effects_by_protein.csv.gz
 - receiver_feature_summary.csv
 - receiver_model_performance.csv
 - receiver_feature_ablation_performance.csv
+- receiver_structural_water_ablation_performance.csv
 - long_range_receiver_summary.csv
-- extraction_audit.json
+- receiver_complete.json
 - parameters.json
 
-### 4.9 Conclusion and limitations
+The complete audit passed 998,281 checks across 8,208 feature partitions and
+all six receiver output directories, with no stored failures.
+
+### 4.10 Conclusion and limitations
 
 The model does not distribute a band’s contribution uniformly across queries.
 After controlling for source band, query Q8 and sequence distance, query
 biophysics strongly identifies high receivers.
 
-Neq is the largest unique predictor for both signs. Positive bands
-preferentially influence flexible and exposed queries, whereas negative bands
-preferentially influence rigid and buried queries. Much of the influence is
-long range in sequence.
+Query-in-band status is the largest unique predictor, followed by Neq and
+sign-specific local biophysics. Positive bands preferentially influence
+flexible and exposed queries, whereas negative bands preferentially influence
+rigid and buried queries. Much of the influence is long range in sequence.
 
 Limitations:
 
-- No pairwise C-alpha distance, direct contact, network path, structural
-  community, domain or strain-covariance feature was used.
-- The current analysis cannot distinguish direct 3D contact, contact-network
-  transmission, solvent-mediated propagation or a learned flexibility pattern.
-- Long sequence distance does not imply long spatial distance.
+- Query-in-band status and receiver strength both come from the model's
+  contribution decomposition; their association is not independent biology.
+- Experimental geometry, contacts and putative polar contacts are independent
+  annotations, but their incremental predictive value is small.
+- Crystallographic waters describe one static structure and do not measure
+  solution-state occupancy or transmission.
+- Long sequence distance does not imply long spatial distance, although the
+  upgraded analysis separately examines direct 3D contact.
 - The six model conditions use the same proteins and are not independent
   biological datasets.
 - The results are predictive associations and do not establish causal
   biochemical transmission.
 
 
-## PHASE 5: SIGNED-BAND SEQUENCE MOTIFS AND PWMs
+## PHASE 5: LEGACY SIGNED-BAND SEQUENCE MOTIFS AND PWMs (exploratory)
+
+Phase 5 was run on the earlier 97,198-band catalog and has not been repeated on
+the current seed-stable catalog. Its motif models add essentially no held-out
+discrimination beyond biophysical features. It is retained for provenance but
+is not a primary manuscript analysis.
 
 Scientific questions:
 
@@ -2130,7 +2195,7 @@ Scientific questions:
 
 Inputs:
 
-- Final averaged bands:
+- Earlier averaged-band catalog:
   results/publication_comparable_v2/
     analysis_seed_averaged_signed_bands/signed_bands.csv
 
@@ -2340,62 +2405,65 @@ Limitations:
    locations are strongly nonrandom relative to protein-preserving
    circular-shift nulls.
 
-2. Positive bands preferentially occupy flexible, exposed, loop-like and
-   torsionally active environments. Negative bands preferentially occupy
-   rigid, structured, buried and torsionally stable environments.
+2. Raw positive/negative differences in flexibility, exposure and local
+   structure are strong localization and model-accuracy diagnostics, but are
+   not by themselves evidence of a specialized biological mechanism.
 
-3. In the 208 test proteins with strain data, positive bands occupy higher and
-   more rapidly changing strain environments, whereas negative bands occupy
-   lower-strain environments.
+3. Under strict same-protein matching and union-group inference, positive
+   apices retain greater torsional change and MD strain, whereas negative
+   apices retain lower torsional change and strain and lie deeper inside Q3
+   regions. These are the primary Phase 2 biological results.
 
-4. These differences remain substantial after comparison with same-protein
-   residues from the same Q3 class. Band selection therefore reflects more
-   than Q3 identity alone.
+4. The primary Phase 2 family contains 36 predeclared two-sided tests. Broader
+   annotation screens and raw circular-shift enrichments are exploratory.
 
 5. Positive bands are enriched for Q8 loops, Neq peaks and high-strain
    environments, but have low exact recall. Bands should not be interpreted as
    general loop, Neq-peak or high-strain detectors.
 
-6. Selection of a complete Q8 segment is predictable on held-out proteins from
-   Neq, exposure, length, geometry, boundary organization and disorder.
+6. Complete-Q8-segment selection is predictable from biophysical features, but
+   this post hoc object is not what the contribution model directly selects;
+   Phase 3A remains exploratory.
 
-7. Experimental structure adds information beyond the predicted biophysical
-   features. Positive bands favor weakly connected, mechanically deformable
-   C/S/T segments, whereas negative bands favor densely connected and central
-   H/E segments resembling stabilizing structural cores.
+7. At the exact apex, positive bands favor weakly connected and loosely packed
+   experimental structures. The corresponding negative-apex hub claim does
+   not survive strict matching and union-group inference. Complete negative
+   band intervals can still occupy more connected environments; apex and
+   interval results must not be conflated.
 
-8. Selected segments are not generally enriched at contact-community or
-   ECOD-domain boundaries. Their signal is better described by local packing
-   and mechanics than by generic hinge or domain-boundary localization.
+8. Neither apex nor segment analyses support a generic contact-community,
+   ECOD-boundary or allosteric-hinge interpretation.
 
-9. Positive bands usually combine strong intrinsic signed evidence with broad
-   attention consultation. Negative bands are more often
-   intrinsic-evidence-dominated, with attention acting as a smaller amplifier.
+9. Evidence-only and shifted-attention controls show that \(s_j\) supplies much
+   of the broad candidate landscape, while its learned alignment with \(B_j\)
+   selects and amplifies a smaller set of detectable locations. This effect is
+   strongest for positive bands and is more modest than the uniform-attention
+   comparison alone suggested.
 
 10. A band’s contribution is not distributed uniformly across query residues.
     After controlling for source band, query Q8 and sequence distance, query
-    biophysics strongly predicts high receivers. Neq is the largest unique
-    predictor for both signs.
+    biophysics strongly predicts high receivers. Membership in another
+    model-derived band is the largest unique predictor, followed by Neq and
+    sign-specific local biophysics.
 
 11. Positive bands preferentially influence flexible and exposed queries,
     whereas negative bands preferentially influence rigid and buried queries.
-    Much of this influence is long range in sequence, especially for
-    evidence-dominated bands.
+    Much of this influence is long range in sequence. Direct structural and
+    putative polar-contact associations exist, but add little receiver
+    prediction beyond query biophysics; crystallographic-water paths add no
+    consistent predictive signal.
 
-12. Positive bands have reproducible polar, turn-associated and
-    hydrophobic-depleted sequence context. Negative bands have reproducible
-    hydrophobic and helix-compatible sequence context.
+12. The legacy motif analysis suggests broad sequence-composition differences,
+    but exact motifs add essentially no held-out discrimination beyond
+    biophysical features. Because it used the earlier band catalog, it is not a
+    primary conclusion of the current pipeline.
 
-13. Broad sequence chemistry replicates better than exact short motifs. Motifs
-    add essentially no positive held-out discrimination and reduce average
-    negative discrimination after the Phase 3A biophysical features are
-    included. The results do not support a universal independent sequence code
-    for band selection.
-
-14. Overall, the model appears to learn a distributed mechanism in which
+13. Overall, the model learns a distributed decision pattern in which
     structurally and mechanically distinctive source regions provide signed
-    evidence, attention controls how broadly that evidence is consulted, and
-    query biophysics helps determine which residues receive it most strongly.
+    evidence, attention selects and amplifies evidence-bearing locations, and
+    query biophysics is strongly associated with which residues receive that
+    evidence. This is a model mechanism, not proof of a physical allosteric
+    pathway.
 
 ## CURRENT LIMITATIONS AND NEXT PHASES
 
@@ -2404,29 +2472,35 @@ Limitations:
   coverage is incomplete for some segments and is somewhat lower for positive
   loop segments.
 
-- A sensitivity analysis restricted to fully resolved experimental segments is
-  still recommended.
+- Fully resolved local, geometry-complete and strict contact-graph sensitivity
+  analyses have been completed. They preserve the main directions, although
+  some small incremental structural AUROC gains remain uncertain.
 
 - Strain is available only for the 208 test proteins. Its associations have not
   yet been replicated using independent train or validation strain datasets,
   and strain was not used as a train-learned incremental predictor.
 
-- Phase 3A and Phase 3B treat complete Q8 segments as candidate objects. This is
-  a deliberate estimand, not proof that every contribution band corresponds
-  exactly to one Q8 segment.
+- Phase 3A and the secondary segment-level part of Phase 3B treat complete Q8
+  segments as candidate objects. The primary Phase 3B analysis uses the actual
+  band apex instead.
 
 - Broad and frequently overlapping positive and negative band intervals should
   not be treated as independent physical domains or summed as nonoverlapping
   sequence coverage.
 
+- The locked \(R_p\geq2\) detector threshold was chosen before the downstream
+  test-set biological analyses, but a formal multi-threshold sensitivity sweep
+  has not been completed. The detector is scale-invariant and therefore does
+  not measure absolute influence magnitude.
+
 - ECOD boundaries are annotations rather than experimentally established hinge
   axes. Contact-network measurements also depend on structural completeness
   and the selected contact definition.
 
-- Phase 4 controls for sequence distance but does not yet include pairwise 3D
-  distance, direct contacts, contact-network paths, structural communities or
-  strain covariance between a source band and its receivers. Long sequence
-  distance must not be interpreted as long spatial distance.
+- Phase 4 includes pairwise 3D geometry, direct contacts, contact-network
+  paths, communities, ECOD relationships, putative polar contacts and
+  crystallographic-water paths. These remain static structural associations;
+  strain covariance and dynamic solvent-mediated transmission were not tested.
 
 - Only 69.7% of apex bands had an eligible same-protein, same-Q8 matched
   background in the apex-centered motif analysis.
@@ -2449,5 +2523,5 @@ Limitations:
   evidence, packing, strain or receiver relationships, are needed to test
   causality.
 
-- Phase 6 final cross-phase robustness, sensitivity analysis and integrated
-  publication-level synthesis remains to be completed.
+- The remaining work is manuscript-level synthesis and figure selection, not a
+  new mechanistic study.
