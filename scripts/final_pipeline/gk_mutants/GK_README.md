@@ -1,5 +1,8 @@
 # GK mutant contribution-network analysis
 
+> This file documents the preserved legacy analysis. The current fixed-WT*
+> workflow, including A176G, is documented in `GK_V2_README.md`.
+
 **State summarized:** 2026-07-24
 
 ## 1. Purpose
