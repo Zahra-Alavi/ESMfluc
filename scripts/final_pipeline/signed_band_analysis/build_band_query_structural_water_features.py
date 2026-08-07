@@ -19,8 +19,10 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import json
 import math
+import os
 import re
 from collections import Counter, deque
 from dataclasses import dataclass
@@ -183,6 +185,48 @@ def read_json(path: str) -> object:
     opener = gzip.open if str(path).endswith(".gz") else open
     with opener(path, "rt", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def file_identity(value: str | None) -> dict | None:
+    if not value:
+        return None
+    path = Path(value).expanduser().resolve()
+    identity = {"path": str(path), "exists": path.exists()}
+    if path.is_file():
+        stat = path.stat()
+        identity.update({"size": stat.st_size, "mtime_ns": stat.st_mtime_ns})
+    return identity
+
+
+def feature_analysis_signature(args: argparse.Namespace) -> tuple[str, dict]:
+    settings = {
+        name: getattr(args, name)
+        for name in (
+            "min_mapping_identity", "min_input_coverage",
+            "min_band_resolved_fraction", "ca_contact_cutoff",
+            "nonlocal_min_sequence_separation", "polar_contact_cutoff",
+            "protein_water_cutoff", "water_water_cutoff",
+            "minimum_water_occupancy", "maximum_water_bfactor_robust_z",
+            "maximum_water_resolution", "water_chain_policy",
+            "required_water_method_regex",
+        )
+    }
+    payload = {
+        "schema": "esmfluc.phase4_structural_water.v2",
+        "implementation": file_identity(__file__),
+        "inputs": {
+            "bands_csv": file_identity(args.bands_csv),
+            "contact_json": [file_identity(value) for value in args.contact_json],
+            "ecod_csv": file_identity(args.ecod_csv),
+        },
+        "selection": {
+            "conditions": sorted(args.conditions or []),
+            "splits": sorted(args.splits or []),
+        },
+        "settings": settings,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest(), payload
 
 
 def load_contact_records(paths: Iterable[str]) -> dict[str, dict]:
@@ -961,28 +1005,70 @@ def save_feature_store(
     bands: pd.DataFrame,
     length: int,
     features: dict[str, np.ndarray],
+    analysis_signature: str,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        path,
-        schema_version=np.asarray(["esmfluc.phase4_structural_water.v1"]),
-        condition=np.asarray([condition]),
-        split=np.asarray([split]),
-        protein=np.asarray([protein]),
-        protein_length=np.asarray([length], dtype=np.int32),
-        band_id=np.asarray(bands.band_id.astype(str).tolist(), dtype=str),
-        sign=bands.sign.to_numpy(np.int8),
-        apex_index_0based=bands.apex_index_0based.to_numpy(np.int32),
-        start_index_0based=bands.start_index_0based.to_numpy(np.int32),
-        end_index_0based_inclusive=bands.end_index_0based_inclusive.to_numpy(np.int32),
-        pair_feature_names=np.asarray(PAIR_FEATURES, dtype=str),
-        band_feature_names=np.asarray(BAND_FEATURES, dtype=str),
-        **features,
-    )
+    temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}.npz")
+    try:
+        np.savez_compressed(
+            temporary,
+            schema_version=np.asarray(["esmfluc.phase4_structural_water.v1"]),
+            analysis_signature=np.asarray([analysis_signature]),
+            condition=np.asarray([condition]),
+            split=np.asarray([split]),
+            protein=np.asarray([protein]),
+            protein_length=np.asarray([length], dtype=np.int32),
+            band_id=np.asarray(bands.band_id.astype(str).tolist(), dtype=str),
+            sign=bands.sign.to_numpy(np.int8),
+            apex_index_0based=bands.apex_index_0based.to_numpy(np.int32),
+            start_index_0based=bands.start_index_0based.to_numpy(np.int32),
+            end_index_0based_inclusive=bands.end_index_0based_inclusive.to_numpy(np.int32),
+            pair_feature_names=np.asarray(PAIR_FEATURES, dtype=str),
+            band_feature_names=np.asarray(BAND_FEATURES, dtype=str),
+            **features,
+        )
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def feature_store_is_current(
+    path: Path, bands: pd.DataFrame, length: int, analysis_signature: str,
+) -> bool:
+    try:
+        with np.load(path, allow_pickle=False) as loaded:
+            return bool(
+                "analysis_signature" in loaded
+                and str(loaded["analysis_signature"][0]) == analysis_signature
+                and int(loaded["protein_length"][0]) == length
+                and np.array_equal(
+                    loaded["band_id"].astype(str),
+                    bands.band_id.astype(str).to_numpy(),
+                )
+                and np.array_equal(
+                    loaded["sign"].astype(np.int8),
+                    bands.sign.to_numpy(np.int8),
+                )
+                and np.array_equal(
+                    loaded["apex_index_0based"].astype(np.int32),
+                    bands.apex_index_0based.to_numpy(np.int32),
+                )
+                and np.array_equal(
+                    loaded["start_index_0based"].astype(np.int32),
+                    bands.start_index_0based.to_numpy(np.int32),
+                )
+                and np.array_equal(
+                    loaded["end_index_0based_inclusive"].astype(np.int32),
+                    bands.end_index_0based_inclusive.to_numpy(np.int32),
+                )
+            )
+    except (OSError, KeyError, ValueError):
+        return False
 
 
 def main() -> None:
     args = parse_args()
+    analysis_signature, signature_payload = feature_analysis_signature(args)
     output = Path(args.output_dir).expanduser().resolve()
     output.mkdir(parents=True, exist_ok=True)
     bands = pd.read_csv(args.bands_csv)
@@ -1063,7 +1149,14 @@ def main() -> None:
             })
             for condition, split, protein_bands in protein_contexts[protein]:
                 destination = output_path(output, condition, split, protein)
-                if destination.exists() and not args.overwrite:
+                if (
+                    destination.exists()
+                    and not args.overwrite
+                    and feature_store_is_current(
+                        destination, protein_bands, len(record["sequence"]),
+                        analysis_signature,
+                    )
+                ):
                     status = "reused"
                 else:
                     features = build_pair_features(
@@ -1071,7 +1164,7 @@ def main() -> None:
                     )
                     save_feature_store(
                         destination, condition, split, protein, protein_bands,
-                        len(record["sequence"]), features
+                        len(record["sequence"]), features, analysis_signature
                     )
                     status = "written"
                 manifest_rows.append({
@@ -1095,6 +1188,8 @@ def main() -> None:
     pd.DataFrame(manifest_rows).to_csv(output / "pair_feature_manifest.csv", index=False)
     parameters = {
         "schema_version": "esmfluc.phase4_structural_water.v1",
+        "analysis_signature": analysis_signature,
+        "analysis_signature_payload": signature_payload,
         "coordinate_system": "model/input sequence, 0-based",
         "contact_graph": {
             "ca_cutoff_angstrom": args.ca_contact_cutoff,

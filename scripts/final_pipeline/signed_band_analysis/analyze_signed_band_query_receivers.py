@@ -503,9 +503,29 @@ def extract_source(
             cache_is_current = False
             if destination.exists() and not overwrite:
                 cached = load_seed_profile(destination)
+                expected_identity = {
+                    "band_id": np.asarray(
+                        protein_bands.band_id.astype(str).tolist(), dtype=str
+                    ),
+                    "sign": protein_bands.sign.to_numpy(np.int8),
+                    "apex_index_0based": protein_bands.apex_index_0based.to_numpy(
+                        np.int32
+                    ),
+                    "start_index_0based": protein_bands.start_index_0based.to_numpy(
+                        np.int32
+                    ),
+                    "end_index_0based_inclusive": (
+                        protein_bands.end_index_0based_inclusive.to_numpy(np.int32)
+                    ),
+                }
                 cache_is_current = (
                     "seed" in cached and int(cached["seed"][0]) == seed
                     and all(metric in cached for metric in PROFILE_METRICS)
+                    and all(
+                        field in cached
+                        and np.array_equal(cached[field], expected)
+                        for field, expected in expected_identity.items()
+                    )
                 )
             if cache_is_current:
                 skipped += 1
@@ -918,8 +938,8 @@ def add_mechanism_interactions(data: pd.DataFrame) -> tuple[pd.DataFrame, list[s
     data = data.copy()
     mechanisms = (
         "combined",
-        "evidence-dominated",
-        "consultation-dominated",
+        "evidence_dominated",
+        "consultation_dominated",
         "not_magnitude_enriched",
         "unclassified",
     )
@@ -1568,6 +1588,17 @@ def aggregate(
     mechanism = {}
     if args.mechanism_csv:
         mechanism_frame = pd.read_csv(args.mechanism_csv, usecols=["band_id", "mechanism_class"])
+        if mechanism_frame.band_id.astype(str).duplicated().any():
+            raise ValueError("Mechanism table contains duplicate band_id values")
+        selected_band_ids = set(bands.band_id.astype(str))
+        mechanism_band_ids = set(mechanism_frame.band_id.astype(str))
+        missing_mechanisms = selected_band_ids - mechanism_band_ids
+        if missing_mechanisms:
+            example = sorted(missing_mechanisms)[0]
+            raise ValueError(
+                "Mechanism table does not cover all selected bands: "
+                f"missing={len(missing_mechanisms)}, first={example}"
+            )
         mechanism = dict(zip(mechanism_frame.band_id.astype(str), mechanism_frame.mechanism_class.astype(str)))
     structure_lookup = {}
     if args.pairwise_structure_csv:
@@ -1586,15 +1617,55 @@ def aggregate(
         if args.pairwise_structure_dir else None
     )
 
+    expected_contexts = set(bands_lookup)
+    missing_residue_contexts = {
+        context for context in expected_contexts
+        if (context[1], context[2]) not in residue_lookup
+    }
+    missing_summary_contexts = {
+        context for context in expected_contexts
+        if context not in summary_lookup.index
+    }
+    missing_cache_contexts = expected_contexts - set(cache_groups)
+    if missing_residue_contexts:
+        raise ValueError(
+            "Residue annotations do not cover all band contexts: "
+            f"missing={len(missing_residue_contexts)}"
+        )
+    if missing_summary_contexts:
+        raise ValueError(
+            "Protein summary does not cover all band contexts: "
+            f"missing={len(missing_summary_contexts)}"
+        )
+    if missing_cache_contexts:
+        example = sorted(missing_cache_contexts)[0]
+        raise FileNotFoundError(
+            "Receiver seed caches do not cover all band contexts: "
+            f"missing={len(missing_cache_contexts)}, first={example}"
+        )
+    incomplete_seed_contexts = []
+    for context in sorted(expected_contexts):
+        found = set()
+        for path in cache_groups[context]:
+            with np.load(path, allow_pickle=False) as cached:
+                if "seed" in cached:
+                    found.add(int(cached["seed"][0]))
+        if found != expected_seeds:
+            incomplete_seed_contexts.append((context, sorted(found)))
+    if incomplete_seed_contexts:
+        context, found = incomplete_seed_contexts[0]
+        raise ValueError(
+            "Receiver seed caches are incomplete: "
+            f"contexts={len(incomplete_seed_contexts)}, first={context}, "
+            f"found_seeds={found}, expected={sorted(expected_seeds)}"
+        )
+
     archive_legacy_pair_table(output)
     checkpoint_root = output / AGGREGATE_CHECKPOINT_DIR
     checkpoints: list[tuple[Path, dict]] = []
     profiles_written = pairs_written = checkpoints_written = checkpoints_reused = 0
     eligible_contexts = [
-        (context, paths)
-        for context, paths in sorted(cache_groups.items())
-        if context in bands_lookup
-        and (context[1], context[2]) in residue_lookup
+        (context, cache_groups[context]) for context in sorted(expected_contexts)
     ]
     total_contexts = len(eligible_contexts)
     print(json.dumps({
@@ -1845,6 +1916,43 @@ def main() -> None:
         residue = residue[residue.split.isin(args.splits)]
     manifest = manifest[manifest.seed.isin(args.seeds)].copy()
     bands = bands.sort_values(["condition", "split", "protein", "band_id"])
+    required_bands = {
+        "condition", "split", "protein", "band_id", "sign",
+        "apex_index_0based", "start_index_0based",
+        "end_index_0based_inclusive",
+    }
+    missing = required_bands - set(bands)
+    if missing:
+        raise ValueError(f"Band table lacks {sorted(missing)}")
+    if bands.empty:
+        raise ValueError("No bands remain after condition/split filtering")
+    if bands.band_id.astype(str).duplicated().any():
+        raise ValueError("Band table contains duplicate band_id values")
+    if not bands.sign.isin([-1, 1]).all():
+        raise ValueError("Band signs must be -1 or +1")
+    invalid_interval = (
+        (bands.start_index_0based > bands.apex_index_0based)
+        | (bands.apex_index_0based > bands.end_index_0based_inclusive)
+    )
+    if invalid_interval.any():
+        raise ValueError("At least one band apex lies outside its interval")
+    expected_seeds = set(map(int, args.seeds))
+    seed_sets = manifest.groupby(["condition", "split"]).seed.agg(
+        lambda values: set(map(int, values))
+    )
+    if seed_sets.empty or not seed_sets.map(lambda value: value == expected_seeds).all():
+        raise ValueError(
+            "Contribution manifest does not contain every requested seed for "
+            "each selected condition/split"
+        )
+    band_contexts = set(map(tuple, bands[["condition", "split", "protein"]].astype(str).to_numpy()))
+    summary_contexts = set(map(tuple, summary[["condition", "split", "protein"]].astype(str).to_numpy()))
+    missing_summaries = band_contexts - summary_contexts
+    if missing_summaries:
+        raise ValueError(
+            "Protein summary does not cover all band contexts: "
+            f"missing={len(missing_summaries)}"
+        )
     required_residue = {
         "split", "protein", "residue_index_0based", "amino_acid", "q8",
         "neq", "rsa", "disorder", "torsion_change_from_previous",

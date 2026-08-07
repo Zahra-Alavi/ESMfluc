@@ -1,18 +1,25 @@
 import types
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from signed_band_analysis.analyze_signed_band_query_receivers import (
     PROFILE_METRICS,
+    add_mechanism_interactions,
     receiver_rows_for_profile,
 )
 from signed_band_analysis.build_band_query_structural_water_features import (
     Atom,
+    BAND_FEATURES,
+    PAIR_FEATURES,
     adjacency_lists,
+    feature_store_is_current,
     multi_source_bfs,
     retained_water_network,
+    save_feature_store,
     unique_majority,
 )
 
@@ -46,6 +53,65 @@ def atom(
 
 
 class Phase4StructuralWaterHelperTests(unittest.TestCase):
+    def test_feature_store_reuse_requires_signature_and_band_identity(self):
+        bands = pd.DataFrame({
+            "band_id": ["band_1"],
+            "sign": [1],
+            "apex_index_0based": [1],
+            "start_index_0based": [0],
+            "end_index_0based_inclusive": [2],
+        })
+        features = {
+            name: np.zeros((1, 3), dtype=np.float32)
+            for name in PAIR_FEATURES
+        }
+        features.update({
+            name: np.zeros(1, dtype=np.float32)
+            for name in BAND_FEATURES
+        })
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "feature.npz"
+            save_feature_store(
+                path, "condition", "test", "protein", bands, 3,
+                features, "signature-A",
+            )
+            self.assertTrue(
+                feature_store_is_current(path, bands, 3, "signature-A")
+            )
+            self.assertFalse(
+                feature_store_is_current(path, bands, 3, "signature-B")
+            )
+            changed = bands.copy()
+            changed.loc[0, "apex_index_0based"] = 2
+            self.assertFalse(
+                feature_store_is_current(path, changed, 3, "signature-A")
+            )
+
+    def test_mechanism_interactions_use_phase3c_class_names(self):
+        frame = pd.DataFrame({
+            "mechanism_class": [
+                "combined", "evidence_dominated",
+                "consultation_dominated", "not_magnitude_enriched",
+                "unclassified",
+            ],
+            "query_q8": ["H"] * 5,
+            "query_amino_acid_class": ["aliphatic"] * 5,
+            "neq": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "rsa": [0.1] * 5,
+            "disorder": [0.0] * 5,
+            "torsion_change_from_previous": [10.0] * 5,
+            "query_in_any_band": [1.0] * 5,
+        })
+
+        result, columns = add_mechanism_interactions(frame)
+
+        evidence = "interaction__evidence_dominated__neq"
+        consultation = "interaction__consultation_dominated__neq"
+        self.assertIn(evidence, columns)
+        self.assertIn(consultation, columns)
+        np.testing.assert_allclose(result[evidence], [0, 2, 0, 0, 0])
+        np.testing.assert_allclose(result[consultation], [0, 0, 3, 0, 0])
+
     def test_multisource_bfs_distinguishes_disconnection_from_zero_length(self):
         adjacency = adjacency_lists(
             5,

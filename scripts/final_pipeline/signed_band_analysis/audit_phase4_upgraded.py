@@ -56,6 +56,7 @@ def audit_feature_partition(
     path: Path,
     expected: pd.DataFrame,
     minimum_band_fraction: float,
+    expected_analysis_signature: str,
     audit: Audit,
 ) -> int:
     context = str(path)
@@ -68,6 +69,13 @@ def audit_feature_partition(
         str(data.get("schema_version", [""])[0])
         == "esmfluc.phase4_structural_water.v1",
         "schema_version",
+        context,
+    )
+    audit.check(
+        bool(expected_analysis_signature)
+        and str(data.get("analysis_signature", [""])[0])
+        == expected_analysis_signature,
+        "feature_analysis_signature",
         context,
     )
     expected_ids = expected.sort_values("band_id").band_id.astype(str).to_numpy()
@@ -446,6 +454,7 @@ def main() -> None:
     minimum_band_fraction = float(
         parameters["quality"]["min_band_resolved_fraction"]
     )
+    expected_analysis_signature = str(parameters.get("analysis_signature", ""))
     bands = pd.read_csv(args.bands_csv).sort_values(
         ["condition", "split", "protein", "band_id"]
     )
@@ -470,6 +479,7 @@ def main() -> None:
                 Path(row.feature_npz),
                 expected,
                 minimum_band_fraction,
+                expected_analysis_signature,
                 audit,
             )
     accepted_proteins = pd.read_csv(
