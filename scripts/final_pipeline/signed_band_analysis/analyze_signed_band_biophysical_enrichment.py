@@ -29,7 +29,9 @@ zero strain.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -112,6 +114,12 @@ DERIVED_MATCHED_OUTCOMES = {
     "normalized_position": ("continuous", "normalized sequence position"),
 }
 ALL_MATCHED_OUTCOMES = {**MATCHED_OUTCOMES, **DERIVED_MATCHED_OUTCOMES}
+
+HEADLINE_GROUP_METRICS = (
+    "torsion_change_from_previous",
+    "distance_to_q3_boundary",
+    "strain_ensemble_mean",
+)
 
 MATCH_SCHEMES = {
     "q3_only": {
@@ -203,6 +211,23 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--splits", nargs="*", default=None)
     parser.add_argument("--conditions", nargs="*", default=None)
+    parser.add_argument(
+        "--group_manifest_csv",
+        default="data_splits/atlas_grouped_v1/split_manifest_grouped_v1.csv",
+        help=(
+            "Split manifest containing protein, split, and union_group_id. "
+            "Used for the prespecified headline union-group sensitivity intervals."
+        ),
+    )
+    parser.add_argument(
+        "--matching_only_reuse_dir",
+        default=None,
+        help=(
+            "Recompute only Phase 2 matched-control outputs and copy the audited "
+            "circular-shift/coverage outputs from this compatible enrichment "
+            "directory. This avoids rerunning the expensive null."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -218,6 +243,58 @@ def benjamini_hochberg(values: pd.Series) -> pd.Series:
     adjusted = np.minimum(adjusted, 1.0)
     output.loc[valid.index.to_numpy()[order]] = adjusted
     return output
+
+
+def add_primary_pvalue_family(
+    frame: pd.DataFrame,
+    *,
+    source: str = "p_two_sided",
+    p_name: str = "primary_p_two_sided",
+    q_name: str = "primary_q_bh",
+) -> pd.DataFrame:
+    """Apply BH once to a predeclared table of primary two-sided tests."""
+    frame = frame.copy()
+    if frame.empty:
+        frame[p_name] = pd.Series(dtype=float)
+        frame[q_name] = pd.Series(dtype=float)
+        return frame
+    frame[p_name] = pd.to_numeric(frame[source], errors="coerce")
+    frame[q_name] = benjamini_hochberg(frame[p_name])
+    return frame
+
+
+def matched_covariate_outcomes(match_scheme: str) -> set[str]:
+    """Outcomes prohibited because the selected scheme matches on them."""
+    scheme = MATCH_SCHEMES[match_scheme]
+    prohibited = set()
+    if scheme["use_neq"]:
+        prohibited.add("neq")
+    if scheme["use_rsa"]:
+        prohibited.add("rsa")
+    if scheme["use_position"]:
+        prohibited.add("normalized_position")
+    return prohibited
+
+
+def deterministic_tie_values(
+    *,
+    random_seed: int,
+    condition: str,
+    split: str,
+    protein: str,
+    band_id: str,
+    match_scheme: str,
+    candidate_indices: np.ndarray,
+) -> np.ndarray:
+    """Stable pseudo-random values used only when match distances are tied."""
+    prefix = (
+        f"{random_seed}|{condition}|{split}|{protein}|{band_id}|{match_scheme}|"
+    ).encode()
+    values = []
+    for index in np.asarray(candidate_indices, dtype=int):
+        digest = hashlib.sha256(prefix + str(int(index)).encode()).digest()
+        values.append(int.from_bytes(digest[:8], "big") / 2**64)
+    return np.asarray(values, dtype=float)
 
 
 def empirical_p(observed: float, null: np.ndarray, tail: str) -> float:
@@ -862,7 +939,16 @@ def phase2_within_q3_matching(
                 if len(candidate_indices) == 0:
                     continue
                 candidate_distances = np.sqrt(distance_squared[candidate_indices])
-                order = np.lexsort((candidate_indices, candidate_distances))
+                tie_values = deterministic_tie_values(
+                    random_seed=args.random_seed,
+                    condition=condition,
+                    split=split,
+                    protein=protein,
+                    band_id=str(band.band_id),
+                    match_scheme=match_scheme,
+                    candidate_indices=candidate_indices,
+                )
+                order = np.lexsort((tie_values, candidate_distances))
                 if use_all_controls:
                     selected = candidate_indices[order]
                     selected_distances = candidate_distances[order]
@@ -932,7 +1018,10 @@ def phase2_within_q3_matching(
                     "difference_sum": np.zeros(len(outcome_names), dtype=float),
                     "counts": np.zeros(len(outcome_names), dtype=np.int32),
                 })
+                prohibited_outcomes = matched_covariate_outcomes(match_scheme)
                 for metric_index, metric in enumerate(outcome_names):
+                    if metric in prohibited_outcomes:
+                        continue
                     values = outcome_arrays[metric]
                     case_value = values[case_index]
                     control_values = values[selected]
@@ -1080,6 +1169,215 @@ def phase2_within_q3_matching(
     return matches, matched_cases, match_coverage, balance, per_protein, enrichment
 
 
+def headline_union_group_inference(
+    per_protein: pd.DataFrame,
+    group_manifest_csv: str | Path,
+    *,
+    n_bootstrap: int,
+    n_sign_flips: int,
+    minimum_groups: int,
+    random_seed: int,
+) -> pd.DataFrame:
+    """Sensitivity inference with equal weight assigned to split-union groups."""
+    columns = [
+        "match_scheme", "condition", "split", "sign", "label", "metric",
+        "n_union_groups", "n_proteins", "union_group_mean_effect",
+        "union_group_ci95_low", "union_group_ci95_high", "union_group_sign_flip_z",
+        "union_group_p_two_sided", "primary_p_two_sided", "primary_q_bh",
+    ]
+    if per_protein.empty:
+        return pd.DataFrame(columns=columns)
+    manifest = pd.read_csv(group_manifest_csv)
+    required = {"name", "split", "union_group_id"}
+    missing = required - set(manifest)
+    if missing:
+        raise ValueError(
+            f"Group manifest lacks required columns: {sorted(missing)}"
+        )
+    mapping = manifest[["name", "split", "union_group_id"]].rename(
+        columns={"name": "protein"}
+    )
+    if mapping.duplicated(["protein", "split"]).any():
+        raise ValueError("Group manifest has duplicate protein/split keys")
+    selected = per_protein[
+        per_protein["match_scheme"].eq("q3_neq_rsa_position")
+        & per_protein["split"].eq("test")
+        & per_protein["metric"].isin(HEADLINE_GROUP_METRICS)
+    ].copy()
+    if selected.empty:
+        return pd.DataFrame(columns=columns)
+    selected = selected.merge(
+        mapping, on=["protein", "split"], how="left", validate="many_to_one"
+    )
+    if selected["union_group_id"].isna().any():
+        names = selected.loc[selected.union_group_id.isna(), "protein"].unique()
+        raise ValueError(
+            "Headline Phase 2 rows lack union-group assignments: "
+            + ", ".join(map(str, names[:5]))
+        )
+    group_keys = ["match_scheme", "condition", "split", "sign", "label", "metric"]
+    group_effects = selected.groupby(
+        [*group_keys, "union_group_id"], as_index=False
+    ).agg(
+        group_effect=("case_minus_control", "mean"),
+        proteins_in_group=("protein", "nunique"),
+    )
+    rng = np.random.default_rng(random_seed)
+    rows = []
+    for key, frame in group_effects.groupby(group_keys, sort=False):
+        values = frame.group_effect.to_numpy(float)
+        observed = float(np.mean(values))
+        low, high = bootstrap_mean_ci(values, n_bootstrap, rng)
+        z = p_two = np.nan
+        if len(values) >= minimum_groups:
+            _, z, _, _, p_two = sign_flip_test(values, n_sign_flips, rng)
+        rows.append({
+            **dict(zip(group_keys, key)),
+            "n_union_groups": int(len(values)),
+            "n_proteins": int(frame.proteins_in_group.sum()),
+            "union_group_mean_effect": observed,
+            "union_group_ci95_low": low,
+            "union_group_ci95_high": high,
+            "union_group_sign_flip_z": z,
+            "union_group_p_two_sided": p_two,
+        })
+    result = pd.DataFrame(rows)
+    return add_primary_pvalue_family(
+        result, source="union_group_p_two_sided"
+    )
+
+
+def rerun_matching_only(
+    *,
+    bands: pd.DataFrame,
+    residue: pd.DataFrame,
+    protein_summary: pd.DataFrame,
+    args: argparse.Namespace,
+    matched_outcome_definitions: dict,
+) -> None:
+    """Rebuild matching outputs while retaining a compatible expensive null."""
+    source = Path(args.matching_only_reuse_dir).expanduser().resolve()
+    output = Path(args.output_dir).expanduser().resolve()
+    if source == output:
+        raise ValueError(
+            "--matching_only_reuse_dir must differ from --output_dir so the "
+            "previous audited run remains immutable"
+        )
+    source_parameters_path = source / "biophysical_enrichment_parameters.json"
+    if not source_parameters_path.is_file():
+        raise FileNotFoundError(source_parameters_path)
+    source_parameters = json.loads(source_parameters_path.read_text())
+    expected_inputs = {
+        "annotated_bands_csv": args.annotated_bands_csv,
+        "residue_annotations_csv": args.residue_annotations_csv,
+        "protein_summary_csv": args.protein_summary_csv,
+    }
+    for key, current in expected_inputs.items():
+        previous = source_parameters.get(key)
+        if previous is None or Path(previous).resolve() != Path(current).resolve():
+            raise ValueError(
+                f"Cannot reuse nonmatching outputs: {key} differs "
+                f"({previous!r} versus {current!r})"
+            )
+    previous_strain = source_parameters.get("strain", {})
+    if bool(previous_strain.get("requested")) != bool(args.strain_root):
+        raise ValueError(
+            "Cannot reuse nonmatching outputs: strain analysis selection differs"
+        )
+    if args.strain_root and Path(previous_strain["root"]).resolve() != Path(
+        args.strain_root
+    ).resolve():
+        raise ValueError("Cannot reuse nonmatching outputs: strain root differs")
+    reusable = [
+        "apex_metrics_by_protein.csv.gz",
+        "apex_circular_shift_null.csv.gz",
+        "apex_circular_shift_enrichment_summary.csv",
+        "paired_flex_vs_rigid_summary.csv",
+        "annotation_band_coverage_by_protein.csv.gz",
+        "annotation_band_coverage_identifier_summary.csv",
+    ]
+    if source_parameters.get("strain", {}).get("requested"):
+        reusable.append("strain_input_audit.csv")
+    missing = [name for name in reusable if not (source / name).is_file()]
+    if missing:
+        raise FileNotFoundError("Reusable Phase 2 outputs are missing: " + ", ".join(missing))
+
+    results = phase2_within_q3_matching(
+        bands,
+        residue,
+        protein_summary,
+        args,
+        np.random.default_rng(args.random_seed + 2001),
+        matched_outcome_definitions,
+    )
+    controls, cases, coverage, balance, by_protein, summary = results
+    group_inference = headline_union_group_inference(
+        by_protein,
+        args.group_manifest_csv,
+        n_bootstrap=args.n_bootstrap,
+        n_sign_flips=args.n_sign_flips,
+        minimum_groups=10,
+        random_seed=args.random_seed + 3001,
+    )
+    output.mkdir(parents=True, exist_ok=True)
+    for name in reusable:
+        shutil.copy2(source / name, output / name)
+    controls.to_csv(output / "within_q3_matched_controls.csv.gz", index=False, compression="gzip")
+    cases.to_csv(output / "within_q3_matched_cases.csv.gz", index=False, compression="gzip")
+    coverage.to_csv(output / "within_q3_match_coverage_summary.csv", index=False)
+    balance.to_csv(output / "within_q3_match_balance.csv", index=False)
+    by_protein.to_csv(
+        output / "within_q3_matched_effects_by_protein.csv.gz",
+        index=False,
+        compression="gzip",
+    )
+    summary.to_csv(output / "within_q3_matched_enrichment_summary.csv", index=False)
+    group_inference.to_csv(output / "headline_union_group_inference.csv", index=False)
+
+    phase2 = source_parameters.setdefault("phase2_within_q3_matching", {})
+    phase2.update({
+        "matched_covariate_policy": (
+            "Matched covariates are retained as balance diagnostics and omitted "
+            "from inferential outcome rows for schemes that use them."
+        ),
+        "tie_break": (
+            "Reproducible SHA-256 pseudo-random ordering keyed by random seed, "
+            "case, scheme, and candidate residue; used only after match distance."
+        ),
+        "primary_pvalue_family": (
+            "36 two-sided union-group sign-flip tests: 6 conditions x 2 signs "
+            "x 3 predeclared headline metrics; BH corrected once across all 36"
+        ),
+        "other_pvalues": "diagnostic/exploratory; not members of the primary family",
+        "headline_union_group_metrics": list(HEADLINE_GROUP_METRICS),
+        "group_manifest_csv": str(Path(args.group_manifest_csv).resolve()),
+    })
+    source_parameters["matching_only_reuse"] = {
+        "source_directory": str(source),
+        "copied_outputs": reusable,
+        "expensive_null_recomputed": False,
+    }
+    source_parameters.setdefault("outputs", {}).update({
+        "within_q3_matched_controls": str(output / "within_q3_matched_controls.csv.gz"),
+        "within_q3_matched_cases": str(output / "within_q3_matched_cases.csv.gz"),
+        "within_q3_match_coverage": str(output / "within_q3_match_coverage_summary.csv"),
+        "within_q3_match_balance": str(output / "within_q3_match_balance.csv"),
+        "within_q3_matched_effects_by_protein": str(output / "within_q3_matched_effects_by_protein.csv.gz"),
+        "within_q3_matched_summary": str(output / "within_q3_matched_enrichment_summary.csv"),
+        "headline_union_group_inference": str(output / "headline_union_group_inference.csv"),
+    })
+    (output / "biophysical_enrichment_parameters.json").write_text(
+        json.dumps(source_parameters, indent=2) + "\n"
+    )
+    print(json.dumps({
+        "matching_only": True,
+        "expensive_null_recomputed": False,
+        "matched_summary_rows": len(summary),
+        "headline_union_group_rows": len(group_inference),
+        "output_dir": str(output),
+    }, indent=2))
+
+
 def main() -> None:
     args = parse_args()
     if args.n_block_shifts < 1 or args.n_sign_flips < 1 or args.n_bootstrap < 1:
@@ -1108,6 +1406,15 @@ def main() -> None:
     if args.strain_root:
         metric_definitions.update(STRAIN_METRICS)
         matched_outcome_definitions.update(STRAIN_MATCHED_OUTCOMES)
+    if args.matching_only_reuse_dir:
+        rerun_matching_only(
+            bands=bands,
+            residue=residue,
+            protein_summary=protein_summary,
+            args=args,
+            matched_outcome_definitions=matched_outcome_definitions,
+        )
+        return
     rng = np.random.default_rng(args.random_seed)
     metric_names = list(metric_definitions)
     metric_count = len(metric_names)
@@ -1351,6 +1658,14 @@ def main() -> None:
         np.random.default_rng(args.random_seed + 2001),
         matched_outcome_definitions,
     )
+    group_inference = headline_union_group_inference(
+        matched_per_protein,
+        args.group_manifest_csv,
+        n_bootstrap=args.n_bootstrap,
+        n_sign_flips=args.n_sign_flips,
+        minimum_groups=10,
+        random_seed=args.random_seed + 3001,
+    )
 
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1366,6 +1681,7 @@ def main() -> None:
     match_balance_path = output_dir / "within_q3_match_balance.csv"
     matched_per_protein_path = output_dir / "within_q3_matched_effects_by_protein.csv.gz"
     matched_summary_path = output_dir / "within_q3_matched_enrichment_summary.csv"
+    group_inference_path = output_dir / "headline_union_group_inference.csv"
     strain_audit_path = output_dir / "strain_input_audit.csv"
     per_protein.to_csv(per_protein_path, index=False, compression="gzip")
     pd.DataFrame(null_rows).to_csv(null_path, index=False, compression="gzip")
@@ -1383,6 +1699,7 @@ def main() -> None:
         matched_per_protein_path, index=False, compression="gzip"
     )
     matched_summary.to_csv(matched_summary_path, index=False)
+    group_inference.to_csv(group_inference_path, index=False)
     if args.strain_root:
         strain_audit.to_csv(strain_audit_path, index=False)
     parameters = {
@@ -1456,7 +1773,9 @@ def main() -> None:
                 "intervals (plus the configured buffer)."
             ),
             "caliper_scheme_control_selection": (
-                "Up to controls_per_apex_maximum nearest eligible controls."
+                "Up to controls_per_apex_maximum nearest eligible controls; "
+                "exact distance ties are resolved by a reproducible seeded hash, "
+                "not residue order."
             ),
             "control_storage": (
                 "q3_only is stored one row per matched apex in "
@@ -1473,9 +1792,23 @@ def main() -> None:
             },
             "control_reuse": "Allowed across apex matched sets, not within a set.",
             "outcomes": matched_outcome_definitions,
-            "inference": (
-                "Protein-level sign flips and protein bootstrap confidence intervals."
+            "matched_covariate_policy": (
+                "Neq, RSA, and normalized position are omitted as inferential "
+                "outcomes whenever the selected scheme matches on that covariate; "
+                "they remain in balance diagnostics."
             ),
+            "inference": (
+                "The sole Phase 2 primary family contains the 36 two-sided "
+                "union-group sign-flip tests for the three predeclared headline "
+                "metrics. BH is applied once across those 36 tests. All other "
+                "p-values are diagnostic or exploratory."
+            ),
+            "primary_pvalue_family": (
+                "6 conditions x 2 signs x 3 headline metrics = 36 tests; "
+                "two-sided union-group sign flips with one global BH correction"
+            ),
+            "headline_union_group_metrics": list(HEADLINE_GROUP_METRICS),
+            "group_manifest_csv": str(Path(args.group_manifest_csv).expanduser().resolve()),
         },
         "outputs": {
             "per_protein": str(per_protein_path),
@@ -1490,6 +1823,7 @@ def main() -> None:
             "within_q3_match_balance": str(match_balance_path),
             "within_q3_matched_effects_by_protein": str(matched_per_protein_path),
             "within_q3_matched_summary": str(matched_summary_path),
+            "headline_union_group_inference": str(group_inference_path),
             "strain_input_audit": str(strain_audit_path) if args.strain_root else None,
         },
     }
@@ -1505,6 +1839,7 @@ def main() -> None:
         "matched_control_rows": len(matched_controls),
         "matched_case_rows": len(matched_cases),
         "matched_summary_rows": len(matched_summary),
+        "headline_union_group_rows": len(group_inference),
         "strain_proteins_ok": (
             int((strain_audit["strain_status"] == "ok").sum())
             if not strain_audit.empty else 0

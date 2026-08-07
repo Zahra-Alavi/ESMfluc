@@ -68,6 +68,9 @@ def main() -> None:
     matched_summary = pd.read_csv(
         enrichment_dir / "within_q3_matched_enrichment_summary.csv"
     )
+    group_inference = pd.read_csv(
+        enrichment_dir / "headline_union_group_inference.csv"
+    )
     parameters = json.loads(
         (enrichment_dir / "biophysical_enrichment_parameters.json").read_text()
     )
@@ -775,6 +778,40 @@ def main() -> None:
         matched_pq,
         checks,
     )
+    primary_valid = (
+        {"primary_p_two_sided", "primary_q_bh"}.issubset(group_inference.columns)
+        and len(group_inference) == 36
+        and group_inference["primary_p_two_sided"].dropna().between(0, 1).all()
+        and group_inference["primary_q_bh"].dropna().between(0, 1).all()
+        and all(
+            "primary_p_two_sided" not in frame.columns
+            and "primary_q_bh" not in frame.columns
+            for frame in (summary, contrasts, matched_summary)
+        )
+    )
+    check(
+        "one_two_sided_primary_pvalue_family",
+        bool(primary_valid),
+        "36 union-group headline tests; other tables are diagnostic",
+        checks,
+    )
+    forbidden = (
+        (matched_summary.metric.eq("neq") & matched_summary.match_scheme.ne("q3_only"))
+        | (
+            matched_summary.metric.eq("rsa")
+            & matched_summary.match_scheme.str.contains("rsa")
+        )
+        | (
+            matched_summary.metric.eq("normalized_position")
+            & matched_summary.match_scheme.str.endswith("position")
+        )
+    )
+    check(
+        "matched_covariates_absent_from_inferential_outcomes",
+        not bool(forbidden.any()),
+        int(forbidden.sum()),
+        checks,
+    )
     expected_matched_on = (
         ((match_balance.covariate == "neq") & (match_balance.match_scheme != "q3_only"))
         | ((match_balance.covariate == "rsa") & match_balance.match_scheme.str.contains("rsa"))
@@ -818,6 +855,7 @@ def main() -> None:
             "match_balance": len(match_balance),
             "matched_effects_by_protein": len(matched_protein),
             "matched_summary": len(matched_summary),
+            "headline_union_group_inference": len(group_inference),
         },
     }
     output = Path(args.output_json).expanduser().resolve()

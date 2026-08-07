@@ -6,7 +6,11 @@ import numpy as np
 import pandas as pd
 
 from signed_band_analysis.analyze_signed_band_biophysical_enrichment import (
+    add_primary_pvalue_family,
     attach_test_strain,
+    deterministic_tie_values,
+    headline_union_group_inference,
+    matched_covariate_outcomes,
 )
 
 
@@ -71,6 +75,65 @@ class TestStrainAttachment(unittest.TestCase):
             )
         self.assertTrue(merged["strain_ensemble_mean"].isna().all())
         self.assertEqual(audit.loc[0, "strain_status"], "index_or_length_mismatch")
+
+
+class TestCorrectedPhase2Inference(unittest.TestCase):
+    def test_matched_covariates_are_not_inferential_outcomes(self):
+        self.assertEqual(matched_covariate_outcomes("q3_only"), set())
+        self.assertEqual(matched_covariate_outcomes("q3_neq"), {"neq"})
+        self.assertEqual(
+            matched_covariate_outcomes("q3_neq_rsa_position"),
+            {"neq", "rsa", "normalized_position"},
+        )
+
+    def test_tie_break_is_reproducible_and_not_index_order(self):
+        candidates = np.arange(20)
+        first = deterministic_tie_values(
+            random_seed=123, condition="c", split="test", protein="p",
+            band_id="b", match_scheme="q3_neq", candidate_indices=candidates,
+        )
+        second = deterministic_tie_values(
+            random_seed=123, condition="c", split="test", protein="p",
+            band_id="b", match_scheme="q3_neq", candidate_indices=candidates,
+        )
+        np.testing.assert_array_equal(first, second)
+        self.assertFalse(np.array_equal(np.argsort(first), candidates))
+
+    def test_primary_family_uses_only_two_sided_values(self):
+        frame = pd.DataFrame({
+            "p_upper": [0.001, 0.9],
+            "p_lower": [0.9, 0.001],
+            "p_two_sided": [0.02, 0.04],
+        })
+        result = add_primary_pvalue_family(frame)
+        np.testing.assert_allclose(result.primary_p_two_sided, [0.02, 0.04])
+        np.testing.assert_allclose(result.primary_q_bh, [0.04, 0.04])
+
+    def test_headline_inference_resamples_union_group_means(self):
+        per_protein = pd.DataFrame({
+            "match_scheme": ["q3_neq_rsa_position"] * 4,
+            "condition": ["c"] * 4, "split": ["test"] * 4,
+            "protein": ["p1", "p2", "p3", "p4"], "sign": [1] * 4,
+            "label": ["flexibility_supporting"] * 4,
+            "metric": ["torsion_change_from_previous"] * 4,
+            "case_minus_control": [1.0, 3.0, 5.0, 7.0],
+        })
+        manifest = pd.DataFrame({
+            "name": ["p1", "p2", "p3", "p4"], "split": ["test"] * 4,
+            "union_group_id": ["g1", "g1", "g2", "g3"],
+        })
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "groups.csv"
+            manifest.to_csv(path, index=False)
+            result = headline_union_group_inference(
+                per_protein, path, n_bootstrap=200, n_sign_flips=100,
+                minimum_groups=2, random_seed=7,
+            )
+        row = result.iloc[0]
+        self.assertEqual(row.n_union_groups, 3)
+        self.assertEqual(row.n_proteins, 4)
+        self.assertAlmostEqual(row.union_group_mean_effect, (2 + 5 + 7) / 3)
+        self.assertEqual(row.primary_p_two_sided, row.union_group_p_two_sided)
 
 
 if __name__ == "__main__":
