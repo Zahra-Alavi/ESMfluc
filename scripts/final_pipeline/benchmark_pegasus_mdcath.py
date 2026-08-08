@@ -28,16 +28,26 @@ PIPELINE STAGES (each stage is cached; re-runs skip completed stages)
       on the filtered FASTA via Attention/get_attn.py. Per-residue P(flexible)
       is averaged across the 3 seeds.
 
+  Stage 1b – mmseqs (optional, recommended)
+      Run MMseqs2 easy-search (ATLAS sequences vs filtered mdCATH) at 30% identity
+      / 50% coverage — consistent with the ESMfluc split criterion — and remove
+      any mdCATH domain with a hit.  Then cluster the remaining proteins at 30%
+      identity to obtain homology groups for the union-group bootstrap.
+      Writes mdcath_320K_strict.{csv,fasta} and mdcath_cluster_assignments.tsv.
+
   Stage 3 – pegasus
       Pull the PEGASUS Docker image (dsimb/pegasus) if not present, download
       the model weights if not present, then run PEGASUS on the filtered FASTA.
-      PEGASUS predicts per-residue RMSF; higher RMSF = more flexible.
+      PEGASUS emits four heads per residue: RMSF, STD_PHI, STD_PSI, MEAN_LDDT.
+      All four (plus the φ/ψ combined average) are scored against Neq.
 
   Stage 4 – compare
       For each protein compute Spearman ρ between per-residue predictor scores
-      and the continuous mdCATH 320K Neq. Report macro-average ρ, bootstrapped
-      95 % CI (2 000 resamples over proteins), and a paired Wilcoxon signed-rank
-      test comparing ESMfluc to PEGASUS.
+      and the continuous mdCATH 320K Neq.  Bootstrap 95 % CI on the macro-mean
+      ρ and on Δρ (ESMfluc − best PEGASUS head) are computed by resampling
+      homology groups rather than individual proteins (union-group bootstrap).
+      If mdcath_cluster_assignments.tsv is present the MMseqs2 clusters are used;
+      otherwise the 4-char PDB code is used as a conservative fallback group.
 
 USAGE (from scripts/final_pipeline/)
 -------------------------------------
@@ -70,7 +80,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr, wilcoxon
+from scipy.stats import spearmanr
 
 # ---------------------------------------------------------------------------
 # Paths (auto-resolved from this file's location)
@@ -107,6 +117,25 @@ _CONDITION_DISPLAY = {
     "esm3_top28_bilstm_attn":   "ESMfluc ESM3 top-28",
 }
 
+# PEGASUS prediction heads to score against Neq.
+# mean_MEAN_LDDT is a confidence score (higher = more rigid), so its Spearman ρ
+# vs Neq (flexibility) will be negative — reported as-is.
+_PEGASUS_HEADS = ["mean_RMSF", "mean_STD_PHI", "mean_STD_PSI", "mean_MEAN_LDDT"]
+_PEGASUS_HEAD_DISPLAY = {
+    "mean_RMSF":        "PEGASUS RMSF",
+    "mean_STD_PHI":     "PEGASUS φ-std",
+    "mean_STD_PSI":     "PEGASUS ψ-std",
+    "mean_MEAN_LDDT":   "PEGASUS LDDT (neg. flex.)",
+    "phi_psi_combined": "PEGASUS φ/ψ combined",
+}
+
+# Path to MMseqs2 binary (ColabFold install takes priority; falls back to PATH).
+_MMSEQS_BIN = Path("/home/zahralab/localcolabfold/colabfold-conda/bin/mmseqs")
+
+# Python interpreter that has the EvolutionaryScale ESM3 package installed.
+# Used for ESM3 conditions only; ESM2 conditions use the current interpreter.
+_ESM3_PYTHON = Path("/home/zahralab/miniconda/envs/esm_env/bin/python")
+
 
 # ===========================================================================
 # CLI
@@ -126,7 +155,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skip_pegasus", action="store_true",
                    help="Skip PEGASUS; produce ESMfluc-only table.")
     p.add_argument("--stages", type=str, default="filter,infer,pegasus,compare",
-                   help="Comma-separated subset of stages to run.")
+                   help="Comma-separated subset of stages to run. "
+                        "Add 'mmseqs' for homology-filtered strict evaluation.")
+    p.add_argument("--use_strict", action="store_true",
+                   help="Use the MMseqs2-strict filtered set in the compare stage. "
+                        "Requires the 'mmseqs' stage to have been run.")
     p.add_argument("--n_bootstrap", type=int, default=2000)
     p.add_argument("--random_seed", type=int, default=42)
     p.add_argument("--device", type=str, default="cuda",
@@ -232,8 +265,11 @@ def _run_get_attn(
     if not get_attn.is_file():
         raise FileNotFoundError(f"get_attn.py not found at {get_attn}")
 
+    # Use the ESM3-capable interpreter for ESM3 conditions; current interpreter otherwise.
+    python = str(_ESM3_PYTHON) if is_esm3 else sys.executable
+
     cmd = [
-        sys.executable, str(get_attn),
+        python, str(get_attn),
         "--checkpoint",    str(checkpoint),
         "--fasta_file",    str(fasta),
         "--output",        str(output_json),
@@ -252,7 +288,7 @@ def _run_get_attn(
     if device == "cpu":
         env["CUDA_VISIBLE_DEVICES"] = ""
 
-    print(f"  [infer] Running: checkpoint={checkpoint.parent.name} (esm3={is_esm3})")
+    print(f"  [infer] Running: checkpoint={checkpoint.parent.name} (esm3={is_esm3}, python={Path(python).name})")
     result = subprocess.run(cmd, env=env, capture_output=False)
     if result.returncode != 0:
         raise RuntimeError(
@@ -451,32 +487,33 @@ def _run_pegasus_docker(
     return peg_out
 
 
-def _parse_pegasus_output(peg_raw_dir: Path) -> dict[str, list[float]]:
+def _parse_pegasus_all_heads(peg_raw_dir: Path) -> dict[str, dict[str, list[float]]]:
     """
-    Parse PEGASUS predictions from the raw output directory.
+    Parse all PEGASUS prediction heads from the raw output directory.
 
-    PEGASUS creates:
-      {peg_raw_dir}/{job_id}/id_mapping.tsv          Generated_ID <tab> Original_ID
-      {peg_raw_dir}/{job_id}/predictions/{GID}_predictions.tsv
-        columns: position  RMSF_mean  RMSF_std  Std_Phi_mean ...
+    PEGASUS TSV columns (predictions/{GID}_predictions.tsv):
+      res  mean_RMSF  std_RMSF  mean_STD_PHI  std_STD_PHI
+           mean_STD_PSI  std_STD_PSI  mean_MEAN_LDDT  std_MEAN_LDDT
 
-    Returns {original_domain: [RMSF per residue]}.
+    Returns {head_name: {original_domain: [scores per residue]}}.
+    Heads returned: mean_RMSF, mean_STD_PHI, mean_STD_PSI, mean_MEAN_LDDT,
+                    phi_psi_combined (average of STD_PHI and STD_PSI means).
     """
-    # Locate job directory (PEGASUS creates one unique subdirectory)
     subdirs = [d for d in peg_raw_dir.iterdir() if d.is_dir() and (d / "id_mapping.tsv").is_file()]
     if not subdirs:
         raise FileNotFoundError(
-            f"No PEGASUS job directory with id_mapping.tsv found in {peg_raw_dir}. "
-            "Check that the Docker run completed successfully."
+            f"No PEGASUS job directory with id_mapping.tsv found in {peg_raw_dir}."
         )
-    job_dir = subdirs[0]  # take the first (should be only one)
-    print(f"[pegasus] Parsing output from {job_dir.name} …")
+    job_dir = subdirs[0]
+    print(f"[pegasus] Parsing all prediction heads from {job_dir.name} …")
 
     id_map = pd.read_csv(job_dir / "id_mapping.tsv", sep="\t",
-                         names=["Generated_ID", "Original_ID"], header=0)
-    id_map = id_map.dropna()
+                         names=["Generated_ID", "Original_ID"], header=0).dropna()
 
-    out: dict[str, list[float]] = {}
+    # Initialise output dict: one entry per head + combined
+    all_heads: dict[str, dict[str, list[float]]] = {h: {} for h in _PEGASUS_HEADS}
+    all_heads["phi_psi_combined"] = {}
+
     missing: list[str] = []
     pred_dir = job_dir / "predictions"
 
@@ -488,43 +525,61 @@ def _parse_pegasus_output(peg_raw_dir: Path) -> dict[str, list[float]]:
             missing.append(orig_id)
             continue
         df_pred = pd.read_csv(tsv, sep="\t")
-        # Normalize column names (handle potential casing differences)
         df_pred.columns = [c.strip() for c in df_pred.columns]
-        rmsf_col = next(
-            (c for c in df_pred.columns if c.lower().startswith("rmsf") and "mean" in c.lower()),
-            None
-        )
-        if rmsf_col is None:
-            # fallback: first column with "rmsf" (case-insensitive)
-            rmsf_col = next(
-                (c for c in df_pred.columns if "rmsf" in c.lower()), None
-            )
-        if rmsf_col is None:
-            raise KeyError(
-                f"Cannot find RMSF column in {tsv}. Columns: {df_pred.columns.tolist()}"
-            )
-        out[orig_id] = df_pred[rmsf_col].tolist()
+        # Build lower-case → actual column name map for robust matching
+        col_map = {c.lower(): c for c in df_pred.columns}
+
+        for head in _PEGASUS_HEADS:
+            actual = col_map.get(head.lower())
+            if actual is not None:
+                all_heads[head][orig_id] = [float(v) for v in df_pred[actual]]
+
+        # φ/ψ combined: average of the two dihedral-std heads
+        phi_col = col_map.get("mean_std_phi")
+        psi_col = col_map.get("mean_std_psi")
+        if phi_col is not None and psi_col is not None:
+            phi = np.array(df_pred[phi_col], dtype=float)
+            psi = np.array(df_pred[psi_col], dtype=float)
+            all_heads["phi_psi_combined"][orig_id] = ((phi + psi) / 2.0).tolist()
 
     if missing:
-        print(f"[pegasus] WARNING: missing predictions for {len(missing)} proteins: {missing[:5]}")
-    print(f"[pegasus] Parsed RMSF for {len(out)} proteins.")
-    return out
+        print(f"[pegasus] WARNING: missing predictions for {len(missing)} proteins.")
+    n = len(all_heads["mean_RMSF"])
+    print(f"[pegasus] Parsed {n} proteins across "
+          f"{len(all_heads)} heads ({', '.join(all_heads)}).")
+    return all_heads
 
 
-def run_pegasus(args: argparse.Namespace, filtered_fasta: Path) -> dict[str, list[float]] | None:
+def run_pegasus(
+    args: argparse.Namespace,
+    filtered_fasta: Path,
+) -> dict[str, dict[str, list[float]]] | None:
     """
-    Stage 3: run PEGASUS and return {domain: [RMSF per residue]}.
-    Returns None if --skip_pegasus is set.
+    Stage 3: run PEGASUS and return all prediction heads.
+
+    Returns {head_name: {domain: [scores per residue]}} or None if
+    --skip_pegasus is set.
     """
     if args.skip_pegasus:
         print("[pegasus] Skipped (--skip_pegasus).")
         return None
 
-    merged_path = args.output_dir / "pegasus_rmsf_scores.json"
-    if merged_path.is_file():
-        print(f"[pegasus] Cached — {merged_path.name} already exists. Skipping.")
-        with open(merged_path) as fh:
+    all_heads_path = args.output_dir / "pegasus_all_heads.json"
+    if all_heads_path.is_file():
+        print(f"[pegasus] Cached — {all_heads_path.name} already exists. Loading.")
+        with open(all_heads_path) as fh:
             return json.load(fh)
+
+    # Legacy cache: only RMSF was saved.  If raw output exists, re-parse all heads.
+    peg_raw_dir = args.output_dir / "pegasus_raw_output"
+    peg_done    = peg_raw_dir / ".pegasus_done"
+    if peg_done.is_file():
+        print("[pegasus] Raw output cached; re-parsing all prediction heads …")
+        all_heads = _parse_pegasus_all_heads(peg_raw_dir)
+        with open(all_heads_path, "w") as fh:
+            json.dump(all_heads, fh)
+        print(f"[pegasus] Saved all-heads cache → {all_heads_path}")
+        return all_heads
 
     _ensure_pegasus_image()
     _ensure_pegasus_weights(args.pegasus_models_dir)
@@ -534,12 +589,12 @@ def run_pegasus(args: argparse.Namespace, filtered_fasta: Path) -> dict[str, lis
         models_dir=args.pegasus_models_dir,
         output_dir=args.output_dir,
     )
-    rmsf_scores = _parse_pegasus_output(peg_raw)
+    all_heads = _parse_pegasus_all_heads(peg_raw)
 
-    with open(merged_path, "w") as fh:
-        json.dump(rmsf_scores, fh)
-    print(f"[pegasus] Saved RMSF scores → {merged_path}")
-    return rmsf_scores
+    with open(all_heads_path, "w") as fh:
+        json.dump(all_heads, fh)
+    print(f"[pegasus] Saved all-heads cache → {all_heads_path}")
+    return all_heads
 
 
 # ===========================================================================
@@ -551,85 +606,268 @@ def _parse_neq(value) -> list[float]:
     return [float(v) for v in parsed]
 
 
-def _bootstrap_mean_rho(rho_array: np.ndarray, n_bootstrap: int, rng: np.random.Generator) -> tuple[float, float]:
-    """Return (lower_95ci, upper_95ci) of macro-mean Spearman ρ via bootstrap."""
-    boot = [
-        float(np.mean(rng.choice(rho_array, size=len(rho_array), replace=True)))
-        for _ in range(n_bootstrap)
-    ]
+# ---------------------------------------------------------------------------
+# Bootstrap helpers (group-level resampling)
+# ---------------------------------------------------------------------------
+
+def _build_group_index(
+    group_ids: np.ndarray,
+) -> tuple[np.ndarray, dict]:
+    """Return (unique_groups, group→[protein_indices]) for bootstrap resampling."""
+    groups = np.unique(group_ids)
+    g2idx: dict = {g: [] for g in groups}
+    for i, g in enumerate(group_ids):
+        g2idx[g].append(i)
+    return groups, g2idx
+
+
+def _bootstrap_mean_rho_groups(
+    rho_array: np.ndarray,
+    group_ids: np.ndarray,
+    n_bootstrap: int,
+    rng: np.random.Generator,
+) -> tuple[float, float]:
+    """95% CI of macro-mean ρ via group-level bootstrap (resample groups, not proteins)."""
+    groups, g2idx = _build_group_index(group_ids)
+    boot = []
+    for _ in range(n_bootstrap):
+        sampled = rng.choice(groups, size=len(groups), replace=True)
+        idxs = [i for g in sampled for i in g2idx[g]]
+        boot.append(float(np.mean(rho_array[idxs])))
     return float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))
 
+
+def _bootstrap_ci_delta_groups(
+    rho_esm: np.ndarray,
+    rho_peg: np.ndarray,
+    group_ids: np.ndarray,
+    n_bootstrap: int,
+    rng: np.random.Generator,
+) -> tuple[float, float]:
+    """95% CI on mean(Δρ = ρ_esm − ρ_peg) via group-level bootstrap."""
+    groups, g2idx = _build_group_index(group_ids)
+    delta = rho_esm - rho_peg
+    boot = []
+    for _ in range(n_bootstrap):
+        sampled = rng.choice(groups, size=len(groups), replace=True)
+        idxs = [i for g in sampled for i in g2idx[g]]
+        boot.append(float(np.mean(delta[idxs])))
+    return float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))
+
+
+# ---------------------------------------------------------------------------
+# Stage 1b – MMseqs2 homology filter + clustering
+# ---------------------------------------------------------------------------
+
+def _find_mmseqs() -> Path:
+    """Locate the MMseqs2 binary (ColabFold install or PATH)."""
+    if _MMSEQS_BIN.is_file():
+        return _MMSEQS_BIN
+    result = subprocess.run(["which", "mmseqs"], capture_output=True, text=True)
+    if result.returncode == 0:
+        return Path(result.stdout.strip())
+    raise FileNotFoundError(
+        "MMseqs2 not found.  Install with: conda install -c bioconda mmseqs2  "
+        f"or set _MMSEQS_BIN in the script (currently {_MMSEQS_BIN})."
+    )
+
+
+def _load_cluster_map(cluster_tsv: Path) -> dict[str, str]:
+    df = pd.read_csv(cluster_tsv, sep="\t")
+    return dict(zip(df["member"].astype(str), df["rep"].astype(str)))
+
+
+def run_filter_mmseqs(
+    args: argparse.Namespace,
+    filtered_csv: Path,
+    filtered_fasta: Path,
+) -> tuple[Path, Path, dict[str, str]]:
+    """
+    Stage 1b: MMseqs2-based contamination removal + homology clustering.
+
+    1. easy-search ATLAS (all 1 369 sequences) vs filtered mdCATH FASTA at
+       ≥ 30% sequence identity / ≥ 50% coverage (shorter-seq mode) — the same
+       threshold used to build the ESMfluc training split.  Any mdCATH domain
+       that matches an ATLAS protein is removed.
+    2. easy-cluster the remaining proteins at 30% identity to produce homology
+       groups for the union-group bootstrap.
+
+    Returns (strict_csv, strict_fasta, cluster_map {domain: cluster_rep}).
+    Outputs are cached; re-runs skip completed steps.
+    """
+    strict_csv   = args.output_dir / "mdcath_320K_strict.csv"
+    strict_fasta = args.output_dir / "mdcath_320K_strict.fasta"
+    cluster_tsv  = args.output_dir / "mdcath_cluster_assignments.tsv"
+
+    if strict_csv.is_file() and strict_fasta.is_file() and cluster_tsv.is_file():
+        print("[mmseqs] Cached — strict files already exist. Loading cluster map.")
+        return strict_csv, strict_fasta, _load_cluster_map(cluster_tsv)
+
+    mmseqs  = _find_mmseqs()
+    tmp_dir = args.output_dir / "mmseqs_tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    atlas_fasta = args.atlas_splits_dir / "mmseqs" / "atlas.fasta"
+    if not atlas_fasta.is_file():
+        raise FileNotFoundError(
+            f"ATLAS FASTA not found at {atlas_fasta}.  "
+            "Expected in data_splits/atlas_grouped_v1/mmseqs/atlas.fasta."
+        )
+
+    # Step 1 – search
+    search_tsv = tmp_dir / "atlas_vs_mdcath.tsv"
+    if not search_tsv.is_file():
+        print("[mmseqs] Running easy-search: ATLAS vs filtered mdCATH 320K …")
+        subprocess.run([
+            str(mmseqs), "easy-search",
+            str(atlas_fasta), str(filtered_fasta), str(search_tsv),
+            str(tmp_dir / "search_tmp"),
+            "--min-seq-id", "0.30",
+            "-c", "0.50",
+            "--cov-mode", "2",   # coverage of shorter sequence
+            "--format-output", "query,target,pident,qcov,tcov",
+            "-v", "1",
+        ], check=True)
+    else:
+        print("[mmseqs] easy-search cached.")
+
+    if search_tsv.stat().st_size > 0:
+        hits = pd.read_csv(search_tsv, sep="\t", header=None,
+                           names=["query", "target", "pident", "qcov", "tcov"])
+        homologs = set(hits["target"].str.strip())
+    else:
+        homologs: set[str] = set()
+
+    # Step 2 – filter
+    df_filt = pd.read_csv(filtered_csv)
+    mask    = ~df_filt["domain"].isin(homologs)
+    n_rm    = (~mask).sum()
+    df_strict = df_filt[mask].copy().reset_index(drop=True)
+    print(
+        f"[mmseqs] MMseqs2 removed {n_rm} homologs (≥30% id, ≥50% cov) "
+        f"on top of the PDB-code filter; {len(df_strict)} proteins remain."
+    )
+    df_strict.to_csv(strict_csv, index=False)
+    with open(strict_fasta, "w") as fh:
+        for _, row in df_strict.iterrows():
+            fh.write(f">{row['domain']}\n{row['sequence']}\n")
+    print(f"[mmseqs] Wrote strict filtered set → {strict_fasta}")
+
+    # Step 3 – cluster remaining proteins
+    print(f"[mmseqs] Clustering {len(df_strict)} proteins at 30% identity …")
+    cluster_prefix = str(tmp_dir / "mdcath_clusters")
+    subprocess.run([
+        str(mmseqs), "easy-cluster",
+        str(strict_fasta), cluster_prefix,
+        str(tmp_dir / "cluster_tmp"),
+        "--min-seq-id", "0.30",
+        "-c", "0.50",
+        "--cov-mode", "0",
+        "-v", "1",
+    ], check=True)
+
+    raw_cluster = pd.read_csv(
+        cluster_prefix + "_cluster.tsv", sep="\t", header=None,
+        names=["rep", "member"]
+    )
+    cluster_map = dict(zip(raw_cluster["member"].astype(str),
+                           raw_cluster["rep"].astype(str)))
+    n_clusters = len(set(cluster_map.values()))
+    print(f"[mmseqs] {len(cluster_map)} proteins → {n_clusters} clusters.")
+
+    raw_cluster.to_csv(cluster_tsv, sep="\t", index=False)
+    print(f"[mmseqs] Wrote cluster assignments → {cluster_tsv}")
+    return strict_csv, strict_fasta, cluster_map
+
+
+# ===========================================================================
+# Stage 4 – compare
+# ===========================================================================
 
 def run_compare(
     args: argparse.Namespace,
     filtered_csv: Path,
     all_esmfluc_scores: dict[str, dict[str, list[float]]],
-    pegasus_scores: dict[str, list[float]] | None,
+    pegasus_all_heads: dict[str, dict[str, list[float]]] | None,
+    cluster_map: dict[str, str] | None = None,
 ) -> None:
-    """Stage 4: compute per-protein Spearman ρ for every ESMfluc condition vs PEGASUS."""
+    """Stage 4: compute per-protein Spearman ρ for every ESMfluc condition vs all PEGASUS heads."""
 
     rng = np.random.default_rng(args.random_seed)
 
-    print("[compare] Loading filtered mdCATH 320K Neq values …")
+    print("[compare] Loading mdCATH Neq values …")
     df_filt = pd.read_csv(filtered_csv)
     neq_map: dict[str, list[float]] = {}
     for _, row in df_filt.iterrows():
         neq_map[row["domain"]] = _parse_neq(row["neq"])
 
-    # Determine evaluation domain set: intersection of all conditions + PEGASUS + Neq
-    # Start with domains valid for all ESMfluc conditions
-    valid_per_condition: dict[str, set[str]] = {}
+    # Determine group assignment for bootstrap:
+    # prefer MMseqs2 clusters; fall back to 4-char PDB code.
+    if cluster_map:
+        n_clusters = len(set(cluster_map.values()))
+        print(f"[compare] Using MMseqs2 cluster groups ({n_clusters} clusters).")
+        def get_group(d: str) -> str:
+            return cluster_map.get(d, d[:4].lower())  # fallback to PDB if domain not in map
+    else:
+        print("[compare] No cluster file; using 4-char PDB code as group (conservative fallback).")
+        def get_group(d: str) -> str:
+            return d[:4].lower()
+
+    # Evaluate on the intersection of all available domains
+    valid_esm: dict[str, set[str]] = {}
     for cond, scores in all_esmfluc_scores.items():
-        valid_per_condition[cond] = {
-            d for d in scores
-            if d in neq_map and len(scores[d]) == len(neq_map[d])
+        valid_esm[cond] = {
+            d for d in scores if d in neq_map and len(scores[d]) == len(neq_map[d])
         }
+    eval_domains_set = set.intersection(*valid_esm.values()) if valid_esm else set()
 
-    # Common across all ESMfluc conditions
-    eval_domains_set = set.intersection(*valid_per_condition.values()) if valid_per_condition else set()
+    if pegasus_all_heads is not None:
+        # Intersect over all heads so every domain has a complete set of scores
+        for head, head_scores in pegasus_all_heads.items():
+            peg_valid = {
+                d for d in head_scores
+                if d in neq_map and len(head_scores[d]) == len(neq_map[d])
+            }
+            n_before = len(eval_domains_set)
+            eval_domains_set &= peg_valid
+            n_drop = n_before - len(eval_domains_set)
+            if n_drop:
+                print(f"[compare] WARNING: {n_drop} domains dropped (PEGASUS head '{head}' "
+                      "length mismatch/missing).")
 
-    if pegasus_scores is not None:
-        peg_valid = {
-            d for d in pegasus_scores
-            if d in neq_map and len(pegasus_scores[d]) == len(neq_map[d])
-        }
-        n_before = len(eval_domains_set)
-        eval_domains_set &= peg_valid
-        n_skip_peg = n_before - len(eval_domains_set)
-        if n_skip_peg:
-            print(f"[compare] WARNING: {n_skip_peg} proteins dropped (PEGASUS length mismatch/missing).")
+    skipped = len(all_esmfluc_scores[next(iter(all_esmfluc_scores))]) - len(eval_domains_set)
+    if skipped:
+        print(f"[compare] WARNING: {skipped} ESMfluc proteins skipped (length mismatch or missing Neq).")
 
     eval_domains = sorted(eval_domains_set)
-    print(f"[compare] Evaluating on {len(eval_domains)} proteins, "
-          f"{len(all_esmfluc_scores)} ESMfluc conditions "
-          f"+ {'PEGASUS' if pegasus_scores else 'no PEGASUS'} …")
+    n_groups = len({get_group(d) for d in eval_domains})
+    print(f"[compare] Evaluating on {len(eval_domains)} proteins "
+          f"({n_groups} bootstrap groups) …")
 
-    # Per-protein rows
-    rho_per_condition: dict[str, list[float]] = {c: [] for c in all_esmfluc_scores}
-    rho_peg_list: list[float] = []
+    # Per-protein ρ
+    rho_per_esm: dict[str, list[float]]       = {c: [] for c in all_esmfluc_scores}
+    rho_per_peg: dict[str, list[float]]       = {h: [] for h in (pegasus_all_heads or {})}
+    group_ids:   list[str]                    = []
     rows = []
 
     for dom in eval_domains:
         neq = np.array(neq_map[dom])
-        row: dict = {"domain": dom, "n_residues": int(len(neq))}
+        row: dict = {"domain": dom, "n_residues": int(len(neq)),
+                     "group": get_group(dom)}
+        group_ids.append(get_group(dom))
 
         for cond, scores in all_esmfluc_scores.items():
-            sc = np.array(scores[dom])
-            rho, _ = spearmanr(sc, neq)
+            rho, _ = spearmanr(np.array(scores[dom]), neq)
             rho = float(rho) if np.isfinite(rho) else 0.0
-            rho_per_condition[cond].append(rho)
-            row[f"spearman_rho_{cond}"] = round(rho, 4)
+            rho_per_esm[cond].append(rho)
+            row[f"rho_{cond}"] = round(rho, 4)
 
-        if pegasus_scores is not None:
-            peg_sc = np.array(pegasus_scores[dom])
-            rho_peg, _ = spearmanr(peg_sc, neq)
-            rho_peg = float(rho_peg) if np.isfinite(rho_peg) else 0.0
-            rho_peg_list.append(rho_peg)
-            row["spearman_rho_pegasus"] = round(rho_peg, 4)
-            for cond in all_esmfluc_scores:
-                row[f"delta_{cond}_minus_pegasus"] = round(
-                    row[f"spearman_rho_{cond}"] - rho_peg, 4
-                )
+        if pegasus_all_heads is not None:
+            for head, head_scores in pegasus_all_heads.items():
+                rho_p, _ = spearmanr(np.array(head_scores[dom]), neq)
+                rho_p = float(rho_p) if np.isfinite(rho_p) else 0.0
+                rho_per_peg[head].append(rho_p)
+                row[f"rho_pegasus_{head}"] = round(rho_p, 4)
         rows.append(row)
 
     per_protein_df = pd.DataFrame(rows)
@@ -637,50 +875,70 @@ def run_compare(
     per_protein_df.to_csv(per_protein_csv, index=False)
     print(f"[compare] Per-protein results → {per_protein_csv}")
 
-    # Aggregate
-    summary: dict = {"n_proteins": len(eval_domains), "conditions": {}}
+    grp = np.array(group_ids)
 
-    for cond, rho_list in rho_per_condition.items():
+    # Identify best PEGASUS head (highest mean ρ vs Neq)
+    best_head: str | None = None
+    if rho_per_peg:
+        best_head = max(rho_per_peg, key=lambda h: float(np.mean(rho_per_peg[h])))
+
+    summary: dict = {
+        "n_proteins":   len(eval_domains),
+        "n_groups":     n_groups,
+        "group_source": "mmseqs2_cluster" if cluster_map else "pdb_code_fallback",
+        "conditions":   {},
+        "pegasus_heads": {},
+    }
+
+    # ESMfluc results
+    for cond, rho_list in rho_per_esm.items():
         arr  = np.array(rho_list)
         mean = float(np.mean(arr))
-        ci   = _bootstrap_mean_rho(arr, args.n_bootstrap, rng)
+        ci   = _bootstrap_mean_rho_groups(arr, grp, args.n_bootstrap, rng)
         label = _CONDITION_DISPLAY.get(cond, cond)
         summary["conditions"][cond] = {
-            "display": label,
-            "mean_spearman_rho": round(mean, 4),
-            "ci_95_lower": round(ci[0], 4),
-            "ci_95_upper": round(ci[1], 4),
+            "display":  label,
+            "mean_rho": round(mean, 4),
+            "ci_95":    [round(ci[0], 4), round(ci[1], 4)],
         }
-        print(f"[compare] {label:<40s}  ρ={mean:.4f}  CI [{ci[0]:.4f},{ci[1]:.4f}]")
+        print(f"[compare] {label:<42s}  ρ={mean:.4f}  CI [{ci[0]:.4f},{ci[1]:.4f}]")
 
-    if pegasus_scores is not None and rho_peg_list:
-        peg_arr  = np.array(rho_peg_list)
-        mean_peg = float(np.mean(peg_arr))
-        ci_peg   = _bootstrap_mean_rho(peg_arr, args.n_bootstrap, rng)
-        summary["pegasus"] = {
-            "display": "PEGASUS (ATLAS cross-val)",
-            "model": "dsimb/pegasus Docker, RMSF output",
-            "mean_spearman_rho": round(mean_peg, 4),
-            "ci_95_lower": round(ci_peg[0], 4),
-            "ci_95_upper": round(ci_peg[1], 4),
+    # PEGASUS head results
+    for head, rho_list in rho_per_peg.items():
+        arr   = np.array(rho_list)
+        mean  = float(np.mean(arr))
+        ci    = _bootstrap_mean_rho_groups(arr, grp, args.n_bootstrap, rng)
+        label = _PEGASUS_HEAD_DISPLAY.get(head, f"PEGASUS {head}")
+        is_best = (head == best_head)
+        summary["pegasus_heads"][head] = {
+            "display":      label,
+            "mean_rho":     round(mean, 4),
+            "ci_95":        [round(ci[0], 4), round(ci[1], 4)],
+            "is_best_head": is_best,
         }
-        print(f"[compare] {'PEGASUS (ATLAS cross-val)':<40s}  ρ={mean_peg:.4f}  "
-              f"CI [{ci_peg[0]:.4f},{ci_peg[1]:.4f}]")
+        marker = "  ← best head" if is_best else ""
+        print(f"[compare] {label:<42s}  ρ={mean:.4f}  CI [{ci[0]:.4f},{ci[1]:.4f}]{marker}")
 
-        # Wilcoxon for each condition vs PEGASUS
-        comparisons: dict = {}
-        for cond, rho_list in rho_per_condition.items():
-            delta = np.array(rho_list) - peg_arr
-            stat, pval = wilcoxon(delta, alternative="two-sided")
-            comparisons[cond] = {
-                "mean_delta": round(float(np.mean(delta)), 4),
-                "wilcoxon_W": float(stat),
-                "wilcoxon_p": float(pval),
+    # Δρ CI: each ESMfluc condition vs best PEGASUS head
+    if best_head is not None:
+        peg_arr = np.array(rho_per_peg[best_head])
+        peg_label = _PEGASUS_HEAD_DISPLAY.get(best_head, best_head)
+        delta_summary: dict = {}
+        for cond, rho_list in rho_per_esm.items():
+            esm_arr = np.array(rho_list)
+            delta_mean = float(np.mean(esm_arr - peg_arr))
+            ci_d = _bootstrap_ci_delta_groups(esm_arr, peg_arr, grp, args.n_bootstrap, rng)
+            delta_summary[cond] = {
+                "mean_delta": round(delta_mean, 4),
+                "ci_95_delta": [round(ci_d[0], 4), round(ci_d[1], 4)],
             }
             label = _CONDITION_DISPLAY.get(cond, cond)
-            print(f"  Δρ {label} − PEGASUS = {np.mean(delta):+.4f}  "
-                  f"Wilcoxon p={pval:.4g}")
-        summary["wilcoxon_vs_pegasus"] = comparisons
+            print(f"  Δρ {label} − {peg_label} = {delta_mean:+.4f}  "
+                  f"95% CI [{ci_d[0]:+.4f}, {ci_d[1]:+.4f}]")
+        summary["delta_vs_best_pegasus_head"] = {
+            "pegasus_head": best_head,
+            "conditions":   delta_summary,
+        }
 
     summary_path = args.output_dir / "pegasus_mdcath_summary.json"
     with open(summary_path, "w") as fh:
@@ -692,36 +950,55 @@ def run_compare(
 
 def _print_table(summary: dict) -> None:
     """Print a compact results table to stdout."""
-    n = summary["n_proteins"]
-    print("\n" + "=" * 68)
-    print(f"  mdCATH 320K cross-dataset benchmark  (n = {n} proteins)")
-    print("=" * 68)
-    fmt = "  {:<42s}  {:>7s}  {:>14s}"
+    n  = summary["n_proteins"]
+    ng = summary.get("n_groups", "?")
+    gs = summary.get("group_source", "unknown")
+    print("\n" + "=" * 72)
+    print(f"  mdCATH 320K cross-dataset benchmark  "
+          f"(n={n} proteins, {ng} bootstrap groups [{gs}])")
+    print("=" * 72)
+    fmt = "  {:<42s}  {:>7s}  {:>16s}"
     print(fmt.format("Method", "Spearman ρ", "95 % CI"))
-    print("  " + "-" * 64)
+    print("  " + "-" * 68)
+
+    # ESMfluc conditions
     for cond_key in _ALL_CONDITIONS:
-        if cond_key not in summary.get("conditions", {}):
+        d = summary.get("conditions", {}).get(cond_key)
+        if d is None:
             continue
-        d = summary["conditions"][cond_key]
-        print(fmt.format(
-            d["display"],
-            f"{d['mean_spearman_rho']:.4f}",
-            f"[{d['ci_95_lower']:.4f}, {d['ci_95_upper']:.4f}]",
-        ))
-    if "pegasus" in summary:
-        d = summary["pegasus"]
-        print("  " + "-" * 64)
-        print(fmt.format(
-            d["display"],
-            f"{d['mean_spearman_rho']:.4f}",
-            f"[{d['ci_95_lower']:.4f}, {d['ci_95_upper']:.4f}]",
-        ))
-    if "wilcoxon_vs_pegasus" in summary:
+        ci = d["ci_95"]
+        print(fmt.format(d["display"], f"{d['mean_rho']:.4f}",
+                         f"[{ci[0]:.4f}, {ci[1]:.4f}]"))
+
+    # PEGASUS heads
+    heads = summary.get("pegasus_heads", {})
+    if heads:
+        print("  " + "-" * 68)
+        head_order = ["mean_RMSF", "mean_STD_PHI", "mean_STD_PSI",
+                      "mean_MEAN_LDDT", "phi_psi_combined"]
+        for hk in head_order:
+            d = heads.get(hk)
+            if d is None:
+                continue
+            ci     = d["ci_95"]
+            marker = "  *" if d.get("is_best_head") else ""
+            print(fmt.format(d["display"] + marker,
+                             f"{d['mean_rho']:.4f}",
+                             f"[{ci[0]:.4f}, {ci[1]:.4f}]"))
+        print("  (* = best PEGASUS head, used for Δρ comparison)")
+
+    # Δρ CI vs best head
+    ds = summary.get("delta_vs_best_pegasus_head", {})
+    if ds:
+        best_hk  = ds["pegasus_head"]
+        peg_lbl  = _PEGASUS_HEAD_DISPLAY.get(best_hk, best_hk)
         print()
-        for cond, c in summary["wilcoxon_vs_pegasus"].items():
+        for cond, c in ds.get("conditions", {}).items():
             label = _CONDITION_DISPLAY.get(cond, cond)
-            print(f"  Δρ {label} − PEGASUS = {c['mean_delta']:+.4f}  p={c['wilcoxon_p']:.4g}")
-    print("=" * 68 + "\n")
+            ci_d  = c["ci_95_delta"]
+            print(f"  Δρ {label} − {peg_lbl} = {c['mean_delta']:+.4f}  "
+                  f"95% CI [{ci_d[0]:+.4f}, {ci_d[1]:+.4f}]")
+    print("=" * 72 + "\n")
 
 
 # ===========================================================================
@@ -736,7 +1013,7 @@ def main() -> None:
     filtered_fasta = args.output_dir / "mdcath_320K_filtered.fasta"
     filtered_csv   = args.output_dir / "mdcath_320K_filtered.csv"
 
-    # Stage 1 – filter
+    # Stage 1 – PDB-code filter
     if "filter" in stages:
         filtered_fasta = run_filter(args)
     else:
@@ -746,12 +1023,39 @@ def main() -> None:
             )
         print(f"[filter] Skipped (not in --stages). Using {filtered_fasta}.")
 
+    # Stage 1b – MMseqs2 homology filter + clustering (optional)
+    cluster_map: dict[str, str] | None = None
+    compare_csv   = filtered_csv
+    if "mmseqs" in stages:
+        strict_csv, strict_fasta, cluster_map = run_filter_mmseqs(
+            args, filtered_csv, filtered_fasta
+        )
+        if getattr(args, "use_strict", False):
+            compare_csv   = strict_csv
+            filtered_fasta = strict_fasta
+            print(f"[mmseqs] --use_strict: compare stage will use strict-filtered set.")
+    else:
+        # Try to load cached cluster assignments from a previous mmseqs run
+        cluster_tsv = args.output_dir / "mdcath_cluster_assignments.tsv"
+        if cluster_tsv.is_file():
+            cluster_map = _load_cluster_map(cluster_tsv)
+            print(f"[mmseqs] Loaded cached cluster assignments ({len(set(cluster_map.values()))} clusters).")
+        if getattr(args, "use_strict", False):
+            strict_csv   = args.output_dir / "mdcath_320K_strict.csv"
+            strict_fasta = args.output_dir / "mdcath_320K_strict.fasta"
+            if strict_csv.is_file() and strict_fasta.is_file():
+                compare_csv    = strict_csv
+                filtered_fasta = strict_fasta
+                print(f"[mmseqs] --use_strict: using existing strict-filtered set.")
+            else:
+                print("[mmseqs] WARNING: --use_strict requested but strict files not found. "
+                      "Run --stages mmseqs first.")
+
     # Stage 2 – ESMfluc inference
     all_esmfluc_scores: dict[str, dict[str, list[float]]] | None = None
     if "infer" in stages:
         all_esmfluc_scores = run_infer(args, filtered_fasta)
     else:
-        # Try to load each condition from cache
         infer_dir = args.output_dir / "esmfluc_inference"
         cached: dict[str, dict[str, list[float]]] = {}
         for cond in _ALL_CONDITIONS:
@@ -760,11 +1064,9 @@ def main() -> None:
                 with open(p) as fh:
                     cached[cond] = json.load(fh)
             else:
-                # Legacy: single-condition cache from earlier run
                 legacy = infer_dir / "esmfluc_mean_scores.json"
                 if legacy.is_file() and not cached:
-                    print(f"[infer] Found legacy single-condition cache; "
-                          f"mapping to {cond}.")
+                    print(f"[infer] Found legacy single-condition cache; mapping to {cond}.")
                     with open(legacy) as fh:
                         cached[cond] = json.load(fh)
                     break
@@ -775,17 +1077,27 @@ def main() -> None:
             print("[infer] Skipped and no cached scores found; PEGASUS-only mode.")
 
     # Stage 3 – PEGASUS
-    pegasus_scores: dict[str, list[float]] | None = None
+    pegasus_all_heads: dict[str, dict[str, list[float]]] | None = None
     if "pegasus" in stages:
-        pegasus_scores = run_pegasus(args, filtered_fasta)
+        pegasus_all_heads = run_pegasus(args, filtered_fasta)
     else:
-        cached_peg = args.output_dir / "pegasus_rmsf_scores.json"
-        if cached_peg.is_file():
-            print(f"[pegasus] Skipped (not in --stages). Loading {cached_peg.name}.")
-            with open(cached_peg) as fh:
-                pegasus_scores = json.load(fh)
+        all_heads_path = args.output_dir / "pegasus_all_heads.json"
+        if all_heads_path.is_file():
+            print(f"[pegasus] Skipped (not in --stages). Loading {all_heads_path.name}.")
+            with open(all_heads_path) as fh:
+                pegasus_all_heads = json.load(fh)
         else:
-            print("[pegasus] Skipped and no cached scores found.")
+            # Legacy: try to re-parse all heads from cached raw output
+            peg_done = args.output_dir / "pegasus_raw_output" / ".pegasus_done"
+            if peg_done.is_file():
+                print("[pegasus] Skipped; re-parsing all heads from cached raw output …")
+                pegasus_all_heads = _parse_pegasus_all_heads(
+                    args.output_dir / "pegasus_raw_output"
+                )
+                with open(all_heads_path, "w") as fh:
+                    json.dump(pegasus_all_heads, fh)
+            else:
+                print("[pegasus] Skipped and no cached output found.")
 
     # Stage 4 – compare
     if "compare" in stages:
@@ -794,7 +1106,7 @@ def main() -> None:
                 "Cannot run 'compare' without ESMfluc scores. "
                 "Include 'infer' in --stages or ensure cached scores exist."
             )
-        run_compare(args, filtered_csv, all_esmfluc_scores, pegasus_scores)
+        run_compare(args, compare_csv, all_esmfluc_scores, pegasus_all_heads, cluster_map)
     else:
         print("[compare] Skipped (not in --stages).")
 
