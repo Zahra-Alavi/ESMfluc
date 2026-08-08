@@ -121,6 +121,11 @@ HEADLINE_GROUP_METRICS = (
     "strain_ensemble_mean",
 )
 
+PRIMARY_HEADLINE_SPEC = {
+    "q3_neq": ("rsa",),
+    "q3_neq_rsa": HEADLINE_GROUP_METRICS,
+}
+
 MATCH_SCHEMES = {
     "q3_only": {
         "matched_covariates": ["Q3"],
@@ -198,6 +203,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--match_neq_caliper", type=float, default=0.25)
     parser.add_argument("--match_rsa_caliper", type=float, default=0.15)
     parser.add_argument("--match_position_caliper", type=float, default=0.25)
+    parser.add_argument(
+        "--match_terminal_exclusion",
+        type=int,
+        default=2,
+        help=(
+            "Exclude this many residues at each protein terminus, symmetrically, "
+            "from matched cases and controls (default: 2)."
+        ),
+    )
     parser.add_argument(
         "--match_schemes",
         nargs="+",
@@ -862,6 +876,10 @@ def phase2_within_q3_matching(
         span = end - start
         eligible = np.zeros(length, dtype=bool)
         eligible[start:end] = True
+        terminal_exclusion = int(args.match_terminal_exclusion)
+        if terminal_exclusion:
+            eligible[:terminal_exclusion] = False
+            eligible[-terminal_exclusion:] = False
         excluded = np.zeros(length, dtype=bool)
         for band in protein_bands.itertuples(index=False):
             left = max(0, int(band.start_index_0based) - args.match_band_buffer)
@@ -891,6 +909,8 @@ def phase2_within_q3_matching(
         }
         for band in protein_bands.itertuples(index=False):
             case_index = int(band.apex_index_0based)
+            if case_index < 0 or case_index >= length or not eligible[case_index]:
+                continue
             sign = int(band.sign)
             label = str(band.label)
             q3_label = str(q3[case_index])
@@ -1199,10 +1219,14 @@ def headline_union_group_inference(
     )
     if mapping.duplicated(["protein", "split"]).any():
         raise ValueError("Group manifest has duplicate protein/split keys")
+    primary_mask = np.zeros(len(per_protein), dtype=bool)
+    for scheme, metrics in PRIMARY_HEADLINE_SPEC.items():
+        primary_mask |= (
+            per_protein["match_scheme"].eq(scheme)
+            & per_protein["metric"].isin(metrics)
+        ).to_numpy()
     selected = per_protein[
-        per_protein["match_scheme"].eq("q3_neq_rsa_position")
-        & per_protein["split"].eq("test")
-        & per_protein["metric"].isin(HEADLINE_GROUP_METRICS)
+        primary_mask & per_protein["split"].eq("test").to_numpy()
     ].copy()
     if selected.empty:
         return pd.DataFrame(columns=columns)
@@ -1345,11 +1369,16 @@ def rerun_matching_only(
             "case, scheme, and candidate residue; used only after match distance."
         ),
         "primary_pvalue_family": (
-            "36 two-sided union-group sign-flip tests: 6 conditions x 2 signs "
-            "x 3 predeclared headline metrics; BH corrected once across all 36"
+            "48 two-sided union-group sign-flip tests: RSA under Q3+Neq "
+            "matching, plus torsion, boundary distance, and strain under "
+            "Q3+Neq+RSA matching; 6 conditions x 2 signs x 4 outcomes, with "
+            "BH corrected once across all 48"
         ),
         "other_pvalues": "diagnostic/exploratory; not members of the primary family",
-        "headline_union_group_metrics": list(HEADLINE_GROUP_METRICS),
+        "headline_union_group_spec": {
+            scheme: list(metrics) for scheme, metrics in PRIMARY_HEADLINE_SPEC.items()
+        },
+        "terminal_exclusion_residues_per_end": args.match_terminal_exclusion,
         "group_manifest_csv": str(Path(args.group_manifest_csv).resolve()),
     })
     source_parameters["matching_only_reuse"] = {
@@ -1357,6 +1386,10 @@ def rerun_matching_only(
         "copied_outputs": reusable,
         "expensive_null_recomputed": False,
     }
+    if source_parameters.get("strain", {}).get("requested"):
+        source_parameters["strain"]["audit"] = str(
+            output / "strain_input_audit.csv"
+        )
     source_parameters.setdefault("outputs", {}).update({
         "within_q3_matched_controls": str(output / "within_q3_matched_controls.csv.gz"),
         "within_q3_matched_cases": str(output / "within_q3_matched_cases.csv.gz"),
@@ -1384,6 +1417,8 @@ def main() -> None:
         raise ValueError("Permutation and bootstrap counts must be positive")
     if args.match_controls_per_apex < 1 or args.match_band_buffer < 0:
         raise ValueError("Invalid matched-control count or band buffer")
+    if args.match_terminal_exclusion < 0:
+        raise ValueError("--match_terminal_exclusion must be nonnegative")
     if min(
         args.match_neq_caliper,
         args.match_rsa_caliper,
@@ -1785,6 +1820,7 @@ def main() -> None:
             ),
             "controls_per_apex_maximum": args.match_controls_per_apex,
             "non_band_buffer_residues": args.match_band_buffer,
+            "terminal_exclusion_residues_per_end": args.match_terminal_exclusion,
             "calipers": {
                 "neq": args.match_neq_caliper,
                 "rsa": args.match_rsa_caliper,
@@ -1798,16 +1834,20 @@ def main() -> None:
                 "they remain in balance diagnostics."
             ),
             "inference": (
-                "The sole Phase 2 primary family contains the 36 two-sided "
-                "union-group sign-flip tests for the three predeclared headline "
-                "metrics. BH is applied once across those 36 tests. All other "
+                "The sole Phase 2 primary family contains 48 two-sided "
+                "union-group sign-flip tests: RSA under Q3+Neq matching, plus "
+                "torsion, boundary distance, and strain under Q3+Neq+RSA "
+                "matching. BH is applied once across those 48 tests. All other "
                 "p-values are diagnostic or exploratory."
             ),
             "primary_pvalue_family": (
-                "6 conditions x 2 signs x 3 headline metrics = 36 tests; "
+                "6 conditions x 2 signs x 4 headline outcomes = 48 tests; "
                 "two-sided union-group sign flips with one global BH correction"
             ),
-            "headline_union_group_metrics": list(HEADLINE_GROUP_METRICS),
+            "headline_union_group_spec": {
+                scheme: list(metrics)
+                for scheme, metrics in PRIMARY_HEADLINE_SPEC.items()
+            },
             "group_manifest_csv": str(Path(args.group_manifest_csv).expanduser().resolve()),
         },
         "outputs": {

@@ -111,7 +111,7 @@ class TestCorrectedPhase2Inference(unittest.TestCase):
 
     def test_headline_inference_resamples_union_group_means(self):
         per_protein = pd.DataFrame({
-            "match_scheme": ["q3_neq_rsa_position"] * 4,
+            "match_scheme": ["q3_neq_rsa"] * 4,
             "condition": ["c"] * 4, "split": ["test"] * 4,
             "protein": ["p1", "p2", "p3", "p4"], "sign": [1] * 4,
             "label": ["flexibility_supporting"] * 4,
@@ -134,6 +134,30 @@ class TestCorrectedPhase2Inference(unittest.TestCase):
         self.assertEqual(row.n_proteins, 4)
         self.assertAlmostEqual(row.union_group_mean_effect, (2 + 5 + 7) / 3)
         self.assertEqual(row.primary_p_two_sided, row.union_group_p_two_sided)
+
+    def test_headline_family_uses_rsa_before_rsa_matching(self):
+        per_protein = pd.DataFrame({
+            "match_scheme": ["q3_neq", "q3_neq_rsa", "q3_neq_rsa_position"],
+            "condition": ["c"] * 3, "split": ["test"] * 3,
+            "protein": ["p1"] * 3, "sign": [1] * 3,
+            "label": ["flexibility_supporting"] * 3,
+            "metric": ["rsa", "torsion_change_from_previous", "rsa"],
+            "case_minus_control": [0.2, 3.0, 0.0],
+        })
+        manifest = pd.DataFrame({
+            "name": ["p1"], "split": ["test"], "union_group_id": ["g1"],
+        })
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "groups.csv"
+            manifest.to_csv(path, index=False)
+            result = headline_union_group_inference(
+                per_protein, path, n_bootstrap=20, n_sign_flips=10,
+                minimum_groups=2, random_seed=7,
+            )
+        self.assertEqual(set(result.match_scheme), {"q3_neq", "q3_neq_rsa"})
+        self.assertEqual(
+            set(result.metric), {"rsa", "torsion_change_from_previous"}
+        )
 
 
 if __name__ == "__main__":

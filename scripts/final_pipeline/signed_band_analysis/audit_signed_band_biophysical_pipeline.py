@@ -559,7 +559,42 @@ def main() -> None:
             ["condition", "split", "protein"], sort=False
         )
     }
-    length_lookup = residue.groupby(["split", "protein"]).size().to_dict()
+    length_lookup = {
+        (str(split), str(protein)): int(length)
+        for (split, protein), length in residue.groupby(["split", "protein"]).size().items()
+    }
+    phase2_parameters = parameters["phase2_within_q3_matching"]
+    terminal_exclusion = int(
+        phase2_parameters.get("terminal_exclusion_residues_per_end", 0)
+    )
+    case_keys = pd.MultiIndex.from_frame(
+        matched_cases[["split", "protein"]].astype(str)
+    )
+    control_keys = pd.MultiIndex.from_frame(
+        matched_controls[["split", "protein"]].astype(str)
+    )
+    case_lengths = case_keys.map(length_lookup).to_numpy(dtype=int)
+    control_lengths = control_keys.map(length_lookup).to_numpy(dtype=int)
+    matched_nonterminal = bool(
+        matched_cases.case_index_0based.ge(terminal_exclusion).all()
+        and matched_cases.case_index_0based.lt(
+            case_lengths - terminal_exclusion
+        ).all()
+        and matched_controls.case_index_0based.ge(terminal_exclusion).all()
+        and matched_controls.case_index_0based.lt(
+            control_lengths - terminal_exclusion
+        ).all()
+        and matched_controls.control_index_0based.ge(terminal_exclusion).all()
+        and matched_controls.control_index_0based.lt(
+            control_lengths - terminal_exclusion
+        ).all()
+    )
+    check(
+        "phase2_matched_cases_and_controls_nonterminal",
+        matched_nonterminal,
+        {"terminal_exclusion_residues_per_end": terminal_exclusion},
+        checks,
+    )
     controls_inside_bands = 0
     for key, group in matched_controls.groupby(
         ["condition", "split", "protein"], sort=False
@@ -584,7 +619,6 @@ def main() -> None:
         controls_inside_bands,
         checks,
     )
-    phase2_parameters = parameters["phase2_within_q3_matching"]
     calipers = phase2_parameters["calipers"]
     neq_rows = matched_controls.match_scheme != "q3_only"
     neq_valid = (
@@ -646,6 +680,9 @@ def main() -> None:
                 int(interval.eligible_start_index_0based):
                 int(interval.eligible_end_index_0based_exclusive)
             ] = True
+            if terminal_exclusion:
+                eligible[:terminal_exclusion] = False
+                eligible[-terminal_exclusion:] = False
             positions = np.arange(length)
             start = int(interval.eligible_start_index_0based)
             end = int(interval.eligible_end_index_0based_exclusive)
@@ -780,7 +817,15 @@ def main() -> None:
     )
     primary_valid = (
         {"primary_p_two_sided", "primary_q_bh"}.issubset(group_inference.columns)
-        and len(group_inference) == 36
+        and len(group_inference) == 48
+        and set(
+            map(tuple, group_inference[["match_scheme", "metric"]].drop_duplicates().to_numpy())
+        ) == {
+            ("q3_neq", "rsa"),
+            ("q3_neq_rsa", "torsion_change_from_previous"),
+            ("q3_neq_rsa", "distance_to_q3_boundary"),
+            ("q3_neq_rsa", "strain_ensemble_mean"),
+        }
         and group_inference["primary_p_two_sided"].dropna().between(0, 1).all()
         and group_inference["primary_q_bh"].dropna().between(0, 1).all()
         and all(
@@ -792,7 +837,7 @@ def main() -> None:
     check(
         "one_two_sided_primary_pvalue_family",
         bool(primary_valid),
-        "36 union-group headline tests; other tables are diagnostic",
+        "48 union-group headline tests; other tables are diagnostic",
         checks,
     )
     forbidden = (

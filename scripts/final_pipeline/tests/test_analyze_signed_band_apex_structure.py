@@ -42,7 +42,7 @@ class BandApexStructureTests(unittest.TestCase):
         )
         args = types.SimpleNamespace(
             position_caliper=0.5, neq_caliper=1.0, rsa_caliper=1.0,
-            max_controls_per_apex=5, random_seed=123,
+            max_controls_per_apex=5, random_seed=123, terminal_exclusion=0,
         )
         selected = candidate_control_pool(case, {"p": residues}, masks, "q3_only", args)
         self.assertTrue((selected.q3 == "C").all())
@@ -71,7 +71,7 @@ class BandApexStructureTests(unittest.TestCase):
         )
         args = types.SimpleNamespace(
             position_caliper=0.12, neq_caliper=0.25, rsa_caliper=0.15,
-            max_controls_per_apex=5, random_seed=123,
+            max_controls_per_apex=5, random_seed=123, terminal_exclusion=0,
         )
         q3_only = candidate_control_pool(case, {"p": residues}, masks, "q3_only", args)
         final = candidate_control_pool(
@@ -157,7 +157,7 @@ class BandApexStructureTests(unittest.TestCase):
         by_protein = pd.DataFrame({
             "condition": ["c"] * 4, "split": ["test"] * 4,
             "protein": ["p1", "p2", "p3", "p4"], "sign": [1] * 4,
-            "match_model": ["q3_neq_rsa_position"] * 4,
+            "match_model": ["q3_neq"] * 4,
             "feature": ["contact_degree"] * 4,
             "apex_minus_control": [1.0, 3.0, 5.0, 7.0],
         })

@@ -122,6 +122,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--position_caliper", type=float, default=0.25)
     parser.add_argument("--neq_caliper", type=float, default=0.25)
     parser.add_argument("--rsa_caliper", type=float, default=0.15)
+    parser.add_argument(
+        "--terminal_exclusion", type=int, default=2,
+        help=(
+            "Exclude this many residues at each protein terminus from both "
+            "matched apices and controls (default: 2)."
+        ),
+    )
     parser.add_argument("--min_mapping_identity", type=float, default=0.90)
     parser.add_argument("--min_input_coverage", type=float, default=0.80)
     parser.add_argument("--min_contact_sequence_separation", type=int, default=3)
@@ -147,6 +154,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--minimum_inference_proteins must be at least 2")
     if args.n_sign_flips < 1 or args.n_bootstrap < 1:
         parser.error("--n_sign_flips and --n_bootstrap must be positive")
+    if args.terminal_exclusion < 0:
+        parser.error("--terminal_exclusion must be nonnegative")
     return args
 
 
@@ -379,6 +388,8 @@ def candidate_control_pool(
         & pool.structure_resolved.astype(bool).to_numpy()
         & (indices >= int(case.eligible_start_index_0based))
         & (indices < int(case.eligible_end_index_0based_exclusive))
+        & (indices >= int(args.terminal_exclusion))
+        & (indices < len(mask) - int(args.terminal_exclusion))
     ].copy()
     settings = MATCH_MODELS[model]
     if pd.isna(case.q3):
@@ -442,6 +453,12 @@ def match_controls(apex: pd.DataFrame, residues: pd.DataFrame, masks, args) -> p
     for case in apex.itertuples(index=False):
         if case.structure_residue_merge != "both" or not bool(case.structure_resolved):
             continue
+        if (
+            int(case.apex_index_0based) < int(args.terminal_exclusion)
+            or int(case.apex_index_0based)
+            >= int(case.protein_length) - int(args.terminal_exclusion)
+        ):
+            continue
         for model in MATCH_MODELS:
             selected = candidate_control_pool(case, residue_groups, masks, model, args)
             for rank, control in enumerate(selected.itertuples(index=False), start=1):
@@ -450,6 +467,7 @@ def match_controls(apex: pd.DataFrame, residues: pd.DataFrame, masks, args) -> p
                     "split": case.split, "protein": case.protein,
                     "sign": int(case.sign), "sign_label": case.sign_label,
                     "apex_index_0based": int(case.apex_index_0based),
+                    "protein_length": int(case.protein_length),
                     "match_model": model, "control_rank": rank,
                     "control_index_0based": int(control.residue_index_0based),
                     "match_distance": float(control.match_distance),
@@ -603,7 +621,7 @@ def union_group_network_inference(
     if mapping.duplicated(["protein", "split"]).any():
         raise ValueError("Group manifest has duplicate protein/split keys")
     selected = by_protein[
-        by_protein.match_model.eq("q3_neq_rsa_position")
+        by_protein.match_model.eq("q3_neq")
         & by_protein.feature.isin(HEADLINE_NETWORK_FEATURES)
     ].copy()
     selected = selected.merge(
@@ -828,6 +846,18 @@ def integrity_audit(
         checks["controls_differ_from_apex"] = bool(
             (controls.control_index_0based != controls.apex_index_0based).all()
         )
+        checks["matched_cases_and_controls_nonterminal"] = bool(
+            (
+                controls.apex_index_0based.ge(args.terminal_exclusion)
+                & controls.apex_index_0based.lt(
+                    controls.protein_length - args.terminal_exclusion
+                )
+                & controls.control_index_0based.ge(args.terminal_exclusion)
+                & controls.control_index_0based.lt(
+                    controls.protein_length - args.terminal_exclusion
+                )
+            ).all()
+        )
         position = controls[controls.match_model.eq("q3_neq_rsa_position")]
         checks["position_caliper_where_required"] = bool(
             position.delta_position_control_minus_apex.abs().le(
@@ -932,6 +962,7 @@ def main() -> None:
         ],
         "detection_threshold_R_p": args.detection_threshold_R_p,
         "max_controls_per_apex": args.max_controls_per_apex,
+        "terminal_exclusion_residues_per_end": args.terminal_exclusion,
         "calipers": {
             "normalized_position": args.position_caliper,
             "neq": args.neq_caliper, "rsa": args.rsa_caliper,
@@ -941,9 +972,10 @@ def main() -> None:
             "sign flips, and assigned protein-bootstrap confidence intervals; "
             "importance models use protein fixed effects and protein-clustered "
             "standard errors. The sole primary structural family is the 60 "
-            "strict-match union-group tests (6 conditions x 2 signs x 5 headline "
-            "network features), with one BH correction across that table. Other "
-            "p-values are diagnostic or exploratory."
+            "Q3+Neq-matched union-group tests (6 conditions x 2 signs x 5 "
+            "headline network features), with one BH correction across that "
+            "table. Q3+Neq+RSA and position-matched results are sensitivity "
+            "analyses; other p-values are diagnostic or exploratory."
         ),
         "group_manifest_csv": str(Path(args.group_manifest_csv).expanduser().resolve()),
         "headline_union_group_features": list(HEADLINE_NETWORK_FEATURES),

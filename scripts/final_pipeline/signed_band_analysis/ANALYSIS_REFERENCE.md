@@ -831,6 +831,7 @@ All schemes require:
 - same model condition
 - identical Q3 label
 - control outside every positive and negative band interval
+- case and control outside the first and last two sequence positions
 
 The q3_only design uses:
 
@@ -846,6 +847,11 @@ The stricter schemes add:
 - RSA caliper: 0.15
 - normalized-position caliper: 0.25
 - up to five nearest eligible controls per apex
+
+Sequence position is not used in the primary comparison. The first and last
+two residues are excluded directly because these positions lack assigned PB
+states. The position-matched scheme is retained only as a sensitivity
+analysis.
 
 Control reuse is allowed across different apex match sets but not within one
 set. Candidate controls are ordered first by matching distance. Exact ties are
@@ -867,18 +873,18 @@ Q3-only coverage:
 - total test-set apices across the six models: 11,039
 - matched apices: 11,039
 - match rate: 100%
-- implied control assignments: 1,124,964
-- mean controls per matched apex: 101.91
+- implied control assignments: 1,112,177
+- mean controls per matched apex: 100.75
 - every control comes from the same protein
 
 Coverage under the stricter schemes:
 
 | Matching scheme | Matched apices | Match rate | Mean controls per matched apex |
 |:---|---:|---:|---:|
-| Q3 only | 11,039 | 100% | 101.91 |
-| Q3 + Neq | 10,538 | 95.46% | 4.61 |
-| Q3 + Neq + RSA | 9,891 | 89.60% | 4.23 |
-| Q3 + Neq + RSA + position | 8,841 | 80.09% | 3.84 |
+| Q3 only | 11,039 | 100% | 100.75 |
+| Q3 + Neq | 10,537 | 95.45% | 4.61 |
+| Q3 + Neq + RSA | 9,889 | 89.58% | 4.22 |
+| Q3 + Neq + RSA + position | 8,828 | 79.97% | 3.83 |
 
 The 11,039 total is an aggregate over six model conditions. The stricter schemes lose cases when no non-band
 residue satisfies all required calipers.
@@ -893,32 +899,35 @@ One primary Phase 2 family was declared:
 
 - six model conditions;
 - two contribution signs;
-- three headline outcomes: torsional change, distance to the nearest Q3
-  boundary and MD strain;
-- 36 two-sided tests in total, with one Benjamini-Hochberg correction across
-  all 36.
+- RSA tested after matching on Q3 and Neq;
+- torsional change, distance to the nearest Q3 boundary and MD strain tested
+  after matching on Q3, Neq and RSA;
+- 48 two-sided tests in total, with one Benjamini-Hochberg correction across
+  all 48.
 
 The remaining annotation tests are exploratory. Their upper, lower and
 two-sided p-values are retained for diagnostics but are not additional primary
 families.
 
-Under the strict Q3 + Neq + RSA + position match, the union-group-weighted
-test-set effects across the six models were:
+Under the Q3 + Neq comparison, positive apices had RSA values 0.105–0.131
+higher than matched controls. This was significant in all six models. Negative
+apices had RSA values 0.019–0.120 lower than matched controls. The direction
+was consistent across all six models, although the corrected test was
+significant in four; the effect was weakest in the top-fine-tuned ESM3 models.
+
+After additionally matching RSA, the union-group-weighted test-set effects
+across the six models were:
 
 | Sign | Torsional change | Distance to Q3 boundary | MD strain |
 |:---|---:|---:|---:|
-| Negative | -20.83 to -16.19 degrees | +2.14 to +2.96 residues | -0.0085 to -0.0044 |
-| Positive | +18.07 to +26.18 degrees | +0.35 to +0.84 residues | +0.0060 to +0.0153 |
+| Negative | -18.58 to -13.75 degrees | +1.91 to +2.85 residues | -0.0078 to -0.0042 |
+| Positive | +15.77 to +28.31 degrees | +0.37 to +0.88 residues | +0.0042 to +0.0133 |
 
 Torsional change remained significant in all six conditions for both signs.
-Negative boundary distance and negative strain were significant in all six.
-Positive boundary distance was significant in five of six conditions, and
-positive strain in four of six. Depending on feature availability and match
-coverage, 77–81 independent test union groups contributed to each comparison.
-
-For ESM3 top-28 specifically, the corrected effects were +23.56 degrees and
-+0.0153 strain for positive apices, and -20.83 degrees, -0.0067 strain and
-+2.75 residues from a Q3 boundary for negative apices.
+Negative boundary distance was significant in all six models and negative
+strain in five. Positive boundary distance was significant in four models and
+positive strain in three. The position-matched results remain available as
+a more restrictive sensitivity analysis but are not the primary estimates.
 
 The raw circular-shift analysis in Phase 2B remains useful for showing that
 apex locations are not arbitrary. Because the model predicts the Neq-derived
@@ -930,7 +939,7 @@ boundary and external-strain effects are the main biological results.
 Current outputs:
 
 ```text
-results/publication_comparable_v2/analysis_phase2_interval_iou05_test_corrected/
+results/publication_comparable_v2/analysis_phase2_primary_no_position_test/
   enrichment_with_test_strain/
     within_q3_match_coverage_summary.csv
     within_q3_match_balance.csv
@@ -943,7 +952,7 @@ results/publication_comparable_v2/analysis_phase2_interval_iou05_test_corrected/
   pipeline_audit_with_test_strain.json
 ```
 
-The corrected audit passed all 48 checks. The expensive Phase 2B circular-shift
+The audit passed all 49 checks. The expensive Phase 2B circular-shift
 null was reused without recomputation because the correction affected only
 control matching and downstream inference, not apex locations or annotations.
 
@@ -1378,8 +1387,10 @@ The statistics also follow Phase 2. Apex-minus-control effects are averaged
 within protein and then within the fixed-split union groups. Union groups
 receive equal weight, are resampled for confidence intervals and are the units
 of the two-sided sign-flip tests. The primary structural family contains 60
-strict-match tests: six conditions, two signs and five predeclared contact
+Q3 + Neq-matched tests: six conditions, two signs and five predeclared contact
 features. Benjamini-Hochberg correction is applied once across those 60 tests.
+Q3 + Neq + RSA asks whether an effect remains among equally exposed residues,
+and the position-matched analysis is retained as a final sensitivity check.
 The larger protein-level feature table remains exploratory.
 
 The audit passed. The six model catalogs contain 11,039 test-set apices, of
@@ -1392,20 +1403,21 @@ which 10,804 have mapped PDB coordinates. Control coverage was:
 | Q3 + Neq + RSA | 99.85–100% | 79.10–80.93% |
 | Q3 + Neq + RSA + position | 99.44–100% | 64.48–67.84% |
 
-The positive-apex pattern survived strict matching and union-group inference.
-Across the six conditions, positive apices had 0.58–0.97 fewer contacts and a
-0.10–0.16 lower packing index. Both effects were significant in all six
-conditions. Participation coefficient was also lower in all six. Lower
-betweenness was significant in four conditions and lower closeness in three.
-For ESM3 top-28, all five effects were significant: contact degree -0.97,
-packing index -0.163, betweenness -0.0055, closeness -0.0164 and participation
--0.0427.
+The positive-apex pattern was strong. After Q3 + Neq matching, positive apices
+had 1.03–1.37 fewer contacts and a 0.17–0.23 lower packing index. All five
+contact-network features were significant in all six models. After also
+matching RSA, positive apices still had 0.49–0.83 fewer contacts and a
+0.09–0.14 lower packing index, significant in all six models. Their weakly
+connected structural environment is therefore not explained only by greater
+solvent exposure.
 
-The negative-apex hub interpretation did not survive. Negative contact degree
-and packing were significant in only one of six conditions, while betweenness
-and closeness were significant in none. Participation coefficient was higher
-in four conditions, but this isolated effect is not evidence that the exact
-negative apex is a general dense or central network hub.
+For negative apices, the Q3 + Neq results were model-dependent. Contact degree
+and packing were significant in three of six models, betweenness and closeness
+in four, and participation coefficient in all six. After RSA matching,
+contact degree was slightly lower in all six models rather than higher, while
+packing and centrality were mostly weak or inconsistent. Negative apices are
+buried, but the evidence does not support an additional universal hub property
+beyond what is expected from burial.
 
 The same script tests whether stronger bands, measured by
 `log2(R_p / 2)`, have stronger structural signatures. After protein adjustment
@@ -1418,7 +1430,7 @@ Primary outputs:
 
 ```text
 results/publication_comparable_v2/
-  analysis_apex_structure_phase2_consistent_test_corrected/
+  analysis_apex_structure_primary_no_position_test/
     stable_apex_structure_features.csv.gz
     matched_nonband_controls.csv.gz
     matched_apex_control_effects_by_protein.csv.gz
