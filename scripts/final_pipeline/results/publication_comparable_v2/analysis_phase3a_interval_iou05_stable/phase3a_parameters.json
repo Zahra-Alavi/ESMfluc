@@ -1,0 +1,122 @@
+{
+  "phase": "3A",
+  "candidate_object": "complete contiguous Q8 segment",
+  "case": "segment contains exactly one sign class of band apex",
+  "control": "same-protein, identical-Q8 segment outside every band interval",
+  "dual_sign_segments": "excluded from both sign-specific case sets",
+  "feature_groups": {
+    "neq": [
+      "mean_neq",
+      "max_neq",
+      "neq_peak_fraction",
+      "neq_peak_excess"
+    ],
+    "exposure_length_position": [
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint"
+    ],
+    "geometry_boundaries": [
+      "mean_torsion_change",
+      "max_torsion_change",
+      "q3_boundary_fraction",
+      "mean_distance_to_q3_boundary",
+      "structured_linker_fraction"
+    ],
+    "disorder": [
+      "mean_disorder",
+      "max_disorder"
+    ],
+    "sequence": [
+      "fraction_glycine",
+      "fraction_proline",
+      "fraction_hydrophobic",
+      "fraction_charged",
+      "fraction_aromatic",
+      "sequence_entropy"
+    ]
+  },
+  "stages": {
+    "00_q8_only": [],
+    "01_add_neq": [
+      "mean_neq",
+      "max_neq",
+      "neq_peak_fraction",
+      "neq_peak_excess"
+    ],
+    "02_add_exposure_length_position": [
+      "mean_neq",
+      "max_neq",
+      "neq_peak_fraction",
+      "neq_peak_excess",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint"
+    ],
+    "03_add_geometry_boundaries": [
+      "mean_neq",
+      "max_neq",
+      "neq_peak_fraction",
+      "neq_peak_excess",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint",
+      "mean_torsion_change",
+      "max_torsion_change",
+      "q3_boundary_fraction",
+      "mean_distance_to_q3_boundary",
+      "structured_linker_fraction"
+    ],
+    "04_add_disorder": [
+      "mean_neq",
+      "max_neq",
+      "neq_peak_fraction",
+      "neq_peak_excess",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint",
+      "mean_torsion_change",
+      "max_torsion_change",
+      "q3_boundary_fraction",
+      "mean_distance_to_q3_boundary",
+      "structured_linker_fraction",
+      "mean_disorder",
+      "max_disorder"
+    ],
+    "05_add_sequence": [
+      "mean_neq",
+      "max_neq",
+      "neq_peak_fraction",
+      "neq_peak_excess",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint",
+      "mean_torsion_change",
+      "max_torsion_change",
+      "q3_boundary_fraction",
+      "mean_distance_to_q3_boundary",
+      "structured_linker_fraction",
+      "mean_disorder",
+      "max_disorder",
+      "fraction_glycine",
+      "fraction_proline",
+      "fraction_hydrophobic",
+      "fraction_charged",
+      "fraction_aromatic",
+      "sequence_entropy"
+    ]
+  },
+  "model_training": "train split only",
+  "model_evaluation": [
+    "validation",
+    "test"
+  ],
+  "weighting": "equal case/control weight within protein-Q8 strata",
+  "minimum_inference_proteins": 10,
+  "random_seed": 123
+}

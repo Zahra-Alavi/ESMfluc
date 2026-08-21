@@ -1,0 +1,76 @@
+{
+  "bands_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/per_seed/signed_bands.csv",
+  "protein_summary_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/per_seed/signed_band_protein_summary.csv",
+  "mean_bands_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/mean/signed_bands.csv",
+  "per_seed_influence_fields": [
+    "signed_column_influence"
+  ],
+  "mean_profile_influence_fields": [
+    "seed_averaged_signed_column_influence"
+  ],
+  "matching": "same condition, split, protein, and sign; one-to-one Hungarian matching; prominence is never used",
+  "matching_method": "interval_iou",
+  "match_tolerance": "interval intersection-over-union >= 0.5",
+  "min_seeds": 2,
+  "min_interval_iou": 0.5,
+  "position_tolerance": 2,
+  "max_width_tolerance": 10,
+  "n_block_shifts": 1000,
+  "random_seed": 123,
+  "null_inference_mode": "monte_carlo_block_shift",
+  "null_statistics_inferential": true,
+  "single_shift_note": null,
+  "block_shift": "circularly shift every apex and every support residue in each seed's complete same-sign band pattern modulo the half-open eligible interval; boundary-crossing support uses two linear segments and preserves exact band count, width, sign, magnitude, and within-protein circular spacing",
+  "circular_shift_audit": {
+    "performed": true,
+    "shift_representation": "one or two inclusive linear segments inside the half-open eligible interval",
+    "patterns_checked": 6973,
+    "representative_offsets_checked": 27892,
+    "band_shifts_checked": 142944,
+    "wrapped_band_shifts_checked": 679,
+    "all_shifted_widths_exact": true,
+    "all_band_counts_preserved": true,
+    "all_signs_preserved": true,
+    "all_magnitudes_preserved": true,
+    "all_relative_circular_apex_spacing_preserved": true,
+    "all_support_positions_inside_eligible_interval": true,
+    "all_shifted_apices_inside_shifted_support": true
+  },
+  "stable_catalog_independent_of_null_shift": true,
+  "consensus_output_role": "diagnostic seed-only clustering",
+  "primary_catalog_definition": "mean-profile band with a one-to-one same-sign seed-band interval match in at least 2 of 3 seeds",
+  "stable_catalog_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/reproducibility_interval_iou05_null_fixed_test/stable_signed_bands.csv",
+  "stable_catalog_audit": {
+    "n_mean_profile_bands": 11740,
+    "n_primary_stable_bands": 11039,
+    "n_strict_3of3_bands": 8445,
+    "n_unstable_mean_bands": 701,
+    "all_mean_bands_with_stability_csv_gz": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/reproducibility_interval_iou05_null_fixed_test/all_mean_bands_with_stability.csv.gz",
+    "primary_definition": ">=2 of 3 seeds",
+    "strict_definition": "3 of 3 seeds",
+    "matching": "same condition/split/protein/sign; one-to-one interval-IoU Hungarian matching with IoU >= 0.5",
+    "apex_displacement_role": "descriptive only",
+    "mean_profile_intervals_recomputed_after_matching": false,
+    "locked_parameter_set_id": "phase1_raw_amp_R2_half_intensity_merge_c5d7c802e9",
+    "interval_audit": {
+      "n_mean_profile_intervals": 11740,
+      "all_intervals_contain_apex": true,
+      "all_interval_widths_exact": true,
+      "n_overlapping_interval_pairs": 0
+    }
+  },
+  "locked_parameter_set_id": "phase1_raw_amp_R2_half_intensity_merge_c5d7c802e9",
+  "validated_active_detector_parameters": {
+    "apex_method": "raw_mad_amplitude",
+    "support_method": "half_intensity_merge",
+    "terminal_exclusion": 0,
+    "terminal_exclusion_fraction": 0.0,
+    "amplitude_mad": 2.0
+  },
+  "extractor_parameter_files": {
+    "per_seed": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/per_seed/signed_band_parameters.json",
+    "mean": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/mean/signed_band_parameters.json"
+  },
+  "n_consensus_bands": 11535,
+  "n_seed_pair_protein_rows": 7488
+}

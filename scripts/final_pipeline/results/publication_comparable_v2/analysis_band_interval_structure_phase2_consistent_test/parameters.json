@@ -1,0 +1,66 @@
+{
+  "analysis_unit": "actual seed-stable contribution-band interval",
+  "control_interval": "same protein, same width and apex-to-boundary offsets, outside every band",
+  "matching_schemes": {
+    "q3_only": {
+      "matched_covariates": [
+        "Q3"
+      ],
+      "use_neq": false,
+      "use_rsa": false,
+      "use_position": false,
+      "use_all_controls": true
+    },
+    "q3_neq": {
+      "matched_covariates": [
+        "Q3",
+        "Neq"
+      ],
+      "use_neq": true,
+      "use_rsa": false,
+      "use_position": false,
+      "use_all_controls": false
+    },
+    "q3_neq_rsa": {
+      "matched_covariates": [
+        "Q3",
+        "Neq",
+        "RSA"
+      ],
+      "use_neq": true,
+      "use_rsa": true,
+      "use_position": false,
+      "use_all_controls": false
+    },
+    "q3_neq_rsa_position": {
+      "matched_covariates": [
+        "Q3",
+        "Neq",
+        "RSA",
+        "normalized sequence position"
+      ],
+      "use_neq": true,
+      "use_rsa": true,
+      "use_position": true,
+      "use_all_controls": false
+    }
+  },
+  "cohorts": {
+    "resolved_80": 0.8,
+    "fully_resolved": 1.0
+  },
+  "calipers": {
+    "neq": 0.25,
+    "rsa": 0.15,
+    "normalized_position": 0.25
+  },
+  "n_sign_flips": 10000,
+  "n_bootstrap": 2000,
+  "random_seed": 123,
+  "split": "test",
+  "stable_bands_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/reproducibility_interval_iou05/stable_signed_bands.csv",
+  "residue_annotations_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/annotations/residue_biophysical_annotations.csv.gz",
+  "contact_json": [
+    "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_seed_averaged_band_external_structure/contact_networks/test_contacts_ca8.json.gz"
+  ]
+}

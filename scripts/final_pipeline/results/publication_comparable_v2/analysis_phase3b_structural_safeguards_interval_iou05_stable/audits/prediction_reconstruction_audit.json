@@ -1,0 +1,11 @@
+{
+  "direct_rows": 576,
+  "reconstructed_rows": 576,
+  "matched_rows": 576,
+  "maximum_absolute_errors": {
+    "weighted_auroc": 0.0,
+    "weighted_average_precision": 0.0,
+    "macro_within_protein_q8_concordance": 0.0
+  },
+  "passed": true
+}

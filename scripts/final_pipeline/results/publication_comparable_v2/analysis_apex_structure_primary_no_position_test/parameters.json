@@ -1,0 +1,124 @@
+{
+  "analysis_unit": "stable test-set band apex",
+  "q8_policy": "Q8 is not used to define, match, or model objects",
+  "response_R": "log2(R_p / detection_threshold_R_p)",
+  "structural_predictor_symbol": "X",
+  "structure_features": [
+    "ca_curvature_degrees",
+    "abs_ca_virtual_torsion_degrees",
+    "contact_degree",
+    "ca_packing_index",
+    "mean_contact_distance_angstrom",
+    "betweenness",
+    "closeness",
+    "participation_coefficient",
+    "community_boundary"
+  ],
+  "complete_structure_features": [
+    "ca_curvature_degrees",
+    "abs_ca_virtual_torsion_degrees",
+    "contact_degree",
+    "ca_packing_index",
+    "betweenness",
+    "closeness",
+    "participation_coefficient",
+    "community_boundary"
+  ],
+  "matching_models": {
+    "q3_only": {
+      "matched_covariates": [
+        "Q3"
+      ],
+      "use_neq": false,
+      "use_rsa": false,
+      "use_position": false,
+      "use_all_controls": true
+    },
+    "q3_neq": {
+      "matched_covariates": [
+        "Q3",
+        "Neq"
+      ],
+      "use_neq": true,
+      "use_rsa": false,
+      "use_position": false,
+      "use_all_controls": false
+    },
+    "q3_neq_rsa": {
+      "matched_covariates": [
+        "Q3",
+        "Neq",
+        "RSA"
+      ],
+      "use_neq": true,
+      "use_rsa": true,
+      "use_position": false,
+      "use_all_controls": false
+    },
+    "q3_neq_rsa_position": {
+      "matched_covariates": [
+        "Q3",
+        "Neq",
+        "RSA",
+        "normalized sequence position"
+      ],
+      "use_neq": true,
+      "use_rsa": true,
+      "use_position": true,
+      "use_all_controls": false
+    }
+  },
+  "importance_models": {
+    "A1_q3_stability": [
+      "strict_3_of_3",
+      "q3"
+    ],
+    "A2_add_neq": [
+      "strict_3_of_3",
+      "q3",
+      "neq"
+    ],
+    "A3_add_rsa": [
+      "strict_3_of_3",
+      "q3",
+      "neq",
+      "rsa"
+    ],
+    "A4_add_position": [
+      "strict_3_of_3",
+      "q3",
+      "neq",
+      "rsa",
+      "normalized_position"
+    ]
+  },
+  "control_definition": "same-protein structurally resolved residue outside every positive and negative band interval for that condition",
+  "reuse_policy": "controls may be reused across apices; inference is aggregated by protein",
+  "split": "test",
+  "stable_bands_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/reproducibility_interval_iou05/stable_signed_bands.csv",
+  "residue_annotations_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/annotations/residue_biophysical_annotations.csv.gz",
+  "contact_json": [
+    "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_seed_averaged_band_external_structure/contact_networks/test_contacts_ca8.json.gz"
+  ],
+  "detection_threshold_R_p": 2.0,
+  "max_controls_per_apex": 5,
+  "terminal_exclusion_residues_per_end": 2,
+  "calipers": {
+    "normalized_position": 0.25,
+    "neq": 0.25,
+    "rsa": 0.15
+  },
+  "inference": "matched effects are averaged within protein, tested with protein-level sign flips, and assigned protein-bootstrap confidence intervals; importance models use protein fixed effects and protein-clustered standard errors. The sole primary structural family is the 60 Q3+Neq-matched union-group tests (6 conditions x 2 signs x 5 headline network features), with one BH correction across that table. Q3+Neq+RSA and position-matched results are sensitivity analyses; other p-values are diagnostic or exploratory.",
+  "group_manifest_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/data_splits/atlas_grouped_v1/split_manifest_grouped_v1.csv",
+  "headline_union_group_features": [
+    "contact_degree",
+    "ca_packing_index",
+    "betweenness",
+    "closeness",
+    "participation_coefficient"
+  ],
+  "minimum_inference_proteins": 10,
+  "n_sign_flips": 10000,
+  "n_bootstrap": 2000,
+  "random_seed": 123
+}

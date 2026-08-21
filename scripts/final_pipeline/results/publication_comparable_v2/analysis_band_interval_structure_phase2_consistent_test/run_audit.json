@@ -1,0 +1,16 @@
+{
+  "status": "pass",
+  "checks": {
+    "one_case_row_per_mapped_band": true,
+    "control_intervals_preserve_width": true,
+    "control_intervals_outside_all_bands": true,
+    "q3_matching_inherited_from_phase2": true,
+    "position_used_only_in_final_scheme": true
+  },
+  "counts": {
+    "input_bands": 11039,
+    "mapped_band_intervals": 11039,
+    "control_interval_rows": 1839583,
+    "matched_band_contexts": 74955
+  }
+}

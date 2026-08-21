@@ -1,0 +1,26 @@
+{
+  "status": "pass",
+  "checks": {
+    "selected_split_only": true,
+    "band_ids_unique": true,
+    "one_apex_row_per_band": true,
+    "R_formula_exact": true,
+    "accepted_maps_input_indexed": true,
+    "controls_same_protein": true,
+    "controls_outside_all_bands": true,
+    "controls_differ_from_apex": true,
+    "matched_cases_and_controls_nonterminal": true,
+    "position_caliper_where_required": true,
+    "q3_exact_for_all_controls": true,
+    "neq_caliper_where_required": true,
+    "rsa_caliper_where_required": true,
+    "max_controls_respected": true
+  },
+  "counts": {
+    "stable_bands": 11039,
+    "apex_rows": 11039,
+    "structure_resolved_apices": 10804,
+    "matched_control_rows": 1202224,
+    "accepted_structure_mappings": 208
+  }
+}

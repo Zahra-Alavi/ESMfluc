@@ -1,0 +1,30 @@
+{
+  "catalog_status": "final_stable",
+  "candidate_table": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase3a_interval_iou05_stable/q8_segment_candidates.csv.gz",
+  "external_features": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase3b_interval_iou05_stable/external_features_by_q8_segment.csv.gz",
+  "input_rows": 481842,
+  "flagged_rows": 481842,
+  "cohort_rows": {
+    "reference_80": 321899,
+    "fully_resolved_local": 318933,
+    "fully_resolved_geometry": 200724,
+    "strict_graph_95": 297838
+  },
+  "cohort_proteins": {
+    "reference_80": 1369,
+    "fully_resolved_local": 1362,
+    "fully_resolved_geometry": 1352,
+    "strict_graph_95": 1147
+  },
+  "partially_resolved_rows_in_fully_resolved_local": 0,
+  "geometry_incomplete_rows_in_fully_resolved_geometry": 0,
+  "incomplete_graph_rows_in_strict_graph_95": 0,
+  "cohorts_with_invalid_case_control_strata": {
+    "reference_80": 0,
+    "fully_resolved_local": 0,
+    "fully_resolved_geometry": 0,
+    "strict_graph_95": 0
+  },
+  "strain_policy": "not filtered or re-estimated by this safeguard",
+  "passed": true
+}

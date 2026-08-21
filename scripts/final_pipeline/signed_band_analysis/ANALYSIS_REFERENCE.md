@@ -100,7 +100,7 @@ Three seeds per condition:
 - 18 model runs
 - 54 condition/seed/split contribution files
 - 24,894 protein-level inferences
-- approximately 37.65 GB compressed
+- approximately 36.80 GB compressed
 
 Maximum audited reconstruction error for:
 
@@ -110,66 +110,128 @@ was 1.91e-6.
 
 ## PRIMARY DATA LOCATIONS
 
-Data splits and NetSurfP:
+Fixed grouped datasets:
 
 ```text
 data_splits/atlas_grouped_v1/
+  train_grouped_v1.csv
+  validation_grouped_v1.csv
+  test_grouped_v1.csv
+  train_grouped_v1.fasta
+  validation_grouped_v1.fasta
+  test_grouped_v1.fasta
 ```
 
-All contribution-file manifest:
+NetSurfP predictions for these exact sequences are:
+
+```text
+data_splits/atlas_grouped_v1/
+  train_grouped_v1_netsurfp3.json
+  validation_grouped_v1_netsurfp3.json
+  test_grouped_v1_netsurfp3.json
+```
+
+Split membership, group IDs and leakage checks are recorded in:
+
+```text
+data_splits/atlas_grouped_v1/
+  split_manifest_grouped_v1.csv
+  group_manifest_grouped_v1.csv
+  split_summary_grouped_v1.json
+  excluded_entries.csv
+```
+
+Training outputs for all seven model conditions and three seeds are under:
+
+```text
+results/publication_comparable_v2/runs/<condition>/seed_<seed>/
+```
+
+There are 21 complete run directories. Each contains the checkpoint,
+training log, run arguments, prediction metrics and test inference output. The
+frozen ESM2 linear baseline is included here, but it has no attention or exact
+contribution matrices.
+
+Exact signed contributions are available for the six BiLSTM-attention
+conditions and three seeds. The manifest for all 54 condition/seed/split files
+is:
 
 ```text
 results/publication_comparable_v2/
   all_split_signed_contributions_manifest.tsv
 ```
 
-Contribution audit:
+The corresponding extraction audit is:
 
 ```text
 results/publication_comparable_v2/
   all_split_signed_contributions_audit.json
 ```
 
-Three-seed averaged-profile manifest:
+The files themselves are stored under:
+
+```text
+results/publication_comparable_v2/runs/<condition>/seed_<seed>/
+  all_split_signed_contributions/
+    train_signed_contributions.json.gz
+    validation_signed_contributions.json.gz
+    test_signed_contributions.json.gz
+```
+
+Every protein record contains:
+
+- `contribution_matrix`: exact `C_ij`, shape `L x L`;
+- `intrinsic_signed_evidence`: `s_j`, shape `L`;
+- `signed_column_influence`: seed-specific `I_j`, shape `L`;
+- `attention_matrix`: `A_ij`, shape `L x L`;
+- `attention_column_mean`: `B_j`, shape `L`;
+- `seed_averaged_signed_column_influence`: the three-seed mean of `I_j`,
+  shape `L`.
+
+The same three-seed mean field was inserted into each seed's contribution
+file. The following manifest points to the seed-1 copy as the canonical file
+for reading the averaged profile; the stored mean still comes from seeds 1,
+2 and 3:
 
 ```text
 results/publication_comparable_v2/
   seed_averaged_signed_contributions_manifest.tsv
 ```
 
-Seed-average audit:
+The seed-average insertion audit is:
 
 ```text
 results/publication_comparable_v2/
   seed_averaged_influence_audit.tsv
 ```
 
-Each run’s contribution files are under:
+The current final stable-band catalog is:
 
 ```text
-results/publication_comparable_v2/runs/<condition>/seed_<seed>/
-  all_split_signed_contributions/
+results/publication_comparable_v2/
+  analysis_phase1_upgraded_raw_mad2/
+    reproducibility_interval_iou05_null_fixed/
+      stable_signed_bands.csv
 ```
 
-Each protein record contains:
+This file contains train, validation and test bands. Test-only confirmatory
+null results are under `reproducibility_interval_iou05_null_fixed_test/`.
 
-- contribution_matrix:
-  C_ij, shape LxL
+Current primary downstream result directories are:
 
-- intrinsic_signed_evidence:
-  s_j, shape L
+```text
+results/publication_comparable_v2/
+  analysis_neq_pb_reliability/
+  analysis_phase2_primary_no_position_test/
+  analysis_apex_structure_primary_no_position_test/
+  analysis_phase3c_interval_iou05_stable_all_splits/
+  analysis_phase4_interval_iou05_stable_query_receivers_upgraded/
 
-- signed_column_influence:
-  I_j, shape L
+results/benchmark/
+```
 
-- attention_matrix:
-  A_ij, shape LxL
-
-- attention_column_mean:
-  B_j, shape L
-
-- seed_averaged_signed_column_influence:
-  mean_seed(I_j), shape L
+The older similarly named analysis directories are retained for provenance,
+but these are the directories to use for the current manuscript.
 
 ## DATA-GENERATION SCRIPTS
 
@@ -225,13 +287,12 @@ Algorithm:
 
 1. Find positive local maxima and negative local minima in the raw `I_j`
    profile. The first and last residues are not eligible as apices.
-2. Keep an apex when its absolute magnitude is at least two robust scales above
-   the profile background: `R_p >= 2`.
+2. Keep an apex when its absolute influence is at least twice the profile's
+   robust MAD scale: `R_p >= 2`.
 3. Define its band as the contiguous, same-sign residues around the apex for
    which `|I_j| >= 0.5 * |I_p|`.
 4. Merge overlapping bands of the same sign and retain the strongest apex as
    the primary apex.
-
 
 Each final band contains its apex, contains residues of only one sign and does
 not overlap another final band. The per-seed and mean-profile interval audits
@@ -317,7 +378,7 @@ Inferential test-set results across 36 condition/sign/seed-pair cells:
 - mean matched interval IoU: 0.668–0.935; median 0.802;
 - pairwise Jaccard null z-scores: 75.5–153.6;
 - consensus-count null z-scores: 43.0–61.5;
-- all pairwise and consensus empirical BH-adjusted p-values were `0.000999`
+- all pairwise and consensus BH-adjusted empirical q-values were `0.000999`
   with 1,000 block shifts.
 
 The raw-profile band locations and intervals are therefore strongly
@@ -361,6 +422,10 @@ Final counts:
 - test: 11,039 bands
 - 55,170 bands supported by all three seeds
 - 17,295 bands supported by two seeds
+
+The densities use the same denominator as the counts: residue positions summed
+over the six separate model profiles. They are not densities of unique regions
+after combining the six models.
 
 Widths:
 
@@ -452,9 +517,11 @@ signed_band_analysis/build_uniform_attention_control_profiles.py
 signed_band_analysis/compare_observed_uniform_bands.py
 ```
 
-The same procedure was used for both controls:
+The same detection and comparison procedure was used for both controls:
 
-1. Build the control profile for every seed, model condition, split and protein.
+1. Build the control profile for every seed, model condition and protein. The
+   uniform control was built for train, validation and test; the shifted-
+   attention control was built for test only.
 2. Average the three control profiles for each model and protein.
 3. Apply the same locked Phase 1 detector used for the observed profiles:
    raw residue-level profiles, \(R_p\geq2\), and same-sign half-height band
@@ -465,7 +532,10 @@ The same procedure was used for both controls:
    sizes and seed support within the same model, split, protein and sign.
 
 No test-set result was used to choose the detector or matching parameters. The
-test split is the primary set for scientific interpretation.
+test split is the primary set for scientific interpretation. The shifted-
+attention stability run used one null shift only, so its saved null statistics
+are noninferential; the stable-band catalog itself does not depend on the number
+of null shifts.
 
 Outputs:
 
@@ -545,15 +615,16 @@ Test-set residue-level overlap with the shifted control was:
 | Seed-stable bands | Negative | 0.265–0.333 | 0.369–0.440 | 0.569–0.658 |
 | Seed-stable bands | Positive | 0.095–0.163 | 0.108–0.197 | 0.645–0.743 |
 
-An apex-level diagnostic on the current ESM3 top-28 test catalog clarifies the
-mechanism. Among 1,868 seed-stable observed apices, 91.4% were also a
-sign-appropriate raw local extremum of \(s_j\), 97.3% were a raw local maximum
-of \(B_j\), 89.3% were both and 0.6% were neither. Yet applying the locked
-detector to \(s_j/L\) produced only 346 seed-averaged candidates, 17.1% of the
-2,029 observed candidates for this condition. Thus, the component profiles
-already contain nearly all candidate apex locations, while their learned
-alignment determines which candidates become strong and stable enough to pass
-the \(R_p\geq2\) detector.
+A separate diagnostic calculation on the current ESM3 top-28 test catalog
+clarifies the mechanism. Among 1,868 seed-stable observed apices, 91.4% were
+also a sign-appropriate raw local extremum of \(s_j\), 97.3% were a raw local
+maximum of \(B_j\), 89.3% were both and 0.6% were neither. Yet applying the
+locked detector to \(s_j/L\) produced only 346 seed-averaged candidates, 17.1%
+of the 2,029 observed candidates for this condition. Thus, the component
+profiles already contain nearly all candidate apex locations, while their
+learned alignment determines which candidates become strong and stable enough
+to pass the \(R_p\geq2\) detector. This diagnostic has not yet been exported as
+a standalone result table by the pipeline.
 
 Thus, much of the shifted-control catalog is contained within the observed
 catalog, while many observed locations are lost when the alignment between
@@ -586,7 +657,7 @@ The publication analysis uses the stable bands detected from seed-averaged
 profiles and supported by at least two of the three seeds. Its main statistical
 conclusions are evaluated on the held-out test proteins.
 
-The phase has four main questions:
+The phase has five main questions:
 
 2A. Where are positive and negative band apices located biophysically?
 
@@ -729,7 +800,7 @@ The script also performs paired positive-versus-negative protein-level
 contrasts. The current outputs are stored in:
 
 ```text
-results/publication_comparable_v2/analysis_phase2_interval_iou05_test/
+results/publication_comparable_v2/analysis_phase2_primary_no_position_test/
   enrichment_with_test_strain/
     apex_metrics_by_protein.csv.gz
     apex_circular_shift_null.csv.gz
@@ -776,7 +847,7 @@ Outputs:
 
 ```text
 results/publication_comparable_v2/
-  analysis_phase2_interval_iou05_test/
+  analysis_phase2_primary_no_position_test/
     enrichment_with_test_strain/
       annotation_band_coverage_by_protein.csv.gz
       annotation_band_coverage_identifier_summary.csv
@@ -994,7 +1065,7 @@ Final strain-aware output directory:
 
 ```text
 results/publication_comparable_v2/
-  analysis_phase2_interval_iou05_test/
+  analysis_phase2_primary_no_position_test/
     enrichment_with_test_strain/
 ```
 
@@ -1070,11 +1141,11 @@ been replicated on independent train/validation strain datasets.
 
 ### 2F. Outputs, visualization and audit
 
-The authoritative corrected strain-aware outputs are:
+The authoritative current strain-aware outputs are:
 
 ```text
 results/publication_comparable_v2/
-  analysis_phase2_interval_iou05_test_corrected/
+  analysis_phase2_primary_no_position_test/
     enrichment_with_test_strain/
       apex_metrics_by_protein.csv.gz
       apex_circular_shift_null.csv.gz
@@ -1133,19 +1204,19 @@ Final corrected audit:
 
 ```text
 results/publication_comparable_v2/
-  analysis_phase2_interval_iou05_test_corrected/
+  analysis_phase2_primary_no_position_test/
     pipeline_audit_with_test_strain.json
 ```
 
 - passed
-- 48 checks
+- 49 checks
 - 0 failures
 - all 208 test strain files valid
 - controls confirmed outside all band intervals
 - Q3 matches and matching calipers independently verified
 - summary statistics independently recomputed
 - matching covariates absent from inferential outcome rows
-- one 36-test primary p-value family confirmed
+- one 48-test primary p-value family confirmed
 
 ## PHASE 3A: WHY SOME Q8 SEGMENTS ARE SELECTED (only exploratory, not to be used as a main result)
 
@@ -1324,11 +1395,12 @@ results/publication_comparable_v2/
 ## PHASE 3B: COMPARISON WITH EXPERIMENTAL STRUCTURE
 
 Phase 3B asks whether contribution-band locations have distinctive geometry or
-contact environments in experimental PDB structures. It now contains two
+contact environments in experimental PDB structures. It now contains three
 analyses:
 
 1. A direct comparison at the band apex. This is the primary analysis.
-2. A Q8-segment analysis inherited from Phase 3A. This is a secondary analysis
+2. A smaller sensitivity analysis using the complete detected band intervals.
+3. A Q8-segment analysis inherited from Phase 3A. This is a secondary analysis
    because the model does not select complete Q8 segments.
 
 ### 3B.1 Structure mapping
@@ -1456,10 +1528,11 @@ signed_band_analysis/analyze_signed_band_interval_structure.py
 
 Each control is a same-protein, non-band interval with the same width and the
 same apex-to-left-boundary and apex-to-right-boundary distances as the detected
-band. Matching uses the same four schemes and the same sign-flip, bootstrap and
-multiple-testing procedure described above. The main cohort requires every
-residue in both the band and control interval to have a mapped C-alpha
-coordinate. An 80%-resolved cohort is retained as a comparison.
+band. Matching uses the same four schemes. Inference uses protein-level sign
+flips, protein bootstrap confidence intervals and Benjamini-Hochberg
+correction. The main cohort requires every residue in both the band and control
+interval to have a mapped C-alpha coordinate. An 80%-resolved cohort is
+retained as a comparison.
 
 Under the fully resolved, strictest matching, the positive-band intervals had
 0.82–1.25 fewer contacts, lower packing and centrality, and 0.08–0.17 Å greater
@@ -1726,7 +1799,8 @@ Additional classes:
 
 ### 3C.4 Coverage and seed stability
 
-The updated run uses the final seed-stable test-set catalog from Phase 1. Each
+The current run covers train, validation and test. The numerical results below
+use the held-out test subset of the final seed-stable Phase 1 catalog. Each
 model contributes its own band catalog:
 
 | Model | Negative | Positive | Total |
@@ -1854,7 +1928,7 @@ is addressed by the Phase 1 uniform-attention control.
 
 ```text
 results/publication_comparable_v2/
-  analysis_phase3c_interval_iou05_stable_test/
+  analysis_phase3c_interval_iou05_stable_all_splits/
     mechanism_by_band_and_seed.csv.gz
     mechanism_by_band_seed_averaged.csv.gz
     mechanism_effects_by_protein.csv.gz
@@ -1911,6 +1985,9 @@ results/publication_comparable_v2/
   analysis_phase3c_interval_iou05_stable_all_splits/
     mechanism_by_band_seed_averaged.csv.gz
 ```
+
+The Phase 1 catalog path recorded by this run is byte-identical to the current
+canonical catalog under `reproducibility_interval_iou05_null_fixed/`.
 
 Query features:
 
@@ -2063,7 +2140,7 @@ Positive-band high receivers versus low receivers:
 - RSA: +0.096 to +0.129
 - torsional change: +15.7 to +23.1 degrees
 - probability of lying in any band: +39.6 to +72.7 percentage points
-- normalized position: weak and inconsistent
+- normalized position: small and not consistently significant
 
 Negative-band high receivers versus low receivers:
 
@@ -2071,7 +2148,7 @@ Negative-band high receivers versus low receivers:
 - RSA: -0.156 to -0.116
 - torsional change: -46.6 to -41.3 degrees
 - probability of lying in any band: +49.4 to +68.1 percentage points
-- normalized position: weak and inconsistent
+- normalized position: small and not consistently significant
 
 Conclusion:
 
@@ -2085,7 +2162,8 @@ Conclusion:
 
 ### 4.7 Experimental structure and water
 
-Matched high-versus-low receivers show independent structural associations:
+After matching query Q8 and sequence-distance bin, high and low receivers show
+structural associations:
 
 - high negative-band receivers were 2.22–2.77 Å closer to the source band and
   5.4–13.0 percentage points more likely to make a direct C-alpha contact;
@@ -2103,7 +2181,7 @@ and longer crystallographic-water paths were not consistent across models.
 These associations add little held-out discrimination beyond query
 biophysics. On the fixed all-query water-eligible cohort, ordinary structure
 added 0.0012–0.0028 AUROC for negative sources and 0.0012–0.0072 for positive
-sources. Adding water changed AUROC by -0.0006 to -0.0001 and -0.0008 to
+sources. Adding water changed AUROC by -0.0006 to +0.0001 and -0.0008 to
 +0.0011, respectively. Structural and water increments were also small and
 inconsistent for queries at least 21 residues away, including after direct
 C-alpha contacts were removed.
@@ -2426,7 +2504,7 @@ Limitations:
    apices retain lower torsional change and strain and lie deeper inside Q3
    regions. These are the primary Phase 2 biological results.
 
-4. The primary Phase 2 family contains 36 predeclared two-sided tests. Broader
+4. The primary Phase 2 family contains 48 predeclared two-sided tests. Broader
    annotation screens and raw circular-shift enrichments are exploratory.
 
 5. Positive bands are enriched for Q8 loops, Neq peaks and high-strain
@@ -2496,8 +2574,9 @@ Limitations:
   segments as candidate objects. The primary Phase 3B analysis uses the actual
   band apex instead.
 
-- Broad and frequently overlapping positive and negative band intervals should
-  not be treated as independent physical domains or summed as nonoverlapping
+- The compact, sign-constrained band intervals should not be treated as
+  independent physical domains. Catalogs from different model conditions can
+  identify overlapping biological regions and should not be summed as unique
   sequence coverage.
 
 - The locked \(R_p\geq2\) detector threshold was chosen before the downstream

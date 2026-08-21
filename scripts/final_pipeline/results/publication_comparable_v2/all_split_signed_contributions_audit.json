@@ -1,0 +1,15 @@
+{
+  "bilstm_run_count": 18,
+  "split_json_count": 54,
+  "expected_proteins_per_split": {
+    "train": 967,
+    "validation": 208,
+    "test": 208
+  },
+  "total_protein_inferences": 24894,
+  "total_residue_inferences": 5745582,
+  "total_compressed_bytes": 37646092448,
+  "max_reconstruction_abs_error": 1.9073486328125e-06,
+  "partial_file_count": 0,
+  "manifest": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/all_split_signed_contributions_manifest.tsv"
+}

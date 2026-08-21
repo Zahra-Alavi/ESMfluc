@@ -1,0 +1,74 @@
+{
+  "analysis": "observed versus shifted_attention band localization comparison",
+  "control_label": "shifted_attention",
+  "selected_splits": [
+    "test"
+  ],
+  "primary_analysis": "test-set residue-level binary band-mask overlap, aggregated with equal protein weighting",
+  "context_key": [
+    "condition",
+    "split",
+    "protein",
+    "sign"
+  ],
+  "catalog_scopes": [
+    "mean_candidate",
+    "seed_stable"
+  ],
+  "coverage_denominator": "eligible_end_index_0based_exclusive - eligible_start_index_0based",
+  "empty_mask_policy": "Jaccard, Dice, and directional overlap are undefined when their denominator is zero; coverage remains zero",
+  "apex_distance_thresholds": [
+    0,
+    2,
+    5,
+    10
+  ],
+  "band_matching": "one-to-one Hungarian assignment maximizing same-sign interval IoU within context; assignments with IoU=0 are treated as unmatched",
+  "band_iou_summary_thresholds": [
+    0.25,
+    0.5,
+    0.75
+  ],
+  "unmatched_catalog_definition": "no positive-IoU assignment in the global maximum-IoU matching; threshold-specific failures remain in the matched table",
+  "stability_annotation": "mean bands present in stable_signed_bands.csv are supported by at least 2/3 seeds; absent bands are labelled <2 with exact 0-versus-1 support unavailable from the supplied stable-only catalog",
+  "aggregation": "equal protein weighting",
+  "bootstrap": {
+    "unit": "protein row within condition/split/scope/sign/direction",
+    "n_bootstrap": 2000,
+    "random_seed": 20260807,
+    "confidence_interval": "percentile 2.5% to 97.5%"
+  },
+  "test_set_primary": true,
+  "inputs": {
+    "observed_mean_bands": {
+      "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/mean/signed_bands.csv",
+      "bytes": 77412892,
+      "sha256": "bc67f9eca31fbcfcbbdb71e121bd664c61192d2de29c0a1b449c9336f81a0b64"
+    },
+    "observed_stable_bands": {
+      "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/reproducibility_interval_iou05/stable_signed_bands.csv",
+      "bytes": 91947771,
+      "sha256": "346596f19a8eeabd7a221b2de9a599297fc0aa322ade09be7596a3fb705c0093"
+    },
+    "shifted_attention_mean_bands": {
+      "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_shifted_attention_control_raw_mad2/bands/mean_shifted/signed_bands.csv",
+      "bytes": 6077557,
+      "sha256": "1a7b6883ef5d85b38c1e2f0766fd696054b607851130376944047f34800381ce"
+    },
+    "shifted_attention_stable_bands": {
+      "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_shifted_attention_control_raw_mad2/stability_shifted_interval_iou05/stable_signed_bands.csv",
+      "bytes": 4874090,
+      "sha256": "7de9ef103ff0f3008c70dd73da6a54bc72d02904428ebcd36b8e19b6fe3364ef"
+    },
+    "observed_protein_summary": {
+      "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/mean/signed_band_protein_summary.csv",
+      "bytes": 2595825,
+      "sha256": "f08c2bb2bd0228bdb5be806ce4ed1caf923a4d2e17e231d95a911e48a535d62f"
+    },
+    "shifted_attention_protein_summary": {
+      "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_shifted_attention_control_raw_mad2/bands/mean_shifted/signed_band_protein_summary.csv",
+      "bytes": 435638,
+      "sha256": "1360b01c38183e02a11077acd8f097d8b8e84f02fe24ffcc78549367d9dac67e"
+    }
+  }
+}

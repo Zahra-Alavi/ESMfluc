@@ -1,0 +1,162 @@
+{
+  "schema_version": "esmfluc.phase4_structural_water.v1",
+  "analysis_signature": "93b6001fecc9f32ae69f43f67037a456e4e65258d2e9878cee660bab48e8f109",
+  "analysis_signature_payload": {
+    "schema": "esmfluc.phase4_structural_water.v2",
+    "implementation": {
+      "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/signed_band_analysis/build_band_query_structural_water_features.py",
+      "exists": true,
+      "size": 50495,
+      "mtime_ns": 1785965856181954095
+    },
+    "inputs": {
+      "bands_csv": {
+        "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/reproducibility_interval_iou05/stable_signed_bands.csv",
+        "exists": true,
+        "size": 91947771,
+        "mtime_ns": 1785428238319034460
+      },
+      "contact_json": [
+        {
+          "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_seed_averaged_band_external_structure/contact_networks/train_contacts_ca8.json.gz",
+          "exists": true,
+          "size": 13908712,
+          "mtime_ns": 1784838524616990010
+        },
+        {
+          "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_seed_averaged_band_external_structure/contact_networks/validation_contacts_ca8.json.gz",
+          "exists": true,
+          "size": 3031343,
+          "mtime_ns": 1784838572856930078
+        },
+        {
+          "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_seed_averaged_band_external_structure/contact_networks/test_contacts_ca8.json.gz",
+          "exists": true,
+          "size": 3018846,
+          "mtime_ns": 1784838622684847254
+        }
+      ],
+      "ecod_csv": {
+        "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/data_splits/atlas_grouped_v1/ecod_v285_annotations.csv",
+        "exists": true,
+        "size": 128683,
+        "mtime_ns": 1784245596406292260
+      }
+    },
+    "selection": {
+      "conditions": [],
+      "splits": []
+    },
+    "settings": {
+      "min_mapping_identity": 0.9,
+      "min_input_coverage": 0.8,
+      "min_band_resolved_fraction": 0.8,
+      "ca_contact_cutoff": 8.0,
+      "nonlocal_min_sequence_separation": 3,
+      "polar_contact_cutoff": 3.5,
+      "protein_water_cutoff": 3.4,
+      "water_water_cutoff": 3.2,
+      "minimum_water_occupancy": 0.5,
+      "maximum_water_bfactor_robust_z": 3.0,
+      "maximum_water_resolution": 2.5,
+      "water_chain_policy": "target_only_unambiguous",
+      "required_water_method_regex": "X-RAY DIFFRACTION"
+    }
+  },
+  "coordinate_system": "model/input sequence, 0-based",
+  "contact_graph": {
+    "ca_cutoff_angstrom": 8.0,
+    "ordinary_path_includes_backbone_neighbors": true,
+    "nonlocal_min_sequence_separation": 3,
+    "community_graph": "nonlocal C-alpha contact graph; greedy modularity"
+  },
+  "quality": {
+    "min_mapping_identity": 0.9,
+    "min_input_coverage": 0.8,
+    "min_band_resolved_fraction": 0.8,
+    "unresolved_encoding": "NaN, never zero/no-contact"
+  },
+  "polar_geometry": {
+    "atom_elements": [
+      "N",
+      "O",
+      "S"
+    ],
+    "cutoff_angstrom": 3.5,
+    "interpretation": "putative polar heavy-atom contact, not a hydrogen bond"
+  },
+  "water_primary_definition": {
+    "water_resnames": [
+      "DOD",
+      "H2O",
+      "HOH",
+      "WAT"
+    ],
+    "protein_water_cutoff_angstrom": 3.4,
+    "water_water_cutoff_angstrom": 3.2,
+    "minimum_occupancy": 0.5,
+    "maximum_bfactor_robust_z": 3.0,
+    "required_method_regex": "X-RAY DIFFRACTION",
+    "maximum_resolution_angstrom": 2.5,
+    "chain_policy": "target_only_unambiguous",
+    "path_definition": "query residue--water(s)--source-band residue; no intervening protein nodes",
+    "interpretation": "water-compatible geometric paths in one static coordinate model, not solution hydrogen-bond persistence"
+  },
+  "pair_features": [
+    "query_resolved",
+    "pair_structure_eligible",
+    "minimum_ca_distance_angstrom",
+    "direct_ca_contact",
+    "query_to_band_contact_count",
+    "query_to_band_contact_fraction",
+    "ordinary_contact_path_exists",
+    "shortest_ordinary_contact_path_edges",
+    "nonlocal_contact_path_exists",
+    "shortest_nonlocal_contact_path_edges",
+    "same_community_as_band_apex",
+    "same_community_as_band_majority",
+    "query_distance_to_community_boundary_edges",
+    "same_ecod_domain_as_band_apex",
+    "shares_any_ecod_domain_with_band",
+    "query_distance_to_ecod_boundary_sequence",
+    "query_distance_to_band_domain_boundary_sequence",
+    "relative_backbone_orientation_cosine",
+    "absolute_backbone_orientation_cosine",
+    "minimum_heavy_atom_distance_angstrom",
+    "minimum_polar_atom_distance_angstrom",
+    "direct_putative_polar_contact",
+    "direct_putative_polar_contact_count",
+    "water_structure_eligible",
+    "query_water_contact_count",
+    "band_water_contact_count",
+    "shared_water_count",
+    "shared_water_fraction_of_query_contacts",
+    "shared_water_fraction_of_band_contacts",
+    "one_water_bridge",
+    "water_path_exists",
+    "shortest_water_path_water_count",
+    "water_path_at_most_1",
+    "water_path_at_most_2",
+    "water_path_at_most_3",
+    "water_path_without_direct_ca_contact",
+    "water_path_without_direct_polar_contact",
+    "reachable_query_water_entry_count",
+    "mean_query_contact_water_degree"
+  ],
+  "band_features": [
+    "band_resolved_fraction",
+    "band_resolved_residue_count",
+    "band_apex_resolved",
+    "band_community_majority_defined",
+    "band_ecod_annotation_fraction"
+  ],
+  "inputs": {
+    "bands_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/reproducibility_interval_iou05/stable_signed_bands.csv",
+    "contact_json": [
+      "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_seed_averaged_band_external_structure/contact_networks/train_contacts_ca8.json.gz",
+      "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_seed_averaged_band_external_structure/contact_networks/validation_contacts_ca8.json.gz",
+      "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_seed_averaged_band_external_structure/contact_networks/test_contacts_ca8.json.gz"
+    ],
+    "ecod_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/data_splits/atlas_grouped_v1/ecod_v285_annotations.csv"
+  }
+}

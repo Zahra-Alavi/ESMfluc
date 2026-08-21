@@ -1,0 +1,164 @@
+{
+  "phase": "3B structural safeguards",
+  "catalog_status": "final_stable",
+  "development_only": false,
+  "source_candidate_table": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase3a_interval_iou05_stable/q8_segment_candidates.csv.gz",
+  "source_external_features": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase3b_interval_iou05_stable/external_features_by_q8_segment.csv.gz",
+  "candidate_provenance_validated": true,
+  "contact_json": [
+    "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_seed_averaged_band_external_structure/contact_networks/train_contacts_ca8.json.gz",
+    "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_seed_averaged_band_external_structure/contact_networks/validation_contacts_ca8.json.gz",
+    "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_seed_averaged_band_external_structure/contact_networks/test_contacts_ca8.json.gz"
+  ],
+  "cohorts": {
+    "reference_80": "accepted mapping, >=80% protein coverage, >=80% segment resolution",
+    "fully_resolved_local": "accepted mapping and complete segment C-alpha coverage",
+    "fully_resolved_geometry": "accepted mapping and complete intended PDB geometry",
+    "strict_graph_95": "fully resolved local segment, complete graph nodes, >=95% protein coverage"
+  },
+  "corrected_model_stages": {
+    "00_q8_only": [],
+    "01_base_biophysics": [
+      "mean_neq",
+      "max_neq",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint"
+    ],
+    "02_add_local_sequence_or_annotation_geometry": [
+      "mean_neq",
+      "max_neq",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint",
+      "mean_torsion_change",
+      "max_torsion_change",
+      "q3_boundary_fraction",
+      "mean_distance_to_q3_boundary",
+      "structured_linker_fraction"
+    ],
+    "03_add_experimental_pdb_geometry": [
+      "mean_neq",
+      "max_neq",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint",
+      "mean_torsion_change",
+      "max_torsion_change",
+      "q3_boundary_fraction",
+      "mean_distance_to_q3_boundary",
+      "structured_linker_fraction",
+      "mean_ca_curvature_degrees",
+      "max_ca_curvature_degrees",
+      "mean_abs_ca_virtual_torsion_degrees",
+      "max_abs_ca_virtual_torsion_degrees",
+      "ca_end_to_end_ratio"
+    ],
+    "04_add_contact_network": [
+      "mean_neq",
+      "max_neq",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint",
+      "mean_torsion_change",
+      "max_torsion_change",
+      "q3_boundary_fraction",
+      "mean_distance_to_q3_boundary",
+      "structured_linker_fraction",
+      "mean_ca_curvature_degrees",
+      "max_ca_curvature_degrees",
+      "mean_abs_ca_virtual_torsion_degrees",
+      "max_abs_ca_virtual_torsion_degrees",
+      "ca_end_to_end_ratio",
+      "mean_contact_degree",
+      "max_contact_degree",
+      "mean_inverse_distance_weighted_degree",
+      "max_inverse_distance_weighted_degree",
+      "mean_betweenness",
+      "max_betweenness",
+      "mean_closeness",
+      "mean_participation_coefficient",
+      "community_boundary_fraction"
+    ],
+    "05_add_ecod_domain": [
+      "mean_neq",
+      "max_neq",
+      "mean_rsa",
+      "max_rsa",
+      "log_segment_length",
+      "normalized_midpoint",
+      "mean_torsion_change",
+      "max_torsion_change",
+      "q3_boundary_fraction",
+      "mean_distance_to_q3_boundary",
+      "structured_linker_fraction",
+      "mean_ca_curvature_degrees",
+      "max_ca_curvature_degrees",
+      "mean_abs_ca_virtual_torsion_degrees",
+      "max_abs_ca_virtual_torsion_degrees",
+      "ca_end_to_end_ratio",
+      "mean_contact_degree",
+      "max_contact_degree",
+      "mean_inverse_distance_weighted_degree",
+      "max_inverse_distance_weighted_degree",
+      "mean_betweenness",
+      "max_betweenness",
+      "mean_closeness",
+      "mean_participation_coefficient",
+      "community_boundary_fraction",
+      "mean_distance_to_domain_boundary",
+      "near_domain_boundary_fraction",
+      "mean_cross_domain_contacts",
+      "mean_cross_domain_contact_fraction"
+    ]
+  },
+  "increments": {
+    "delta_local_annotation": {
+      "smaller_stage": "01_base_biophysics",
+      "expanded_stage": "02_add_local_sequence_or_annotation_geometry"
+    },
+    "delta_experimental_pdb_geometry": {
+      "smaller_stage": "02_add_local_sequence_or_annotation_geometry",
+      "expanded_stage": "03_add_experimental_pdb_geometry"
+    },
+    "delta_contact_network": {
+      "smaller_stage": "03_add_experimental_pdb_geometry",
+      "expanded_stage": "04_add_contact_network"
+    },
+    "delta_ecod_domain": {
+      "smaller_stage": "04_add_contact_network",
+      "expanded_stage": "05_add_ecod_domain"
+    },
+    "delta_total_external_structure": {
+      "smaller_stage": "01_base_biophysics",
+      "expanded_stage": "05_add_ecod_domain"
+    }
+  },
+  "central_matched_features": [
+    "mean_contact_degree",
+    "mean_inverse_distance_weighted_degree",
+    "mean_betweenness",
+    "mean_closeness",
+    "mean_ca_curvature_degrees",
+    "mean_abs_ca_virtual_torsion_degrees",
+    "ca_end_to_end_ratio"
+  ],
+  "reference_segment_resolution": 0.8,
+  "reference_protein_coverage": 0.8,
+  "strict_graph_protein_coverage": 0.95,
+  "min_mapping_identity": 0.9,
+  "n_bootstrap": 2000,
+  "random_seed": 123,
+  "fully_resolved_refit": false,
+  "bootstrap_fully_resolved_refit": false,
+  "bootstrapped_fixed_model_cohorts": [
+    "reference_80",
+    "fully_resolved_local",
+    "fully_resolved_geometry"
+  ],
+  "strain_conditioned_on_pdb_resolution": false
+}

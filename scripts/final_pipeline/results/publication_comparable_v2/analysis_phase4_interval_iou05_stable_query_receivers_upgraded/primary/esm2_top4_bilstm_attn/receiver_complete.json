@@ -1,0 +1,25 @@
+{
+  "schema": "esmfluc.receiver.analysis_complete.v1",
+  "analysis_signature": "f43edd014a1fca0c00d490206175e02c95ad38e2c82b9b9c2a7dd337d66bf23f",
+  "aggregate": {
+    "averaged_protein_profiles": 1377,
+    "band_query_pairs": 4263287,
+    "pair_table_format": "partitioned_csv_gzip",
+    "pair_manifest": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase4_interval_iou05_stable_query_receivers_upgraded/primary/esm2_top4_bilstm_attn/band_query_pair_manifest.csv",
+    "checkpoints_written": 1377,
+    "checkpoints_reused": 0,
+    "protein_feature_effect_rows": 377809,
+    "model_performance_rows": 176,
+    "feature_ablation_rows": 28,
+    "structural_water_ablation_rows": 108
+  },
+  "outputs": [
+    "band_query_pair_manifest.csv",
+    "receiver_feature_effects_by_protein.csv.gz",
+    "receiver_feature_summary.csv",
+    "receiver_model_performance.csv",
+    "receiver_feature_ablation_performance.csv",
+    "receiver_structural_water_ablation_performance.csv",
+    "long_range_receiver_summary.csv"
+  ]
+}

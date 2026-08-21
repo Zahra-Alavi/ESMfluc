@@ -1,0 +1,361 @@
+{
+  "annotated_bands_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/annotations/signed_bands_biophysical_annotations.csv.gz",
+  "residue_annotations_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/annotations/residue_biophysical_annotations.csv.gz",
+  "protein_summary_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/inputs/stable_signed_band_protein_summary.csv",
+  "metrics": {
+    "neq": [
+      "continuous",
+      "flexibility-supporting higher"
+    ],
+    "flexible_neq_gt1": [
+      "binary",
+      "flexibility-supporting higher"
+    ],
+    "neq_top10_within_protein": [
+      "binary",
+      "flexibility-supporting higher"
+    ],
+    "neq_peak": [
+      "binary",
+      "flexibility-supporting higher"
+    ],
+    "distance_to_neq_peak": [
+      "distance",
+      "flexibility-supporting lower"
+    ],
+    "distance_to_neq_top10": [
+      "distance",
+      "flexibility-supporting lower"
+    ],
+    "q3_is_H": [
+      "binary",
+      "two-sided"
+    ],
+    "q3_is_E": [
+      "binary",
+      "two-sided"
+    ],
+    "q3_is_C": [
+      "binary",
+      "two-sided"
+    ],
+    "q8_is_T": [
+      "binary",
+      "upper"
+    ],
+    "q8_is_S": [
+      "binary",
+      "upper"
+    ],
+    "q8_turn_or_bend_TS": [
+      "binary",
+      "upper"
+    ],
+    "q8_loop_turn_bend_CTS": [
+      "binary",
+      "upper"
+    ],
+    "structured_linker_loop": [
+      "binary",
+      "upper"
+    ],
+    "q3_boundary_within2": [
+      "binary",
+      "upper"
+    ],
+    "q8_boundary_within2": [
+      "binary",
+      "upper"
+    ],
+    "distance_to_q3_boundary": [
+      "distance",
+      "lower"
+    ],
+    "distance_to_q8_boundary": [
+      "distance",
+      "lower"
+    ],
+    "rsa": [
+      "continuous",
+      "two-sided"
+    ],
+    "exposed_rsa_ge025": [
+      "binary",
+      "two-sided"
+    ],
+    "disorder": [
+      "continuous",
+      "upper"
+    ],
+    "disorder_ge05": [
+      "binary",
+      "upper"
+    ],
+    "interface": [
+      "binary",
+      "two-sided"
+    ],
+    "torsion_change_from_previous": [
+      "continuous",
+      "upper"
+    ],
+    "strain_ensemble_mean": [
+      "continuous",
+      "two-sided"
+    ],
+    "strain_ensemble_std": [
+      "continuous",
+      "two-sided"
+    ],
+    "strain_abs_gradient_from_previous": [
+      "continuous",
+      "two-sided"
+    ],
+    "strain_top_quantile_within_protein": [
+      "binary",
+      "flexibility-supporting higher"
+    ],
+    "distance_to_strain_top_quantile": [
+      "distance",
+      "flexibility-supporting lower"
+    ]
+  },
+  "strain": {
+    "requested": true,
+    "root": "/home/zahralab/MDStrainMapper/results/atlas_grouped_v1_test",
+    "scope": "test split only",
+    "file_layout": "<strain_root>/<protein>/strain_summary.csv",
+    "required_columns": [
+      "residue",
+      "ensemble_mean",
+      "ensemble_std"
+    ],
+    "mapping_requirement": "exactly one row for residues 1..protein_length",
+    "terminal_exclusion": 10,
+    "high_quantile": 0.9,
+    "available_proteins": 208,
+    "audit": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_primary_no_position_test/enrichment_with_test_strain/strain_input_audit.csv"
+  },
+  "primary_estimand": "Mean of within-protein mean apex feature values; proteins receive equal weight.",
+  "block_shift_null": "One circular offset per protein/condition/sign/permutation, applied to the complete apex pattern within its eligible interval. For test-only strain, the finite-apex subset is circularly shifted in rank space over finite nonterminal strain support so terminal missingness is preserved.",
+  "paired_sign_estimand": "Within-protein mean(flexibility-supporting apices) minus mean(rigidity-supporting apices), tested by protein-level sign flips.",
+  "n_block_shifts": 1000,
+  "n_sign_flips": 10000,
+  "random_seed": 123,
+  "phase1_coverage_identifier": {
+    "estimand": "Annotation-to-band coverage and fixed band-mask identifier metrics; macro estimates average proteins equally and micro estimates pool counts.",
+    "targets": [
+      "q8_loop_turn_bend_CTS",
+      "neq_peak",
+      "strain_top_quantile_within_protein"
+    ],
+    "eligible_interval_note": "Residue and segment denominators are restricted to positions eligible to be band apices. Band intervals are truncated to the same support.",
+    "n_bootstrap": 2000
+  },
+  "phase2_within_q3_matching": {
+    "estimand": "Within-protein mean band-apex minus mean matched non-band control outcome, followed by equal-protein aggregation.",
+    "exact_match": "Q3",
+    "nested_match_schemes": {
+      "q3_only": [
+        "Q3"
+      ],
+      "q3_neq": [
+        "Q3",
+        "Neq"
+      ],
+      "q3_neq_rsa": [
+        "Q3",
+        "Neq",
+        "RSA"
+      ],
+      "q3_neq_rsa_position": [
+        "Q3",
+        "Neq",
+        "RSA",
+        "normalized sequence position"
+      ]
+    },
+    "selected_match_schemes": [
+      "q3_only",
+      "q3_neq",
+      "q3_neq_rsa",
+      "q3_neq_rsa_position"
+    ],
+    "q3_only_control_selection": "Every eligible same-protein, same-Q3 residue outside all band intervals (plus the configured buffer).",
+    "caliper_scheme_control_selection": "Up to controls_per_apex_maximum nearest eligible controls.",
+    "control_storage": "q3_only is stored one row per matched apex in within_q3_matched_cases.csv.gz with the complete control count and control means; capped schemes also store individual controls in within_q3_matched_controls.csv.gz.",
+    "controls_per_apex_maximum": 5,
+    "non_band_buffer_residues": 0,
+    "calipers": {
+      "neq": 0.25,
+      "rsa": 0.15,
+      "normalized_sequence_position": 0.25
+    },
+    "control_reuse": "Allowed across apex matched sets, not within a set.",
+    "outcomes": {
+      "q8_is_G": [
+        "binary",
+        "Q8 G"
+      ],
+      "q8_is_H": [
+        "binary",
+        "Q8 H"
+      ],
+      "q8_is_I": [
+        "binary",
+        "Q8 I"
+      ],
+      "q8_is_B": [
+        "binary",
+        "Q8 B"
+      ],
+      "q8_is_E": [
+        "binary",
+        "Q8 E"
+      ],
+      "q8_is_S": [
+        "binary",
+        "Q8 S"
+      ],
+      "q8_is_T": [
+        "binary",
+        "Q8 T"
+      ],
+      "q8_is_C": [
+        "binary",
+        "Q8 C"
+      ],
+      "q8_turn_or_bend_TS": [
+        "binary",
+        "Q8 turn or bend (T/S)"
+      ],
+      "q8_loop_turn_bend_CTS": [
+        "binary",
+        "Q8 loop/turn/bend (C/T/S)"
+      ],
+      "structured_linker_loop": [
+        "binary",
+        "structured linker/loop"
+      ],
+      "neq": [
+        "continuous",
+        "Neq"
+      ],
+      "rsa": [
+        "continuous",
+        "relative solvent accessibility"
+      ],
+      "neq_peak": [
+        "binary",
+        "Neq peak"
+      ],
+      "distance_to_neq_peak": [
+        "distance",
+        "distance to Neq peak"
+      ],
+      "q3_boundary_within2": [
+        "binary",
+        "within two residues of Q3 boundary"
+      ],
+      "q8_boundary_within2": [
+        "binary",
+        "within two residues of Q8 boundary"
+      ],
+      "distance_to_q3_boundary": [
+        "distance",
+        "distance to Q3 boundary"
+      ],
+      "distance_to_q8_boundary": [
+        "distance",
+        "distance to Q8 boundary"
+      ],
+      "torsion_change_from_previous": [
+        "continuous",
+        "backbone torsion change"
+      ],
+      "disorder": [
+        "continuous",
+        "disorder score"
+      ],
+      "disorder_ge05": [
+        "binary",
+        "disorder score >= 0.5"
+      ],
+      "normalized_position": [
+        "continuous",
+        "normalized sequence position"
+      ],
+      "strain_ensemble_mean": [
+        "continuous",
+        "MDStrainMapper ensemble mean"
+      ],
+      "strain_ensemble_std": [
+        "continuous",
+        "MDStrainMapper ensemble standard deviation"
+      ],
+      "strain_abs_gradient_from_previous": [
+        "continuous",
+        "absolute change in strain from the previous residue"
+      ],
+      "strain_top_quantile_within_protein": [
+        "binary",
+        "within-protein high-strain residue"
+      ],
+      "distance_to_strain_top_quantile": [
+        "distance",
+        "distance to a within-protein high-strain residue"
+      ]
+    },
+    "inference": "Protein-level sign flips and protein bootstrap confidence intervals.",
+    "matched_covariate_policy": "Matched covariates are retained as balance diagnostics and omitted from inferential outcome rows for schemes that use them.",
+    "tie_break": "Reproducible SHA-256 pseudo-random ordering keyed by random seed, case, scheme, and candidate residue; used only after match distance.",
+    "primary_pvalue_family": "48 two-sided union-group sign-flip tests: RSA under Q3+Neq matching, plus torsion, boundary distance, and strain under Q3+Neq+RSA matching; 6 conditions x 2 signs x 4 outcomes, with BH corrected once across all 48",
+    "other_pvalues": "diagnostic/exploratory; not members of the primary family",
+    "headline_union_group_metrics": [
+      "torsion_change_from_previous",
+      "distance_to_q3_boundary",
+      "strain_ensemble_mean"
+    ],
+    "group_manifest_csv": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/data_splits/atlas_grouped_v1/split_manifest_grouped_v1.csv",
+    "headline_union_group_spec": {
+      "q3_neq": [
+        "rsa"
+      ],
+      "q3_neq_rsa": [
+        "torsion_change_from_previous",
+        "distance_to_q3_boundary",
+        "strain_ensemble_mean"
+      ]
+    },
+    "terminal_exclusion_residues_per_end": 2
+  },
+  "outputs": {
+    "per_protein": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/enrichment_with_test_strain/apex_metrics_by_protein.csv.gz",
+    "block_shift_null": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/enrichment_with_test_strain/apex_circular_shift_null.csv.gz",
+    "block_shift_summary": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/enrichment_with_test_strain/apex_circular_shift_enrichment_summary.csv",
+    "paired_sign_summary": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/enrichment_with_test_strain/paired_flex_vs_rigid_summary.csv",
+    "phase1_by_protein": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/enrichment_with_test_strain/annotation_band_coverage_by_protein.csv.gz",
+    "phase1_summary": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/enrichment_with_test_strain/annotation_band_coverage_identifier_summary.csv",
+    "within_q3_matched_controls": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_primary_no_position_test/enrichment_with_test_strain/within_q3_matched_controls.csv.gz",
+    "within_q3_matched_cases": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_primary_no_position_test/enrichment_with_test_strain/within_q3_matched_cases.csv.gz",
+    "within_q3_match_coverage": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_primary_no_position_test/enrichment_with_test_strain/within_q3_match_coverage_summary.csv",
+    "within_q3_match_balance": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_primary_no_position_test/enrichment_with_test_strain/within_q3_match_balance.csv",
+    "within_q3_matched_effects_by_protein": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_primary_no_position_test/enrichment_with_test_strain/within_q3_matched_effects_by_protein.csv.gz",
+    "within_q3_matched_summary": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_primary_no_position_test/enrichment_with_test_strain/within_q3_matched_enrichment_summary.csv",
+    "strain_input_audit": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test/enrichment_with_test_strain/strain_input_audit.csv",
+    "headline_union_group_inference": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_primary_no_position_test/enrichment_with_test_strain/headline_union_group_inference.csv"
+  },
+  "matching_only_reuse": {
+    "source_directory": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_interval_iou05_test_corrected/enrichment_with_test_strain",
+    "copied_outputs": [
+      "apex_metrics_by_protein.csv.gz",
+      "apex_circular_shift_null.csv.gz",
+      "apex_circular_shift_enrichment_summary.csv",
+      "paired_flex_vs_rigid_summary.csv",
+      "annotation_band_coverage_by_protein.csv.gz",
+      "annotation_band_coverage_identifier_summary.csv",
+      "strain_input_audit.csv"
+    ],
+    "expensive_null_recomputed": false
+  }
+}

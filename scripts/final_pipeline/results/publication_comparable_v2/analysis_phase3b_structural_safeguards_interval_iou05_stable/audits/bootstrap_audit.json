@@ -1,0 +1,42 @@
+{
+  "bootstrap_unit": "protein",
+  "segment_resampling_used": false,
+  "models_refit_within_primary_bootstrap": false,
+  "n_bootstrap": 2000,
+  "random_seed": 123,
+  "bootstrap_splits": [
+    "test"
+  ],
+  "increment_definitions": {
+    "delta_local_annotation": {
+      "smaller_stage": "01_base_biophysics",
+      "expanded_stage": "02_add_local_sequence_or_annotation_geometry"
+    },
+    "delta_experimental_pdb_geometry": {
+      "smaller_stage": "02_add_local_sequence_or_annotation_geometry",
+      "expanded_stage": "03_add_experimental_pdb_geometry"
+    },
+    "delta_contact_network": {
+      "smaller_stage": "03_add_experimental_pdb_geometry",
+      "expanded_stage": "04_add_contact_network"
+    },
+    "delta_ecod_domain": {
+      "smaller_stage": "04_add_contact_network",
+      "expanded_stage": "05_add_ecod_domain"
+    },
+    "delta_total_external_structure": {
+      "smaller_stage": "01_base_biophysics",
+      "expanded_stage": "05_add_ecod_domain"
+    }
+  },
+  "experimental_pdb_increment_is_stage03_minus_stage02": true,
+  "minimum_condition_valid_replicate_fraction": 1.0,
+  "minimum_synchronized_valid_replicate_fraction": 1.0,
+  "all_condition_valid_fractions_at_least_0.95": true,
+  "all_synchronized_valid_fractions_at_least_0.95": true,
+  "synchronized_draws": true,
+  "synchronized_condition_count_verified": true,
+  "fully_resolved_geometry_bootstrap_present": true,
+  "prediction_table_passed": true,
+  "passed": true
+}

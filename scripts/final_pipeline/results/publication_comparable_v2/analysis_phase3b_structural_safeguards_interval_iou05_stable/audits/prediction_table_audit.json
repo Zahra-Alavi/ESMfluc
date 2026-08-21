@@ -1,0 +1,16 @@
+{
+  "prediction_rows": 2071194,
+  "duplicate_prediction_stage_rows": 0,
+  "invalid_probability_rows": 0,
+  "invalid_sample_weight_rows": 0,
+  "source_candidate_tables": [
+    "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase3a_interval_iou05_stable/q8_segment_candidates.csv.gz"
+  ],
+  "source_external_feature_tables": [
+    "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase3b_interval_iou05_stable/external_features_by_q8_segment.csv.gz"
+  ],
+  "incomplete_stage_groups": 0,
+  "missing_condition_groups": 0,
+  "missing_required_fixed_model_groups": [],
+  "passed": true
+}

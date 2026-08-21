@@ -1,0 +1,194 @@
+{
+  "receiver_definition": "sign_b * sum_j_in_band C_ij",
+  "seed_handling": "compute within seed, then arithmetic mean across seeds",
+  "receiver_quantile": 0.9,
+  "low_receiver_quantile": 0.5,
+  "matching": "same protein, band, exact query Q8, and sequence-distance bin",
+  "distance_bins": {
+    "inside": "0",
+    "adjacent_1_5": "1-5",
+    "local_6_20": "6-20",
+    "distal_21_50": "21-50",
+    "distal_gt50": ">50"
+  },
+  "long_range_min_separation": 21,
+  "minimum_inference_proteins": 10,
+  "seeds": [
+    1,
+    2,
+    3
+  ],
+  "pairwise_structure_source": "results/publication_comparable_v2/analysis_phase4_interval_iou05_stable_query_receivers_upgraded/feature_store_primary",
+  "receiver_cache_source_dir": "results/publication_comparable_v2/analysis_phase4_interval_iou05_stable_query_receivers/esm2_top28_bilstm_attn",
+  "model_cohorts": {
+    "all_receivers": "original eligible-query cohort",
+    "structure_eligible_fixed": "mapping accepted, query resolved, and source band resolved fraction above threshold; fixed across structural stages",
+    "water_eligible_fixed": "structure-eligible plus primary water method/resolution criteria; fixed across all water-stage comparisons"
+  },
+  "receiver_scopes": [
+    "all_eligible_queries",
+    "sequence_distal_ge21",
+    "sequence_distal_ge21_no_direct_ca"
+  ],
+  "structure_feature_stages": {
+    "geometry": [
+      "minimum_ca_distance_angstrom",
+      "minimum_heavy_atom_distance_angstrom",
+      "relative_backbone_orientation_cosine",
+      "absolute_backbone_orientation_cosine"
+    ],
+    "contact_network": [
+      "direct_ca_contact",
+      "query_to_band_contact_count",
+      "query_to_band_contact_fraction",
+      "ordinary_contact_path_exists",
+      "shortest_ordinary_contact_path_edges",
+      "nonlocal_contact_path_exists",
+      "shortest_nonlocal_contact_path_edges"
+    ],
+    "community_domain": [
+      "same_community_as_band_apex",
+      "same_community_as_band_majority",
+      "query_distance_to_community_boundary_edges",
+      "same_ecod_domain_as_band_apex",
+      "shares_any_ecod_domain_with_band",
+      "query_distance_to_ecod_boundary_sequence",
+      "query_distance_to_band_domain_boundary_sequence"
+    ],
+    "putative_polar_contacts": [
+      "minimum_polar_atom_distance_angstrom",
+      "direct_putative_polar_contact",
+      "direct_putative_polar_contact_count"
+    ],
+    "crystallographic_water_network": [
+      "query_water_contact_count",
+      "band_water_contact_count",
+      "shared_water_count",
+      "shared_water_fraction_of_query_contacts",
+      "shared_water_fraction_of_band_contacts",
+      "one_water_bridge",
+      "water_path_exists",
+      "shortest_water_path_water_count",
+      "water_path_at_most_1",
+      "water_path_at_most_2",
+      "water_path_at_most_3",
+      "water_path_without_direct_ca_contact",
+      "water_path_without_direct_polar_contact",
+      "reachable_query_water_entry_count",
+      "mean_query_contact_water_degree"
+    ],
+    "mechanism_interactions": [
+      "neq",
+      "rsa",
+      "disorder",
+      "torsion_change_from_previous",
+      "query_in_any_band"
+    ]
+  },
+  "feature_ablation": {
+    "features": [
+      "neq",
+      "rsa",
+      "disorder",
+      "torsion_change_from_previous",
+      "query_amino_acid_class",
+      "normalized_query_position",
+      "query_in_any_band"
+    ],
+    "single_feature_estimand": "AUROC of baseline plus one feature minus baseline AUROC",
+    "leave_one_out_estimand": "full query-feature AUROC minus AUROC after removing one feature"
+  },
+  "random_seed": 123,
+  "sampling_randomization": "A deterministic SHA-256-derived seed is assigned to each condition/split/protein context, so checkpoint reuse cannot change the sampled modeling cohort.",
+  "analysis_signature": "498e0e910b5770ba08dad5cafaa259bd6244ab0e46cce1e8532ae03a4f177564",
+  "analysis_signature_payload": {
+    "schema": "esmfluc.receiver.aggregate_checkpoint.v1",
+    "implementation": {
+      "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/signed_band_analysis/analyze_signed_band_query_receivers.py",
+      "exists": true,
+      "size": 86919,
+      "mtime_ns": 1785965987357246355
+    },
+    "inputs": {
+      "manifest_tsv": {
+        "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/all_split_signed_contributions_manifest.tsv",
+        "exists": true,
+        "size": 16821,
+        "mtime_ns": 1784412589411533846
+      },
+      "bands_csv": {
+        "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/reproducibility_interval_iou05/stable_signed_bands.csv",
+        "exists": true,
+        "size": 91947771,
+        "mtime_ns": 1785428238319034460
+      },
+      "protein_summary_csv": {
+        "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/mean/signed_band_protein_summary.csv",
+        "exists": true,
+        "size": 2595825,
+        "mtime_ns": 1785364973482409510
+      },
+      "residue_annotations_csv": {
+        "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_upgraded_raw_mad2/annotations/residue_biophysical_annotations.csv.gz",
+        "exists": true,
+        "size": 61147384,
+        "mtime_ns": 1785369473578913812
+      },
+      "mechanism_csv": {
+        "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase3c_interval_iou05_stable_all_splits/mechanism_by_band_seed_averaged.csv.gz",
+        "exists": true,
+        "size": 14149797,
+        "mtime_ns": 1785967226478439309
+      },
+      "pairwise_structure_csv": null,
+      "pairwise_structure_dir": {
+        "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase4_interval_iou05_stable_query_receivers_upgraded/feature_store_primary",
+        "exists": true,
+        "markers": {
+          "parameters.json": {
+            "size": 6595,
+            "mtime_ns": 1785974806236293754
+          },
+          "pair_feature_manifest.csv": {
+            "size": 2404880,
+            "mtime_ns": 1785974806236293754
+          }
+        }
+      },
+      "receiver_cache_source_dir": {
+        "path": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase4_interval_iou05_stable_query_receivers/esm2_top28_bilstm_attn",
+        "exists": true,
+        "markers": {
+          "parameters.json": {
+            "size": 6357,
+            "mtime_ns": 1785970035057835063
+          }
+        }
+      }
+    },
+    "settings": {
+      "conditions": [
+        "esm2_top28_bilstm_attn"
+      ],
+      "splits": [],
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "receiver_quantile": 0.9,
+      "low_receiver_quantile": 0.5,
+      "long_range_min_separation": 21,
+      "minimum_inference_proteins": 10,
+      "max_model_rows_per_class_per_protein": 50,
+      "random_seed": 123,
+      "max_iter": 500
+    }
+  },
+  "pair_table": {
+    "format": "partitioned_csv_gzip",
+    "manifest": "band_query_pair_manifest.csv",
+    "checkpoint_root": "receiver_aggregate_checkpoints",
+    "note": "Each manifest row identifies one atomic per-protein pair partition. The legacy monolithic pair table is not authoritative."
+  }
+}

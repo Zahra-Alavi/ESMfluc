@@ -1,0 +1,28 @@
+{
+  "external_rows": 481842,
+  "candidate_rows": 481842,
+  "matched_rows": 481842,
+  "missing_from_external": 0,
+  "extra_in_external": 0,
+  "mismatch_counts": {
+    "protein_length": 0,
+    "q8": 0,
+    "start_index_0based": 0,
+    "end_index_0based_exclusive": 0,
+    "selected_positive": 0,
+    "selected_negative": 0,
+    "clean_control": 0,
+    "mean_neq": 0,
+    "max_neq": 0,
+    "mean_rsa": 0,
+    "max_rsa": 0,
+    "log_segment_length": 0,
+    "normalized_midpoint": 0,
+    "mean_torsion_change": 0,
+    "max_torsion_change": 0,
+    "q3_boundary_fraction": 0,
+    "mean_distance_to_q3_boundary": 0,
+    "structured_linker_fraction": 0
+  },
+  "passed": true
+}

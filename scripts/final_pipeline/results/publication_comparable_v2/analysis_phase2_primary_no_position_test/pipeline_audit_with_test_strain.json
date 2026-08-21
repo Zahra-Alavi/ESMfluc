@@ -1,0 +1,437 @@
+{
+  "passed": true,
+  "n_checks": 49,
+  "n_failures": 0,
+  "analysis_scope": {
+    "splits": [
+      "test"
+    ]
+  },
+  "checks": [
+    {
+      "check": "analysis_outputs_match_requested_splits",
+      "passed": true,
+      "details": {
+        "requested": [
+          "test"
+        ],
+        "observed_by_output": {
+          "enrichment_summary": [
+            "test"
+          ],
+          "null": [
+            "test"
+          ],
+          "per_protein_metrics": [
+            "test"
+          ],
+          "paired_contrasts": [
+            "test"
+          ],
+          "coverage_by_protein": [
+            "test"
+          ],
+          "coverage_summary": [
+            "test"
+          ],
+          "matched_controls": [
+            "test"
+          ],
+          "matched_cases": [
+            "test"
+          ],
+          "match_coverage": [
+            "test"
+          ],
+          "match_balance": [
+            "test"
+          ],
+          "matched_effects_by_protein": [
+            "test"
+          ],
+          "matched_summary": [
+            "test"
+          ]
+        }
+      }
+    },
+    {
+      "check": "original_band_ids_unique",
+      "passed": true,
+      "details": 72465
+    },
+    {
+      "check": "annotated_band_ids_unique",
+      "passed": true,
+      "details": 72465
+    },
+    {
+      "check": "band_row_count_preserved",
+      "passed": true,
+      "details": {
+        "original": 72465,
+        "annotated": 72465
+      }
+    },
+    {
+      "check": "band_id_set_preserved",
+      "passed": true,
+      "details": "exact set comparison"
+    },
+    {
+      "check": "coordinates_preserved",
+      "passed": true,
+      "details": "apex/start/end exact equality"
+    },
+    {
+      "check": "interval_counts_equal_width",
+      "passed": true,
+      "details": 0
+    },
+    {
+      "check": "apex_amino_acids_present",
+      "passed": true,
+      "details": 0
+    },
+    {
+      "check": "residue_keys_unique",
+      "passed": true,
+      "details": 0
+    },
+    {
+      "check": "expected_split_protein_counts",
+      "passed": true,
+      "details": {
+        "observed": {
+          "test": 208,
+          "train": 967,
+          "validation": 208
+        },
+        "expected": {
+          "train": 967,
+          "validation": 208,
+          "test": 208
+        }
+      }
+    },
+    {
+      "check": "all_apex_annotations_complete",
+      "passed": true,
+      "details": {
+        "apex_neq": 0,
+        "apex_q3": 0,
+        "apex_q8": 0,
+        "apex_rsa": 0,
+        "apex_disorder": 0
+      }
+    },
+    {
+      "check": "apex_neq_rejoined_exactly",
+      "passed": true,
+      "details": 0
+    },
+    {
+      "check": "apex_q3_q8_rejoined_exactly",
+      "passed": true,
+      "details": {
+        "q3_mismatches": 0,
+        "q8_mismatches": 0
+      }
+    },
+    {
+      "check": "neq_flexible_label_consistent",
+      "passed": true,
+      "details": "Neq > 1.0"
+    },
+    {
+      "check": "q3_values_valid",
+      "passed": true,
+      "details": [
+        "C",
+        "E",
+        "H"
+      ]
+    },
+    {
+      "check": "q8_values_valid",
+      "passed": true,
+      "details": [
+        "B",
+        "C",
+        "E",
+        "G",
+        "H",
+        "I",
+        "S",
+        "T"
+      ]
+    },
+    {
+      "check": "summary_complete",
+      "passed": true,
+      "details": {
+        "observed": 348,
+        "expected": 348
+      }
+    },
+    {
+      "check": "null_complete",
+      "passed": true,
+      "details": {
+        "observed": 348000,
+        "expected": 348000
+      }
+    },
+    {
+      "check": "every_test_has_all_permutations",
+      "passed": true,
+      "details": {
+        "1000": 348
+      }
+    },
+    {
+      "check": "summary_observed_and_null_means_recompute",
+      "passed": true,
+      "details": "recomputed from per-protein and per-permutation tables"
+    },
+    {
+      "check": "summary_p_q_values_in_unit_interval",
+      "passed": true,
+      "details": [
+        "p_lower",
+        "p_lower_q_bh",
+        "p_two_sided",
+        "p_two_sided_q_bh",
+        "p_upper",
+        "p_upper_q_bh"
+      ]
+    },
+    {
+      "check": "contrast_p_q_values_in_unit_interval",
+      "passed": true,
+      "details": [
+        "p_upper",
+        "p_lower",
+        "p_two_sided",
+        "p_upper_q_bh",
+        "p_lower_q_bh",
+        "p_two_sided_q_bh"
+      ]
+    },
+    {
+      "check": "per_protein_keys_unique",
+      "passed": true,
+      "details": 0
+    },
+    {
+      "check": "annotation_internal_audit_passed",
+      "passed": true,
+      "details": "No v2 per-residue strain_summary.csv files were found in data_splits; strain was not approximated or analyzed."
+    },
+    {
+      "check": "phase1_all_proteins_and_methods_present",
+      "passed": true,
+      "details": {
+        "observed": 34944,
+        "expected": 34944
+      }
+    },
+    {
+      "check": "phase1_keys_unique",
+      "passed": true,
+      "details": 0
+    },
+    {
+      "check": "strain_audit_present",
+      "passed": true,
+      "details": "/home/zahralab/Desktop/ESMfluc/scripts/final_pipeline/results/publication_comparable_v2/analysis_phase2_primary_no_position_test/enrichment_with_test_strain/strain_input_audit.csv"
+    },
+    {
+      "check": "strain_files_have_valid_schema_and_exact_indices",
+      "passed": true,
+      "details": []
+    },
+    {
+      "check": "strain_is_test_only",
+      "passed": true,
+      "details": {
+        "strain_metrics": [
+          "strain_ensemble_mean",
+          "strain_ensemble_std",
+          "strain_abs_gradient_from_previous",
+          "strain_top_quantile_within_protein",
+          "distance_to_strain_top_quantile"
+        ]
+      }
+    },
+    {
+      "check": "phase1_zero_band_proteins_retained",
+      "passed": true,
+      "details": {
+        "expected_contexts": 1248,
+        "observed_contexts": 1248
+      }
+    },
+    {
+      "check": "phase1_classification_counts_and_coverage_recompute",
+      "passed": true,
+      "details": "TP/FP/FN/TN, detection counts, and eligible denominators"
+    },
+    {
+      "check": "phase1_summary_counts_recompute",
+      "passed": true,
+      "details": [
+        "total_target_units",
+        "total_detected_target_units",
+        "micro_tp",
+        "micro_fp",
+        "micro_fn",
+        "micro_tn"
+      ]
+    },
+    {
+      "check": "phase1_precision_direction_matches_apex_enrichment",
+      "passed": true,
+      "details": "P(annotation | apex) independently agrees with Phase 1A"
+    },
+    {
+      "check": "phase1_probability_metrics_in_unit_interval",
+      "passed": true,
+      "details": [
+        "micro_coverage",
+        "micro_precision",
+        "micro_recall",
+        "micro_specificity",
+        "micro_f1",
+        "micro_balanced_accuracy",
+        "macro_coverage",
+        "macro_precision",
+        "macro_recall",
+        "macro_specificity",
+        "macro_f1",
+        "macro_balanced_accuracy",
+        "macro_target_prevalence"
+      ]
+    },
+    {
+      "check": "phase2_nested_match_schemes_complete",
+      "passed": true,
+      "details": [
+        "q3_neq",
+        "q3_neq_rsa",
+        "q3_neq_rsa_position",
+        "q3_only"
+      ]
+    },
+    {
+      "check": "phase2_matched_control_keys_unique",
+      "passed": true,
+      "details": 0
+    },
+    {
+      "check": "phase2_exact_q3_match_rejoins_independently",
+      "passed": true,
+      "details": {
+        "control_mismatches": 0,
+        "case_mismatches": 0
+      }
+    },
+    {
+      "check": "phase2_matched_cases_and_controls_nonterminal",
+      "passed": true,
+      "details": {
+        "terminal_exclusion_residues_per_end": 2
+      }
+    },
+    {
+      "check": "phase2_controls_outside_all_band_intervals",
+      "passed": true,
+      "details": 0
+    },
+    {
+      "check": "phase2_all_matching_calipers_respected",
+      "passed": true,
+      "details": {
+        "neq": true,
+        "rsa": true,
+        "position": true
+      }
+    },
+    {
+      "check": "phase2_caliper_scheme_control_ranks_within_configured_maximum",
+      "passed": true,
+      "details": 5
+    },
+    {
+      "check": "phase2_q3_only_uses_all_eligible_same_q3_controls",
+      "passed": true,
+      "details": {
+        "incomplete_band_sets": 0,
+        "matched_case_rows": 11039
+      }
+    },
+    {
+      "check": "phase2_match_coverage_recomputes",
+      "passed": true,
+      "details": "matched cases, selected controls, and rates"
+    },
+    {
+      "check": "phase2_per_protein_effect_keys_unique",
+      "passed": true,
+      "details": 0
+    },
+    {
+      "check": "phase2_summary_effects_recompute",
+      "passed": true,
+      "details": "equal-protein case, control, and paired difference means"
+    },
+    {
+      "check": "phase2_p_q_values_in_unit_interval",
+      "passed": true,
+      "details": [
+        "p_upper",
+        "p_lower",
+        "p_two_sided",
+        "p_upper_q_bh",
+        "p_lower_q_bh",
+        "p_two_sided_q_bh"
+      ]
+    },
+    {
+      "check": "one_two_sided_primary_pvalue_family",
+      "passed": true,
+      "details": "48 union-group headline tests; other tables are diagnostic"
+    },
+    {
+      "check": "matched_covariates_absent_from_inferential_outcomes",
+      "passed": true,
+      "details": 0
+    },
+    {
+      "check": "phase2_balance_labels_match_schemes",
+      "passed": true,
+      "details": 0
+    }
+  ],
+  "strain_status": {
+    "ok": 208
+  },
+  "row_counts": {
+    "original_bands": 72465,
+    "annotated_bands": 72465,
+    "residue_annotations": 319199,
+    "per_protein_metrics": 2301,
+    "enrichment_summary": 348,
+    "null": 348000,
+    "paired_contrasts": 174,
+    "phase1_by_protein": 34944,
+    "phase1_summary": 168,
+    "matched_controls": 124097,
+    "matched_cases": 40293,
+    "match_coverage": 136,
+    "match_balance": 408,
+    "matched_effects_by_protein": 262415,
+    "matched_summary": 3604,
+    "headline_union_group_inference": 48
+  }
+}
