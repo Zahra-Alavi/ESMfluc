@@ -1,0 +1,29 @@
+{
+  "cache_schema_version": 2,
+  "cache_file": "results/benchmark_pegasus_mdcath/esmfluc_inference/esm2_frozen_linear_mean_scores.json",
+  "cache_sha256": "c8c3d628a0c205679a43b5bcf45641765b1ee0781e2cc1495bd95e6669abfd01",
+  "n_cached_proteins": 989,
+  "n_cached_residues": 134556,
+  "checkpoint_paths": [
+    "results/publication_comparable_v2/runs/esm2_frozen_linear/seed_1/best_model.pth",
+    "results/publication_comparable_v2/runs/esm2_frozen_linear/seed_2/best_model.pth",
+    "results/publication_comparable_v2/runs/esm2_frozen_linear/seed_3/best_model.pth"
+  ],
+  "checkpoint_sha256": [
+    "9b53cc2e2bcedee27b144627de24ac9ba65084c043886a674e277c5cba544b8b",
+    "599be4ef22f7e09df32855124edb52a673cdef2e4fc304bd37cd9addb183e8f0",
+    "96b4b0ed9fff99fdeca84a21e3d2a7c1b3811511853af8d16af462d410f50f2c"
+  ],
+  "backbone_equality_passed": true,
+  "n_used_backbone_tensors_compared": 567,
+  "excluded_unused_backbone_tensors": [
+    "embedding_model.pooler.*"
+  ],
+  "tokenizer_model": "facebook/esm2_t33_650M_UR50D",
+  "add_special_tokens": false,
+  "sequence_input_mode": "single_sequence_once",
+  "inference_implementation": "shared_backbone_single_sequence_v2",
+  "equivalence_test_tolerance": 1e-06,
+  "equivalence_test_command": "python3 -m unittest tests.test_benchmark_unified_mdcath",
+  "vector_length_policy": "exactly one output per input residue; no truncation"
+}
