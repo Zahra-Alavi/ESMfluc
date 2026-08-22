@@ -943,13 +943,47 @@ def main() -> None:
         )
 
     targets = {"neq": neq}
+    target_coverages = {"neq": coverage}
+    target_audit = {
+        "neq": {
+            "source": _portable_path(strict_csv),
+            "n_proteins": len(neq),
+            "n_residues": sum(len(values) for values in neq.values()),
+        }
+    }
     rmsf_audit = {}
     if args.rmsf_csv is not None:
         rmsf, rmsf_audit = load_rmsf(args.rmsf_csv, sequences)
         targets["rmsf"] = rmsf
+        target_coverages["rmsf"] = validate_method_coverage(
+            methods, sequences, set(rmsf)
+        )
+        target_audit["rmsf"] = {
+            "source": _portable_path(args.rmsf_csv),
+            "sha256": _sha256_file(args.rmsf_csv),
+            "n_proteins": len(rmsf),
+            "n_residues": sum(len(values) for values in rmsf.values()),
+        }
+
+    if args.require_complete:
+        incomplete_targets = {
+            target_name: sorted(
+                method for method, detail in target_coverages[target_name].items()
+                if detail["n_valid"] != len(target_map)
+            )
+            for target_name, target_map in targets.items()
+        }
+        incomplete_targets = {
+            target: methods for target, methods in incomplete_targets.items() if methods
+        }
+        if incomplete_targets:
+            raise RuntimeError(f"Incomplete target-specific coverage: {incomplete_targets}")
 
     per_protein_parts = [
-        per_protein_metrics(methods, target_name, target_map, sequences, clusters, coverage)
+        per_protein_metrics(
+            methods, target_name, target_map, sequences, clusters,
+            target_coverages[target_name],
+        )
         for target_name, target_map in targets.items()
     ]
     per_protein = pd.concat(per_protein_parts, ignore_index=True)
@@ -975,7 +1009,9 @@ def main() -> None:
             "n_clusters_all_rows": len(set(clusters.values())),
             "n_clusters_valid_neq": len({clusters[d] for d in neq}),
         },
+        "targets": target_audit,
         "method_coverage": coverage,
+        "target_method_coverage": target_coverages,
         "input_audit": input_audit,
         "rmsf_invalid": rmsf_audit,
         "expected_methods": sorted(expected_methods),
