@@ -253,6 +253,13 @@ def tokenize_linear_sequences(tokenizer, sequences: list[str]):
 
 def shared_backbone_linear_probabilities(model, heads, encoded, device):
     """Run one frozen-backbone forward and apply every seed-specific head."""
+    return shared_backbone_linear_probabilities_by_head(
+        model, heads, encoded, device
+    ).mean(dim=0)
+
+
+def shared_backbone_linear_probabilities_by_head(model, heads, encoded, device):
+    """Return one flexible-probability tensor per seed-specific linear head."""
     import torch
 
     input_ids = encoded["input_ids"].to(device)
@@ -270,7 +277,7 @@ def shared_backbone_linear_probabilities(model, heads, encoded, device):
             )[..., 1]
             for weight, bias in heads
         ]
-    return torch.stack(probabilities).mean(dim=0)
+    return torch.stack(probabilities)
 
 
 def ordinary_linear_checkpoint_probabilities(model, checkpoints, encoded, device):
