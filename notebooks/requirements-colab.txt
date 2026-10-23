@@ -1,0 +1,20 @@
+# Python 3.11; aligned with pyproject.toml.
+biopython==1.83
+esm==3.2.1.post1
+h5py==3.12.1
+httpx==0.28.1
+matplotlib==3.9.1
+MDAnalysis==2.4.3
+networkx==3.3
+numpy==1.26.4
+pandas==2.2.2
+pheatmap>=1,<2
+plotly==5.24.1
+psutil==5.9.8
+requests==2.32.2
+remotezip>=0.12,<1
+safetensors==0.4.3
+scikit-learn==1.5.0
+scipy==1.13.1
+torch==2.3.0
+transformers==4.41.1

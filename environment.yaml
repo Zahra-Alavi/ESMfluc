@@ -1,0 +1,9 @@
+name: esmfluc
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip>=24
+  - pip:
+      - -e .[test]

@@ -1,0 +1,4 @@
+condition	seed	split	json_gz
+esm3_top28_bilstm_attn	1	gk_wt	./results/gk_wt_figure/analysis/profiles/seed_1/signed_profile.json.gz
+esm3_top28_bilstm_attn	2	gk_wt	./results/gk_wt_figure/analysis/profiles/seed_2/signed_profile.json.gz
+esm3_top28_bilstm_attn	3	gk_wt	./results/gk_wt_figure/analysis/profiles/seed_3/signed_profile.json.gz

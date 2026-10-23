@@ -1,0 +1,13 @@
+{
+  "top_frac": 0.1,
+  "diag_window": 5,
+  "band_quantile": 0.9,
+  "band_mad_multiplier": 1.5,
+  "band_smooth_window": 5,
+  "band_min_width": 2,
+  "band_max_gap": 1,
+  "band_min_prominence_mad": 0.0,
+  "peak_tolerance": 2,
+  "bootstrap_iterations": 2000,
+  "bootstrap_seed": 123
+}

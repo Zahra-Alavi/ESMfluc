@@ -1,0 +1,46 @@
+{
+  "all_invariants_pass": true,
+  "input_band_counts": {
+    "observed_mean_candidate": 11740,
+    "observed_seed_stable": 11039,
+    "shifted_attention_mean_candidate": 5629,
+    "shifted_attention_seed_stable": 3630
+  },
+  "protein_contexts": 1248,
+  "protein_sign_contexts": 2496,
+  "mask_rows": 4992,
+  "nearest_apex_rows": 32038,
+  "matched_band_pairs": 7497,
+  "observed_only_bands": 15282,
+  "shifted_attention_only_bands": 1762,
+  "band_classification_audit": {
+    "observed_mean_candidate": {
+      "input_bands": 11740,
+      "positive_iou_matched_bands": 4481,
+      "unmatched_bands": 7259
+    },
+    "observed_seed_stable": {
+      "input_bands": 11039,
+      "positive_iou_matched_bands": 3016,
+      "unmatched_bands": 8023
+    },
+    "uniform_mean_candidate": {
+      "input_bands": 5629,
+      "positive_iou_matched_bands": 4481,
+      "unmatched_bands": 1148
+    },
+    "uniform_seed_stable": {
+      "input_bands": 3630,
+      "positive_iou_matched_bands": 3016,
+      "unmatched_bands": 614
+    }
+  },
+  "stable_subset_of_mean": {
+    "observed": true,
+    "shifted_attention": true
+  },
+  "matching_context_and_sign_invariants": true,
+  "input_intervals_nonoverlapping_within_catalog_context": true,
+  "test_results_not_used_for_parameter_selection": true,
+  "test_set_marked_primary": true
+}

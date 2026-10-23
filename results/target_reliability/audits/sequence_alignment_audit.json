@@ -1,0 +1,9 @@
+{
+  "all_prediction_sequences_equal_fixed_test_sequences": true,
+  "no_missing_or_extra_proteins": true,
+  "no_silent_truncation": true,
+  "proteins_per_run": 208,
+  "residues_per_run": 47751,
+  "runs": 21,
+  "status": "passed"
+}

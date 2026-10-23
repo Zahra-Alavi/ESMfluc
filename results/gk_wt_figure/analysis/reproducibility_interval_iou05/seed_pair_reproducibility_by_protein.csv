@@ -1,0 +1,7 @@
+condition,split,protein,protein_length,sign,label,seed_a,seed_b,n_bands_seed_a,n_bands_seed_b,n_matched_bands,precision_vs_seed_a,recall_vs_seed_b,f1,jaccard,mean_matched_apex_distance,mean_matched_interval_iou,both_seeds_empty
+esm3_top28_bilstm_attn,gk_wt,WT,207,1,flexibility_supporting,1,2,5,5,2,0.4,0.4,0.4,0.25,0.0,0.7083333333333333,False
+esm3_top28_bilstm_attn,gk_wt,WT,207,1,flexibility_supporting,1,3,5,4,3,0.6,0.75,0.6666666666666666,0.5,0.3333333333333333,0.7555555555555555,False
+esm3_top28_bilstm_attn,gk_wt,WT,207,1,flexibility_supporting,2,3,5,4,4,0.8,1.0,0.8888888888888888,0.8,0.75,0.8055555555555556,False
+esm3_top28_bilstm_attn,gk_wt,WT,207,-1,rigidity_supporting,1,2,5,5,4,0.8,0.8,0.8,0.6666666666666666,0.75,0.85625,False
+esm3_top28_bilstm_attn,gk_wt,WT,207,-1,rigidity_supporting,1,3,5,6,4,0.8,0.6666666666666666,0.7272727272727273,0.5714285714285714,0.75,0.8333333333333334,False
+esm3_top28_bilstm_attn,gk_wt,WT,207,-1,rigidity_supporting,2,3,5,6,4,0.8,0.6666666666666666,0.7272727272727273,0.5714285714285714,1.0,0.775,False

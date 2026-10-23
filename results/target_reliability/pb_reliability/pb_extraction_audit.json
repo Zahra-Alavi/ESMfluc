@@ -1,0 +1,3150 @@
+{
+  "cache_reuse_requires_exact_source_provenance_match": true,
+  "cache_schema_version": "pb-reliability-cache-v2",
+  "consensus_rows": 47751,
+  "frame_count_maximum": 10001,
+  "frame_count_minimum": 10001,
+  "hdf5_files_checked": 624,
+  "multi_state_definition": "at least two distinct valid non-Z PB states",
+  "pb_root": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test",
+  "proteins": 208,
+  "replicate_metric_rows": 143253,
+  "replicates_per_protein": 3,
+  "single_state_definition": "exactly one distinct valid non-Z PB state",
+  "source_provenance": {
+    "cache_schema_version": "pb-reliability-cache-v2",
+    "digest": "362995130381ae7a046f4586ad03e6b88170116bd9b5d9846b937f4e2d97dbfb",
+    "file_count": 625,
+    "files": [
+      {
+        "mtime_ns": 1784245596394292327,
+        "path": "./data_splits/atlas_grouped_v1/test_grouped_v1.csv",
+        "size_bytes": 622704
+      },
+      {
+        "mtime_ns": 1784658065785619756,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1btk_A/pb_states_R1.h5",
+        "size_bytes": 145681
+      },
+      {
+        "mtime_ns": 1784658106249420685,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1btk_A/pb_states_R2.h5",
+        "size_bytes": 145537
+      },
+      {
+        "mtime_ns": 1784658146885214998,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1btk_A/pb_states_R3.h5",
+        "size_bytes": 133277
+      },
+      {
+        "mtime_ns": 1784658302587623023,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1cpq_A/pb_states_R1.h5",
+        "size_bytes": 71849
+      },
+      {
+        "mtime_ns": 1784658333451331569,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1cpq_A/pb_states_R2.h5",
+        "size_bytes": 72014
+      },
+      {
+        "mtime_ns": 1784658364415046124,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1cpq_A/pb_states_R3.h5",
+        "size_bytes": 68133
+      },
+      {
+        "mtime_ns": 1784658692736355074,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dci_C/pb_states_R1.h5",
+        "size_bytes": 213686
+      },
+      {
+        "mtime_ns": 1784658759175867189,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dci_C/pb_states_R2.h5",
+        "size_bytes": 207030
+      },
+      {
+        "mtime_ns": 1784658825615393239,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dci_C/pb_states_R3.h5",
+        "size_bytes": 227833
+      },
+      {
+        "mtime_ns": 1784659081705668453,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dow_A/pb_states_R1.h5",
+        "size_bytes": 100023
+      },
+      {
+        "mtime_ns": 1784659130721352816,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dow_A/pb_states_R2.h5",
+        "size_bytes": 95234
+      },
+      {
+        "mtime_ns": 1784659179729040899,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dow_A/pb_states_R3.h5",
+        "size_bytes": 96062
+      },
+      {
+        "mtime_ns": 1784659328236114805,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dpt_A/pb_states_R1.h5",
+        "size_bytes": 71621
+      },
+      {
+        "mtime_ns": 1784659356603940725,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dpt_A/pb_states_R2.h5",
+        "size_bytes": 68651
+      },
+      {
+        "mtime_ns": 1784659384759768726,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dpt_A/pb_states_R3.h5",
+        "size_bytes": 69587
+      },
+      {
+        "mtime_ns": 1784659643458218260,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dzf_A/pb_states_R1.h5",
+        "size_bytes": 134070
+      },
+      {
+        "mtime_ns": 1784659694969914699,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dzf_A/pb_states_R2.h5",
+        "size_bytes": 138732
+      },
+      {
+        "mtime_ns": 1784659746537612153,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1dzf_A/pb_states_R3.h5",
+        "size_bytes": 136327
+      },
+      {
+        "mtime_ns": 1784659918696610305,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ez3_B/pb_states_R1.h5",
+        "size_bytes": 35443
+      },
+      {
+        "mtime_ns": 1784659948456438200,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ez3_B/pb_states_R2.h5",
+        "size_bytes": 37589
+      },
+      {
+        "mtime_ns": 1784659978016267523,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ez3_B/pb_states_R3.h5",
+        "size_bytes": 35564
+      },
+      {
+        "mtime_ns": 1784660088383632417,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1f9p_A/pb_states_R1.h5",
+        "size_bytes": 89545
+      },
+      {
+        "mtime_ns": 1784660108791515312,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1f9p_A/pb_states_R2.h5",
+        "size_bytes": 84612
+      },
+      {
+        "mtime_ns": 1784660129139398642,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1f9p_A/pb_states_R3.h5",
+        "size_bytes": 87457
+      },
+      {
+        "mtime_ns": 1784660466917472746,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1fxo_G/pb_states_R1.h5",
+        "size_bytes": 212397
+      },
+      {
+        "mtime_ns": 1784660537469072424,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1fxo_G/pb_states_R2.h5",
+        "size_bytes": 214301
+      },
+      {
+        "mtime_ns": 1784660607724674267,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1fxo_G/pb_states_R3.h5",
+        "size_bytes": 222756
+      },
+      {
+        "mtime_ns": 1784660880631131089,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1h99_A/pb_states_R1.h5",
+        "size_bytes": 86908
+      },
+      {
+        "mtime_ns": 1784660932738836945,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1h99_A/pb_states_R2.h5",
+        "size_bytes": 107820
+      },
+      {
+        "mtime_ns": 1784660985006542019,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1h99_A/pb_states_R3.h5",
+        "size_bytes": 108873
+      },
+      {
+        "mtime_ns": 1784661174929471228,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ijx_C/pb_states_R1.h5",
+        "size_bytes": 96385
+      },
+      {
+        "mtime_ns": 1784661205385299621,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ijx_C/pb_states_R2.h5",
+        "size_bytes": 90255
+      },
+      {
+        "mtime_ns": 1784661235937127498,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ijx_C/pb_states_R3.h5",
+        "size_bytes": 91610
+      },
+      {
+        "mtime_ns": 1784661384304291933,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ikt_A/pb_states_R1.h5",
+        "size_bytes": 82337
+      },
+      {
+        "mtime_ns": 1784661412484133281,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ikt_A/pb_states_R2.h5",
+        "size_bytes": 81299
+      },
+      {
+        "mtime_ns": 1784661440447975859,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ikt_A/pb_states_R3.h5",
+        "size_bytes": 80427
+      },
+      {
+        "mtime_ns": 1784661653570776481,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1im5_A/pb_states_R1.h5",
+        "size_bytes": 109817
+      },
+      {
+        "mtime_ns": 1784661695494540614,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1im5_A/pb_states_R2.h5",
+        "size_bytes": 111483
+      },
+      {
+        "mtime_ns": 1784661737486304382,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1im5_A/pb_states_R3.h5",
+        "size_bytes": 136912
+      },
+      {
+        "mtime_ns": 1784662189355763139,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1io1_A/pb_states_R1.h5",
+        "size_bytes": 272415
+      },
+      {
+        "mtime_ns": 1784662285707441723,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1io1_A/pb_states_R2.h5",
+        "size_bytes": 260216
+      },
+      {
+        "mtime_ns": 1784662381959332860,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1io1_A/pb_states_R3.h5",
+        "size_bytes": 264945
+      },
+      {
+        "mtime_ns": 1784662827262166796,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1iom_A/pb_states_R1.h5",
+        "size_bytes": 212810
+      },
+      {
+        "mtime_ns": 1784662914309854224,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1iom_A/pb_states_R2.h5",
+        "size_bytes": 206443
+      },
+      {
+        "mtime_ns": 1784663001609522633,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1iom_A/pb_states_R3.h5",
+        "size_bytes": 209974
+      },
+      {
+        "mtime_ns": 1784663083177198946,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1j8e_A/pb_states_R1.h5",
+        "size_bytes": 46207
+      },
+      {
+        "mtime_ns": 1784663093829155796,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1j8e_A/pb_states_R2.h5",
+        "size_bytes": 48150
+      },
+      {
+        "mtime_ns": 1784663104333113060,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1j8e_A/pb_states_R3.h5",
+        "size_bytes": 45162
+      },
+      {
+        "mtime_ns": 1784663325124178084,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jhs_A/pb_states_R1.h5",
+        "size_bytes": 130840
+      },
+      {
+        "mtime_ns": 1784663370503978673,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jhs_A/pb_states_R2.h5",
+        "size_bytes": 148114
+      },
+      {
+        "mtime_ns": 1784663415807777592,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jhs_A/pb_states_R3.h5",
+        "size_bytes": 142892
+      },
+      {
+        "mtime_ns": 1784663565195102415,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jif_A/pb_states_R1.h5",
+        "size_bytes": 97209
+      },
+      {
+        "mtime_ns": 1784663593738971569,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jif_A/pb_states_R2.h5",
+        "size_bytes": 100563
+      },
+      {
+        "mtime_ns": 1784663622150840821,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jif_A/pb_states_R3.h5",
+        "size_bytes": 100728
+      },
+      {
+        "mtime_ns": 1784663746950261180,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jo0_A/pb_states_R1.h5",
+        "size_bytes": 69880
+      },
+      {
+        "mtime_ns": 1784663769850153971,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jo0_A/pb_states_R2.h5",
+        "size_bytes": 64792
+      },
+      {
+        "mtime_ns": 1784663792814046225,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jo0_A/pb_states_R3.h5",
+        "size_bytes": 55361
+      },
+      {
+        "mtime_ns": 1784663950869299051,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jyo_B/pb_states_R1.h5",
+        "size_bytes": 86203
+      },
+      {
+        "mtime_ns": 1784663981065155335,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jyo_B/pb_states_R2.h5",
+        "size_bytes": 77349
+      },
+      {
+        "mtime_ns": 1784664011465010376,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1jyo_B/pb_states_R3.h5",
+        "size_bytes": 77672
+      },
+      {
+        "mtime_ns": 1784664101072581688,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1knt_A/pb_states_R1.h5",
+        "size_bytes": 60339
+      },
+      {
+        "mtime_ns": 1784664114980514969,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1knt_A/pb_states_R2.h5",
+        "size_bytes": 65205
+      },
+      {
+        "mtime_ns": 1784664128948447918,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1knt_A/pb_states_R3.h5",
+        "size_bytes": 65138
+      },
+      {
+        "mtime_ns": 1784664528994220310,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1l5o_A/pb_states_R1.h5",
+        "size_bytes": 254498
+      },
+      {
+        "mtime_ns": 1784664614361723657,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1l5o_A/pb_states_R2.h5",
+        "size_bytes": 248850
+      },
+      {
+        "mtime_ns": 1784664699953234682,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1l5o_A/pb_states_R3.h5",
+        "size_bytes": 267303
+      },
+      {
+        "mtime_ns": 1784664809604619211,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1l9l_A/pb_states_R1.h5",
+        "size_bytes": 30723
+      },
+      {
+        "mtime_ns": 1784664827328520730,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1l9l_A/pb_states_R2.h5",
+        "size_bytes": 29413
+      },
+      {
+        "mtime_ns": 1784664845124422107,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1l9l_A/pb_states_R3.h5",
+        "size_bytes": 30800
+      },
+      {
+        "mtime_ns": 1784665440161225767,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1llf_B/pb_states_R1.h5",
+        "size_bytes": 454396
+      },
+      {
+        "mtime_ns": 1784665569640546521,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1llf_B/pb_states_R2.h5",
+        "size_bytes": 469594
+      },
+      {
+        "mtime_ns": 1784665699271869675,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1llf_B/pb_states_R3.h5",
+        "size_bytes": 462483
+      },
+      {
+        "mtime_ns": 1784665878402938300,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1lr0_A/pb_states_R1.h5",
+        "size_bytes": 72954
+      },
+      {
+        "mtime_ns": 1784665909654776192,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1lr0_A/pb_states_R2.h5",
+        "size_bytes": 76132
+      },
+      {
+        "mtime_ns": 1784665940734615071,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1lr0_A/pb_states_R3.h5",
+        "size_bytes": 74188
+      },
+      {
+        "mtime_ns": 1784666419560168119,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1lwd_B/pb_states_R1.h5",
+        "size_bytes": 261229
+      },
+      {
+        "mtime_ns": 1784666515319702059,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1lwd_B/pb_states_R2.h5",
+        "size_bytes": 269451
+      },
+      {
+        "mtime_ns": 1784666610847233349,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1lwd_B/pb_states_R3.h5",
+        "size_bytes": 260210
+      },
+      {
+        "mtime_ns": 1784667049925046181,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1m7v_A/pb_states_R1.h5",
+        "size_bytes": 261869
+      },
+      {
+        "mtime_ns": 1784667133480625871,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1m7v_A/pb_states_R2.h5",
+        "size_bytes": 266241
+      },
+      {
+        "mtime_ns": 1784667217164204056,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1m7v_A/pb_states_R3.h5",
+        "size_bytes": 269670
+      },
+      {
+        "mtime_ns": 1784667441623069463,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1msc_A/pb_states_R1.h5",
+        "size_bytes": 104882
+      },
+      {
+        "mtime_ns": 1784667472794911571,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1msc_A/pb_states_R2.h5",
+        "size_bytes": 113236
+      },
+      {
+        "mtime_ns": 1784667503746754732,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1msc_A/pb_states_R3.h5",
+        "size_bytes": 102809
+      },
+      {
+        "mtime_ns": 1784667887412806781,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1msk_A/pb_states_R1.h5",
+        "size_bytes": 239631
+      },
+      {
+        "mtime_ns": 1784667967236400854,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1msk_A/pb_states_R2.h5",
+        "size_bytes": 239740
+      },
+      {
+        "mtime_ns": 1784668046919995485,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1msk_A/pb_states_R3.h5",
+        "size_bytes": 248775
+      },
+      {
+        "mtime_ns": 1784668327766565851,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1nf8_A/pb_states_R1.h5",
+        "size_bytes": 144796
+      },
+      {
+        "mtime_ns": 1784668377674311678,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1nf8_A/pb_states_R2.h5",
+        "size_bytes": 139811
+      },
+      {
+        "mtime_ns": 1784668427490169303,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1nf8_A/pb_states_R3.h5",
+        "size_bytes": 150080
+      },
+      {
+        "mtime_ns": 1784668629793593167,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ntv_A/pb_states_R1.h5",
+        "size_bytes": 86963
+      },
+      {
+        "mtime_ns": 1784668666357473958,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ntv_A/pb_states_R2.h5",
+        "size_bytes": 86806
+      },
+      {
+        "mtime_ns": 1784668703033350528,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ntv_A/pb_states_R3.h5",
+        "size_bytes": 84283
+      },
+      {
+        "mtime_ns": 1784669100559827143,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1nty_A/pb_states_R1.h5",
+        "size_bytes": 172613
+      },
+      {
+        "mtime_ns": 1784669175539512395,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1nty_A/pb_states_R2.h5",
+        "size_bytes": 187520
+      },
+      {
+        "mtime_ns": 1784669250439192016,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1nty_A/pb_states_R3.h5",
+        "size_bytes": 179305
+      },
+      {
+        "mtime_ns": 1784669833348567510,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1o98_A/pb_states_R1.h5",
+        "size_bytes": 347957
+      },
+      {
+        "mtime_ns": 1784669957823988820,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1o98_A/pb_states_R2.h5",
+        "size_bytes": 340071
+      },
+      {
+        "mtime_ns": 1784670081275411349,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1o98_A/pb_states_R3.h5",
+        "size_bytes": 355390
+      },
+      {
+        "mtime_ns": 1784670279278479642,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ouw_C/pb_states_R1.h5",
+        "size_bytes": 124914
+      },
+      {
+        "mtime_ns": 1784670315150310272,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ouw_C/pb_states_R2.h5",
+        "size_bytes": 126260
+      },
+      {
+        "mtime_ns": 1784670350662142456,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ouw_C/pb_states_R3.h5",
+        "size_bytes": 128752
+      },
+      {
+        "mtime_ns": 1784670454065527732,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1pby_C/pb_states_R1.h5",
+        "size_bytes": 80472
+      },
+      {
+        "mtime_ns": 1784670473029317229,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1pby_C/pb_states_R2.h5",
+        "size_bytes": 72695
+      },
+      {
+        "mtime_ns": 1784670491981110709,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1pby_C/pb_states_R3.h5",
+        "size_bytes": 89694
+      },
+      {
+        "mtime_ns": 1784670830233937446,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1q74_C/pb_states_R1.h5",
+        "size_bytes": 252495
+      },
+      {
+        "mtime_ns": 1784670903333348394,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1q74_C/pb_states_R2.h5",
+        "size_bytes": 253053
+      },
+      {
+        "mtime_ns": 1784670976408784242,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1q74_C/pb_states_R3.h5",
+        "size_bytes": 257535
+      },
+      {
+        "mtime_ns": 1784671127507682446,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1qau_A/pb_states_R1.h5",
+        "size_bytes": 72423
+      },
+      {
+        "mtime_ns": 1784671154479493551,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1qau_A/pb_states_R2.h5",
+        "size_bytes": 74643
+      },
+      {
+        "mtime_ns": 1784671181363307318,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1qau_A/pb_states_R3.h5",
+        "size_bytes": 74448
+      },
+      {
+        "mtime_ns": 1784671421013722250,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1qhv_A/pb_states_R1.h5",
+        "size_bytes": 191403
+      },
+      {
+        "mtime_ns": 1784671467853425314,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1qhv_A/pb_states_R2.h5",
+        "size_bytes": 189474
+      },
+      {
+        "mtime_ns": 1784671514717131592,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1qhv_A/pb_states_R3.h5",
+        "size_bytes": 193621
+      },
+      {
+        "mtime_ns": 1784671766787598158,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1qnx_A/pb_states_R1.h5",
+        "size_bytes": 170691
+      },
+      {
+        "mtime_ns": 1784671817083299654,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1qnx_A/pb_states_R2.h5",
+        "size_bytes": 163414
+      },
+      {
+        "mtime_ns": 1784671867443002736,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1qnx_A/pb_states_R3.h5",
+        "size_bytes": 169094
+      },
+      {
+        "mtime_ns": 1784672055657907478,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1rk8_B/pb_states_R1.h5",
+        "size_bytes": 102888
+      },
+      {
+        "mtime_ns": 1784672090849704811,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1rk8_B/pb_states_R2.h5",
+        "size_bytes": 113235
+      },
+      {
+        "mtime_ns": 1784672125945503256,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1rk8_B/pb_states_R3.h5",
+        "size_bytes": 112127
+      },
+      {
+        "mtime_ns": 1784672406011910827,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1t61_E/pb_states_R1.h5",
+        "size_bytes": 185895
+      },
+      {
+        "mtime_ns": 1784672461095600285,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1t61_E/pb_states_R2.h5",
+        "size_bytes": 186991
+      },
+      {
+        "mtime_ns": 1784672516251406990,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1t61_E/pb_states_R3.h5",
+        "size_bytes": 195543
+      },
+      {
+        "mtime_ns": 1784672719546878681,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1t9i_B/pb_states_R1.h5",
+        "size_bytes": 94264
+      },
+      {
+        "mtime_ns": 1784672757810759865,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1t9i_B/pb_states_R2.h5",
+        "size_bytes": 98304
+      },
+      {
+        "mtime_ns": 1784672796150635707,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1t9i_B/pb_states_R3.h5",
+        "size_bytes": 91833
+      },
+      {
+        "mtime_ns": 1784672913598227301,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1u07_A/pb_states_R1.h5",
+        "size_bytes": 59606
+      },
+      {
+        "mtime_ns": 1784672934670150038,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1u07_A/pb_states_R2.h5",
+        "size_bytes": 56483
+      },
+      {
+        "mtime_ns": 1784672955654072014,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1u07_A/pb_states_R3.h5",
+        "size_bytes": 48685
+      },
+      {
+        "mtime_ns": 1784673192757127276,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1v4p_C/pb_states_R1.h5",
+        "size_bytes": 102478
+      },
+      {
+        "mtime_ns": 1784673230568967764,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1v4p_C/pb_states_R2.h5",
+        "size_bytes": 105031
+      },
+      {
+        "mtime_ns": 1784673268204807034,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1v4p_C/pb_states_R3.h5",
+        "size_bytes": 105617
+      },
+      {
+        "mtime_ns": 1784673589519372623,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1vk1_A/pb_states_R1.h5",
+        "size_bytes": 125661
+      },
+      {
+        "mtime_ns": 1784673648271101175,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1vk1_A/pb_states_R2.h5",
+        "size_bytes": 124989
+      },
+      {
+        "mtime_ns": 1784673707046827507,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1vk1_A/pb_states_R3.h5",
+        "size_bytes": 124800
+      },
+      {
+        "mtime_ns": 1784673895645937663,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1vr8_A/pb_states_R1.h5",
+        "size_bytes": 110719
+      },
+      {
+        "mtime_ns": 1784673929861774636,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1vr8_A/pb_states_R2.h5",
+        "size_bytes": 110846
+      },
+      {
+        "mtime_ns": 1784673964193610642,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1vr8_A/pb_states_R3.h5",
+        "size_bytes": 113213
+      },
+      {
+        "mtime_ns": 1784674326563860341,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wlg_B/pb_states_R1.h5",
+        "size_bytes": 241588
+      },
+      {
+        "mtime_ns": 1784674396999517092,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wlg_B/pb_states_R2.h5",
+        "size_bytes": 226909
+      },
+      {
+        "mtime_ns": 1784674466751176482,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wlg_B/pb_states_R3.h5",
+        "size_bytes": 221977
+      },
+      {
+        "mtime_ns": 1784674669457905072,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wpu_A/pb_states_R1.h5",
+        "size_bytes": 113683
+      },
+      {
+        "mtime_ns": 1784674704921669112,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wpu_A/pb_states_R2.h5",
+        "size_bytes": 108421
+      },
+      {
+        "mtime_ns": 1784674739977439267,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wpu_A/pb_states_R3.h5",
+        "size_bytes": 113269
+      },
+      {
+        "mtime_ns": 1784674858864682074,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wqj_B/pb_states_R1.h5",
+        "size_bytes": 49541
+      },
+      {
+        "mtime_ns": 1784674877548565876,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wqj_B/pb_states_R2.h5",
+        "size_bytes": 45292
+      },
+      {
+        "mtime_ns": 1784674896076451322,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wqj_B/pb_states_R3.h5",
+        "size_bytes": 46192
+      },
+      {
+        "mtime_ns": 1784675281250187614,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wx1_B/pb_states_R1.h5",
+        "size_bytes": 225290
+      },
+      {
+        "mtime_ns": 1784675360657741410,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wx1_B/pb_states_R2.h5",
+        "size_bytes": 241916
+      },
+      {
+        "mtime_ns": 1784675440837295757,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1wx1_B/pb_states_R3.h5",
+        "size_bytes": 242288
+      },
+      {
+        "mtime_ns": 1784675547816707592,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1xg0_A/pb_states_R1.h5",
+        "size_bytes": 65139
+      },
+      {
+        "mtime_ns": 1784675566052607973,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1xg0_A/pb_states_R2.h5",
+        "size_bytes": 71532
+      },
+      {
+        "mtime_ns": 1784675584212508937,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1xg0_A/pb_states_R3.h5",
+        "size_bytes": 69169
+      },
+      {
+        "mtime_ns": 1784675856955038120,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1xkr_A/pb_states_R1.h5",
+        "size_bytes": 101177
+      },
+      {
+        "mtime_ns": 1784675906594773149,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1xkr_A/pb_states_R2.h5",
+        "size_bytes": 106489
+      },
+      {
+        "mtime_ns": 1784675956186509082,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1xkr_A/pb_states_R3.h5",
+        "size_bytes": 106148
+      },
+      {
+        "mtime_ns": 1784676219413116066,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1xta_A/pb_states_R1.h5",
+        "size_bytes": 214211
+      },
+      {
+        "mtime_ns": 1784676272556836208,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1xta_A/pb_states_R2.h5",
+        "size_bytes": 200949
+      },
+      {
+        "mtime_ns": 1784676329648535963,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1xta_A/pb_states_R3.h5",
+        "size_bytes": 202253
+      },
+      {
+        "mtime_ns": 1784676708978384282,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ys1_X/pb_states_R1.h5",
+        "size_bytes": 274240
+      },
+      {
+        "mtime_ns": 1784676783229916733,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ys1_X/pb_states_R2.h5",
+        "size_bytes": 276615
+      },
+      {
+        "mtime_ns": 1784676859205448059,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1ys1_X/pb_states_R3.h5",
+        "size_bytes": 285103
+      },
+      {
+        "mtime_ns": 1784676961936827627,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1yu5_X/pb_states_R1.h5",
+        "size_bytes": 45304
+      },
+      {
+        "mtime_ns": 1784676978048731540,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1yu5_X/pb_states_R2.h5",
+        "size_bytes": 47454
+      },
+      {
+        "mtime_ns": 1784676994220635397,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1yu5_X/pb_states_R3.h5",
+        "size_bytes": 46988
+      },
+      {
+        "mtime_ns": 1784677080584126741,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1z7k_B/pb_states_R1.h5",
+        "size_bytes": 50847
+      },
+      {
+        "mtime_ns": 1784677095740038245,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1z7k_B/pb_states_R2.h5",
+        "size_bytes": 43271
+      },
+      {
+        "mtime_ns": 1784677110679951219,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1z7k_B/pb_states_R3.h5",
+        "size_bytes": 49374
+      },
+      {
+        "mtime_ns": 1784677305022835482,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1zd7_B/pb_states_R1.h5",
+        "size_bytes": 94296
+      },
+      {
+        "mtime_ns": 1784677341758627482,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1zd7_B/pb_states_R2.h5",
+        "size_bytes": 93579
+      },
+      {
+        "mtime_ns": 1784677378446420526,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1zd7_B/pb_states_R3.h5",
+        "size_bytes": 88015
+      },
+      {
+        "mtime_ns": 1784677860819750578,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1zjc_A/pb_states_R1.h5",
+        "size_bytes": 263616
+      },
+      {
+        "mtime_ns": 1784677962155197789,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1zjc_A/pb_states_R2.h5",
+        "size_bytes": 263778
+      },
+      {
+        "mtime_ns": 1784678063306647756,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1zjc_A/pb_states_R3.h5",
+        "size_bytes": 274597
+      },
+      {
+        "mtime_ns": 1784678481792384765,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1zsw_A/pb_states_R1.h5",
+        "size_bytes": 269716
+      },
+      {
+        "mtime_ns": 1784678560239962087,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1zsw_A/pb_states_R2.h5",
+        "size_bytes": 275242
+      },
+      {
+        "mtime_ns": 1784678639351576533,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/1zsw_A/pb_states_R3.h5",
+        "size_bytes": 254647
+      },
+      {
+        "mtime_ns": 1784679497756607777,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2b0t_A/pb_states_R1.h5",
+        "size_bytes": 456203
+      },
+      {
+        "mtime_ns": 1784679676715807193,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2b0t_A/pb_states_R2.h5",
+        "size_bytes": 452764
+      },
+      {
+        "mtime_ns": 1784679856038979069,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2b0t_A/pb_states_R3.h5",
+        "size_bytes": 456499
+      },
+      {
+        "mtime_ns": 1784680222553235515,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2bln_B/pb_states_R1.h5",
+        "size_bytes": 218009
+      },
+      {
+        "mtime_ns": 1784680293744891559,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2bln_B/pb_states_R2.h5",
+        "size_bytes": 217695
+      },
+      {
+        "mtime_ns": 1784680364804547033,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2bln_B/pb_states_R3.h5",
+        "size_bytes": 221842
+      },
+      {
+        "mtime_ns": 1784680532123731834,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2cx7_A/pb_states_R1.h5",
+        "size_bytes": 83826
+      },
+      {
+        "mtime_ns": 1784680563471578599,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2cx7_A/pb_states_R2.h5",
+        "size_bytes": 95766
+      },
+      {
+        "mtime_ns": 1784680594707425761,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2cx7_A/pb_states_R3.h5",
+        "size_bytes": 86539
+      },
+      {
+        "mtime_ns": 1784681181543079622,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ehq_A/pb_states_R1.h5",
+        "size_bytes": 388409
+      },
+      {
+        "mtime_ns": 1784681307002857663,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ehq_A/pb_states_R2.h5",
+        "size_bytes": 379357
+      },
+      {
+        "mtime_ns": 1784681432354580327,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ehq_A/pb_states_R3.h5",
+        "size_bytes": 376797
+      },
+      {
+        "mtime_ns": 1784681593858160346,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2fb6_A/pb_states_R1.h5",
+        "size_bytes": 51161
+      },
+      {
+        "mtime_ns": 1784681621246083435,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2fb6_A/pb_states_R2.h5",
+        "size_bytes": 54860
+      },
+      {
+        "mtime_ns": 1784681648506005467,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2fb6_A/pb_states_R3.h5",
+        "size_bytes": 60009
+      },
+      {
+        "mtime_ns": 1784681765941655100,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2fe5_A/pb_states_R1.h5",
+        "size_bytes": 80422
+      },
+      {
+        "mtime_ns": 1784681787925587169,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2fe5_A/pb_states_R2.h5",
+        "size_bytes": 85066
+      },
+      {
+        "mtime_ns": 1784681809717519175,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2fe5_A/pb_states_R3.h5",
+        "size_bytes": 85871
+      },
+      {
+        "mtime_ns": 1784682325407774165,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2gg6_A/pb_states_R1.h5",
+        "size_bytes": 316207
+      },
+      {
+        "mtime_ns": 1784682435667378664,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2gg6_A/pb_states_R2.h5",
+        "size_bytes": 304068
+      },
+      {
+        "mtime_ns": 1784682546166977568,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2gg6_A/pb_states_R3.h5",
+        "size_bytes": 318105
+      },
+      {
+        "mtime_ns": 1784682630874667453,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2gkr_I/pb_states_R1.h5",
+        "size_bytes": 44882
+      },
+      {
+        "mtime_ns": 1784682642734623876,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2gkr_I/pb_states_R2.h5",
+        "size_bytes": 43485
+      },
+      {
+        "mtime_ns": 1784682654538580469,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2gkr_I/pb_states_R3.h5",
+        "size_bytes": 43631
+      },
+      {
+        "mtime_ns": 1784682882772758162,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2h1t_B/pb_states_R1.h5",
+        "size_bytes": 131444
+      },
+      {
+        "mtime_ns": 1784682927800356143,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2h1t_B/pb_states_R2.h5",
+        "size_bytes": 140328
+      },
+      {
+        "mtime_ns": 1784682972823970653,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2h1t_B/pb_states_R3.h5",
+        "size_bytes": 137260
+      },
+      {
+        "mtime_ns": 1784683194750268364,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2hq4_A/pb_states_R1.h5",
+        "size_bytes": 109919
+      },
+      {
+        "mtime_ns": 1784683231986009176,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2hq4_A/pb_states_R2.h5",
+        "size_bytes": 115253
+      },
+      {
+        "mtime_ns": 1784683269437754762,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2hq4_A/pb_states_R3.h5",
+        "size_bytes": 103226
+      },
+      {
+        "mtime_ns": 1784683428256736136,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2hy5_A/pb_states_R1.h5",
+        "size_bytes": 83611
+      },
+      {
+        "mtime_ns": 1784683458552551380,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2hy5_A/pb_states_R2.h5",
+        "size_bytes": 69120
+      },
+      {
+        "mtime_ns": 1784683488856369223,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2hy5_A/pb_states_R3.h5",
+        "size_bytes": 77005
+      },
+      {
+        "mtime_ns": 1784683841298401230,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2hyv_A/pb_states_R1.h5",
+        "size_bytes": 200650
+      },
+      {
+        "mtime_ns": 1784683912346029566,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2hyv_A/pb_states_R2.h5",
+        "size_bytes": 203131
+      },
+      {
+        "mtime_ns": 1784683983253664617,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2hyv_A/pb_states_R3.h5",
+        "size_bytes": 211023
+      },
+      {
+        "mtime_ns": 1784684348715852807,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ie6_A/pb_states_R1.h5",
+        "size_bytes": 210379
+      },
+      {
+        "mtime_ns": 1784684422815495585,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ie6_A/pb_states_R2.h5",
+        "size_bytes": 213944
+      },
+      {
+        "mtime_ns": 1784684497259139123,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ie6_A/pb_states_R3.h5",
+        "size_bytes": 210119
+      },
+      {
+        "mtime_ns": 1784684657070380621,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2igp_A/pb_states_R1.h5",
+        "size_bytes": 84866
+      },
+      {
+        "mtime_ns": 1784684685942244411,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2igp_A/pb_states_R2.h5",
+        "size_bytes": 85480
+      },
+      {
+        "mtime_ns": 1784684714858108214,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2igp_A/pb_states_R3.h5",
+        "size_bytes": 70426
+      },
+      {
+        "mtime_ns": 1784684884152249875,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2in8_A/pb_states_R1.h5",
+        "size_bytes": 87005
+      },
+      {
+        "mtime_ns": 1784684917331814335,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2in8_A/pb_states_R2.h5",
+        "size_bytes": 87157
+      },
+      {
+        "mtime_ns": 1784684950619392803,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2in8_A/pb_states_R3.h5",
+        "size_bytes": 88175
+      },
+      {
+        "mtime_ns": 1784685045794264348,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2j7z_A/pb_states_R1.h5",
+        "size_bytes": 73372
+      },
+      {
+        "mtime_ns": 1784685061682086061,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2j7z_A/pb_states_R2.h5",
+        "size_bytes": 71365
+      },
+      {
+        "mtime_ns": 1784685077473911481,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2j7z_A/pb_states_R3.h5",
+        "size_bytes": 71959
+      },
+      {
+        "mtime_ns": 1784685288943790325,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ot9_A/pb_states_R1.h5",
+        "size_bytes": 130642
+      },
+      {
+        "mtime_ns": 1784685330939409397,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ot9_A/pb_states_R2.h5",
+        "size_bytes": 128284
+      },
+      {
+        "mtime_ns": 1784685372919039559,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ot9_A/pb_states_R3.h5",
+        "size_bytes": 129838
+      },
+      {
+        "mtime_ns": 1784685780875866957,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ozl_A/pb_states_R1.h5",
+        "size_bytes": 293803
+      },
+      {
+        "mtime_ns": 1784685865063279686,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ozl_A/pb_states_R2.h5",
+        "size_bytes": 294398
+      },
+      {
+        "mtime_ns": 1784685948978709758,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2ozl_A/pb_states_R3.h5",
+        "size_bytes": 280643
+      },
+      {
+        "mtime_ns": 1784686124633556811,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2pag_A/pb_states_R1.h5",
+        "size_bytes": 100417
+      },
+      {
+        "mtime_ns": 1784686157165348193,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2pag_A/pb_states_R2.h5",
+        "size_bytes": 101524
+      },
+      {
+        "mtime_ns": 1784686189585141594,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2pag_A/pb_states_R3.h5",
+        "size_bytes": 100213
+      },
+      {
+        "mtime_ns": 1784686372519996619,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2prv_A/pb_states_R1.h5",
+        "size_bytes": 97348
+      },
+      {
+        "mtime_ns": 1784686408307776130,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2prv_A/pb_states_R2.h5",
+        "size_bytes": 85195
+      },
+      {
+        "mtime_ns": 1784686444047556901,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2prv_A/pb_states_R3.h5",
+        "size_bytes": 93943
+      },
+      {
+        "mtime_ns": 1784686603206590712,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2qjz_A/pb_states_R1.h5",
+        "size_bytes": 82525
+      },
+      {
+        "mtime_ns": 1784686632618413733,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2qjz_A/pb_states_R2.h5",
+        "size_bytes": 78106
+      },
+      {
+        "mtime_ns": 1784686662218236047,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2qjz_A/pb_states_R3.h5",
+        "size_bytes": 80051
+      },
+      {
+        "mtime_ns": 1784686817421310473,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2qud_A/pb_states_R1.h5",
+        "size_bytes": 85864
+      },
+      {
+        "mtime_ns": 1784686847461337027,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2qud_A/pb_states_R2.h5",
+        "size_bytes": 81225
+      },
+      {
+        "mtime_ns": 1784686877585380580,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2qud_A/pb_states_R3.h5",
+        "size_bytes": 83919
+      },
+      {
+        "mtime_ns": 1784686970645448762,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2rjw_A/pb_states_R1.h5",
+        "size_bytes": 46693
+      },
+      {
+        "mtime_ns": 1784686986697451265,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2rjw_A/pb_states_R2.h5",
+        "size_bytes": 47220
+      },
+      {
+        "mtime_ns": 1784687002769451261,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2rjw_A/pb_states_R3.h5",
+        "size_bytes": 44755
+      },
+      {
+        "mtime_ns": 1784687346460974107,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2rku_A/pb_states_R1.h5",
+        "size_bytes": 237656
+      },
+      {
+        "mtime_ns": 1784687417572789148,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2rku_A/pb_states_R2.h5",
+        "size_bytes": 239436
+      },
+      {
+        "mtime_ns": 1784687488560583336,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2rku_A/pb_states_R3.h5",
+        "size_bytes": 244719
+      },
+      {
+        "mtime_ns": 1784688000158679386,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2rkv_A/pb_states_R1.h5",
+        "size_bytes": 388796
+      },
+      {
+        "mtime_ns": 1784688109934209168,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2rkv_A/pb_states_R2.h5",
+        "size_bytes": 390849
+      },
+      {
+        "mtime_ns": 1784688219421727136,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2rkv_A/pb_states_R3.h5",
+        "size_bytes": 394567
+      },
+      {
+        "mtime_ns": 1784688549952216030,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2v9m_A/pb_states_R1.h5",
+        "size_bytes": 200308
+      },
+      {
+        "mtime_ns": 1784688615783907848,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2v9m_A/pb_states_R2.h5",
+        "size_bytes": 196129
+      },
+      {
+        "mtime_ns": 1784688681779597145,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2v9m_A/pb_states_R3.h5",
+        "size_bytes": 192042
+      },
+      {
+        "mtime_ns": 1784688936490013625,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vfx_C/pb_states_R1.h5",
+        "size_bytes": 129845
+      },
+      {
+        "mtime_ns": 1784688986241522614,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vfx_C/pb_states_R2.h5",
+        "size_bytes": 131451
+      },
+      {
+        "mtime_ns": 1784689035829051851,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vfx_C/pb_states_R3.h5",
+        "size_bytes": 118093
+      },
+      {
+        "mtime_ns": 1784689177271796590,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vkp_B/pb_states_R1.h5",
+        "size_bytes": 67445
+      },
+      {
+        "mtime_ns": 1784689203567575621,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vkp_B/pb_states_R2.h5",
+        "size_bytes": 68064
+      },
+      {
+        "mtime_ns": 1784689229787358704,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vkp_B/pb_states_R3.h5",
+        "size_bytes": 64505
+      },
+      {
+        "mtime_ns": 1784689438137737332,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vri_A/pb_states_R1.h5",
+        "size_bytes": 123107
+      },
+      {
+        "mtime_ns": 1784689479801431347,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vri_A/pb_states_R2.h5",
+        "size_bytes": 108143
+      },
+      {
+        "mtime_ns": 1784689521661128959,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vri_A/pb_states_R3.h5",
+        "size_bytes": 111636
+      },
+      {
+        "mtime_ns": 1784689768635428299,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vrs_C/pb_states_R1.h5",
+        "size_bytes": 142933
+      },
+      {
+        "mtime_ns": 1784689819463092490,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vrs_C/pb_states_R2.h5",
+        "size_bytes": 139490
+      },
+      {
+        "mtime_ns": 1784689870158761369,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vrs_C/pb_states_R3.h5",
+        "size_bytes": 145427
+      },
+      {
+        "mtime_ns": 1784690037481691291,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vzc_A/pb_states_R1.h5",
+        "size_bytes": 72650
+      },
+      {
+        "mtime_ns": 1784690068785494390,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vzc_A/pb_states_R2.h5",
+        "size_bytes": 72257
+      },
+      {
+        "mtime_ns": 1784690100125298158,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2vzc_A/pb_states_R3.h5",
+        "size_bytes": 66403
+      },
+      {
+        "mtime_ns": 1784690272204234390,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2w86_A/pb_states_R1.h5",
+        "size_bytes": 140917
+      },
+      {
+        "mtime_ns": 1784690307388019343,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2w86_A/pb_states_R2.h5",
+        "size_bytes": 124706
+      },
+      {
+        "mtime_ns": 1784690342567805027,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2w86_A/pb_states_R3.h5",
+        "size_bytes": 127784
+      },
+      {
+        "mtime_ns": 1784690458619102521,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2w8x_A/pb_states_R1.h5",
+        "size_bytes": 68877
+      },
+      {
+        "mtime_ns": 1784690475251002336,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2w8x_A/pb_states_R2.h5",
+        "size_bytes": 68249
+      },
+      {
+        "mtime_ns": 1784690491898902170,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2w8x_A/pb_states_R3.h5",
+        "size_bytes": 67024
+      },
+      {
+        "mtime_ns": 1784690721597530005,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2waw_A/pb_states_R1.h5",
+        "size_bytes": 188332
+      },
+      {
+        "mtime_ns": 1784690769737244355,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2waw_A/pb_states_R2.h5",
+        "size_bytes": 182115
+      },
+      {
+        "mtime_ns": 1784690817696960302,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2waw_A/pb_states_R3.h5",
+        "size_bytes": 187900
+      },
+      {
+        "mtime_ns": 1784691017492444128,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2wfr_A/pb_states_R1.h5",
+        "size_bytes": 106530
+      },
+      {
+        "mtime_ns": 1784691055988445200,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2wfr_A/pb_states_R2.h5",
+        "size_bytes": 107453
+      },
+      {
+        "mtime_ns": 1784691094516432180,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2wfr_A/pb_states_R3.h5",
+        "size_bytes": 97577
+      },
+      {
+        "mtime_ns": 1784691225872295078,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2wpq_C/pb_states_R1.h5",
+        "size_bytes": 20447
+      },
+      {
+        "mtime_ns": 1784691249696256677,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2wpq_C/pb_states_R2.h5",
+        "size_bytes": 16738
+      },
+      {
+        "mtime_ns": 1784691273508214610,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2wpq_C/pb_states_R3.h5",
+        "size_bytes": 17165
+      },
+      {
+        "mtime_ns": 1784691561899467819,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2x9o_A/pb_states_R1.h5",
+        "size_bytes": 170719
+      },
+      {
+        "mtime_ns": 1784691620711273180,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2x9o_A/pb_states_R2.h5",
+        "size_bytes": 165771
+      },
+      {
+        "mtime_ns": 1784691679351068260,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2x9o_A/pb_states_R3.h5",
+        "size_bytes": 155851
+      },
+      {
+        "mtime_ns": 1784691799526619241,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2xdg_A/pb_states_R1.h5",
+        "size_bytes": 69110
+      },
+      {
+        "mtime_ns": 1784691821546533259,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2xdg_A/pb_states_R2.h5",
+        "size_bytes": 72109
+      },
+      {
+        "mtime_ns": 1784691843510446468,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2xdg_A/pb_states_R3.h5",
+        "size_bytes": 76252
+      },
+      {
+        "mtime_ns": 1784692132861225316,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2xjq_A/pb_states_R1.h5",
+        "size_bytes": 264384
+      },
+      {
+        "mtime_ns": 1784692194948948491,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2xjq_A/pb_states_R2.h5",
+        "size_bytes": 261094
+      },
+      {
+        "mtime_ns": 1784692256788668842,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2xjq_A/pb_states_R3.h5",
+        "size_bytes": 253002
+      },
+      {
+        "mtime_ns": 1784692776634212957,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2xz3_A/pb_states_R1.h5",
+        "size_bytes": 288080
+      },
+      {
+        "mtime_ns": 1784692884893686364,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2xz3_A/pb_states_R2.h5",
+        "size_bytes": 297331
+      },
+      {
+        "mtime_ns": 1784692993313186486,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2xz3_A/pb_states_R3.h5",
+        "size_bytes": 280456
+      },
+      {
+        "mtime_ns": 1784693272432054577,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2y44_A/pb_states_R1.h5",
+        "size_bytes": 57628
+      },
+      {
+        "mtime_ns": 1784693316503865742,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2y44_A/pb_states_R2.h5",
+        "size_bytes": 54634
+      },
+      {
+        "mtime_ns": 1784693360607674619,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2y44_A/pb_states_R3.h5",
+        "size_bytes": 52462
+      },
+      {
+        "mtime_ns": 1784693531306917714,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2y7b_A/pb_states_R1.h5",
+        "size_bytes": 103592
+      },
+      {
+        "mtime_ns": 1784693563570772035,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2y7b_A/pb_states_R2.h5",
+        "size_bytes": 104412
+      },
+      {
+        "mtime_ns": 1784693595570626847,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2y7b_A/pb_states_R3.h5",
+        "size_bytes": 99927
+      },
+      {
+        "mtime_ns": 1784693702938135134,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2zfz_D/pb_states_R1.h5",
+        "size_bytes": 51705
+      },
+      {
+        "mtime_ns": 1784693721878047735,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2zfz_D/pb_states_R2.h5",
+        "size_bytes": 50032
+      },
+      {
+        "mtime_ns": 1784693740821960137,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/2zfz_D/pb_states_R3.h5",
+        "size_bytes": 52201
+      },
+      {
+        "mtime_ns": 1784693914701148777,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3apa_A/pb_states_R1.h5",
+        "size_bytes": 107184
+      },
+      {
+        "mtime_ns": 1784693948364990374,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3apa_A/pb_states_R2.h5",
+        "size_bytes": 104949
+      },
+      {
+        "mtime_ns": 1784693982140831076,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3apa_A/pb_states_R3.h5",
+        "size_bytes": 104609
+      },
+      {
+        "mtime_ns": 1784694589041926956,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3b4w_A/pb_states_R1.h5",
+        "size_bytes": 402402
+      },
+      {
+        "mtime_ns": 1784694708729348441,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3b4w_A/pb_states_R2.h5",
+        "size_bytes": 382445
+      },
+      {
+        "mtime_ns": 1784694827928771246,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3b4w_A/pb_states_R3.h5",
+        "size_bytes": 395797
+      },
+      {
+        "mtime_ns": 1784695128790601447,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3bk5_A/pb_states_R1.h5",
+        "size_bytes": 174233
+      },
+      {
+        "mtime_ns": 1784695184086037264,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3bk5_A/pb_states_R2.h5",
+        "size_bytes": 168815
+      },
+      {
+        "mtime_ns": 1784695239409498727,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3bk5_A/pb_states_R3.h5",
+        "size_bytes": 183018
+      },
+      {
+        "mtime_ns": 1784695699841726744,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3bpt_A/pb_states_R1.h5",
+        "size_bytes": 323379
+      },
+      {
+        "mtime_ns": 1784695787085108872,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3bpt_A/pb_states_R2.h5",
+        "size_bytes": 303628
+      },
+      {
+        "mtime_ns": 1784695872632522327,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3bpt_A/pb_states_R3.h5",
+        "size_bytes": 294285
+      },
+      {
+        "mtime_ns": 1784695986051769190,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3bqp_B/pb_states_R1.h5",
+        "size_bytes": 47988
+      },
+      {
+        "mtime_ns": 1784696004463649210,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3bqp_B/pb_states_R2.h5",
+        "size_bytes": 49618
+      },
+      {
+        "mtime_ns": 1784696023023528850,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3bqp_B/pb_states_R3.h5",
+        "size_bytes": 49702
+      },
+      {
+        "mtime_ns": 1784696277145929970,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3cla_A/pb_states_R1.h5",
+        "size_bytes": 148028
+      },
+      {
+        "mtime_ns": 1784696327213623733,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3cla_A/pb_states_R2.h5",
+        "size_bytes": 146531
+      },
+      {
+        "mtime_ns": 1784696377173320424,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3cla_A/pb_states_R3.h5",
+        "size_bytes": 154191
+      },
+      {
+        "mtime_ns": 1784696517224480490,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3cyi_A/pb_states_R1.h5",
+        "size_bytes": 73835
+      },
+      {
+        "mtime_ns": 1784696542532330125,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3cyi_A/pb_states_R2.h5",
+        "size_bytes": 65001
+      },
+      {
+        "mtime_ns": 1784696567828180212,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3cyi_A/pb_states_R3.h5",
+        "size_bytes": 68605
+      },
+      {
+        "mtime_ns": 1784697047781388074,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3d3y_A/pb_states_R1.h5",
+        "size_bytes": 298377
+      },
+      {
+        "mtime_ns": 1784697147924884317,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3d3y_A/pb_states_R2.h5",
+        "size_bytes": 290565
+      },
+      {
+        "mtime_ns": 1784697247796384614,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3d3y_A/pb_states_R3.h5",
+        "size_bytes": 303866
+      },
+      {
+        "mtime_ns": 1784697510731030351,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3da8_A/pb_states_R1.h5",
+        "size_bytes": 144332
+      },
+      {
+        "mtime_ns": 1784697561170765677,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3da8_A/pb_states_R2.h5",
+        "size_bytes": 146928
+      },
+      {
+        "mtime_ns": 1784697611430500725,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3da8_A/pb_states_R3.h5",
+        "size_bytes": 135397
+      },
+      {
+        "mtime_ns": 1784697943084728959,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3dff_A/pb_states_R1.h5",
+        "size_bytes": 155626
+      },
+      {
+        "mtime_ns": 1784698006868384725,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3dff_A/pb_states_R2.h5",
+        "size_bytes": 163100
+      },
+      {
+        "mtime_ns": 1784698070688039474,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3dff_A/pb_states_R3.h5",
+        "size_bytes": 168242
+      },
+      {
+        "mtime_ns": 1784698493313738330,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3dpg_B/pb_states_R1.h5",
+        "size_bytes": 266174
+      },
+      {
+        "mtime_ns": 1784698574797292607,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3dpg_B/pb_states_R2.h5",
+        "size_bytes": 265939
+      },
+      {
+        "mtime_ns": 1784698656212846814,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3dpg_B/pb_states_R3.h5",
+        "size_bytes": 261472
+      },
+      {
+        "mtime_ns": 1784698905287480781,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3dza_A/pb_states_R1.h5",
+        "size_bytes": 98146
+      },
+      {
+        "mtime_ns": 1784698951399227630,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3dza_A/pb_states_R2.h5",
+        "size_bytes": 92599
+      },
+      {
+        "mtime_ns": 1784698997170976278,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3dza_A/pb_states_R3.h5",
+        "size_bytes": 93232
+      },
+      {
+        "mtime_ns": 1784699548093268837,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3e2d_A/pb_states_R1.h5",
+        "size_bytes": 364634
+      },
+      {
+        "mtime_ns": 1784699665088849247,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3e2d_A/pb_states_R2.h5",
+        "size_bytes": 391592
+      },
+      {
+        "mtime_ns": 1784699781656396785,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3e2d_A/pb_states_R3.h5",
+        "size_bytes": 368279
+      },
+      {
+        "mtime_ns": 1784699926047799024,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3e7h_A/pb_states_R1.h5",
+        "size_bytes": 53054
+      },
+      {
+        "mtime_ns": 1784699950091696173,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3e7h_A/pb_states_R2.h5",
+        "size_bytes": 53735
+      },
+      {
+        "mtime_ns": 1784699974227592093,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3e7h_A/pb_states_R3.h5",
+        "size_bytes": 57146
+      },
+      {
+        "mtime_ns": 1784700318666034981,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3f7w_A/pb_states_R1.h5",
+        "size_bytes": 192393
+      },
+      {
+        "mtime_ns": 1784700388033709165,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3f7w_A/pb_states_R2.h5",
+        "size_bytes": 184150
+      },
+      {
+        "mtime_ns": 1784700457165381523,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3f7w_A/pb_states_R3.h5",
+        "size_bytes": 179693
+      },
+      {
+        "mtime_ns": 1784700608288656849,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3fkc_A/pb_states_R1.h5",
+        "size_bytes": 68756
+      },
+      {
+        "mtime_ns": 1784700635292526312,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3fkc_A/pb_states_R2.h5",
+        "size_bytes": 59338
+      },
+      {
+        "mtime_ns": 1784700662372395132,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3fkc_A/pb_states_R3.h5",
+        "size_bytes": 57779
+      },
+      {
+        "mtime_ns": 1784700785227796866,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3fpu_A/pb_states_R1.h5",
+        "size_bytes": 68566
+      },
+      {
+        "mtime_ns": 1784700808595682562,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3fpu_A/pb_states_R2.h5",
+        "size_bytes": 76478
+      },
+      {
+        "mtime_ns": 1784700831951568172,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3fpu_A/pb_states_R3.h5",
+        "size_bytes": 63745
+      },
+      {
+        "mtime_ns": 1784700925851106933,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ghd_A/pb_states_R1.h5",
+        "size_bytes": 43227
+      },
+      {
+        "mtime_ns": 1784700942103026899,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ghd_A/pb_states_R2.h5",
+        "size_bytes": 39291
+      },
+      {
+        "mtime_ns": 1784700958366946752,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ghd_A/pb_states_R3.h5",
+        "size_bytes": 37224
+      },
+      {
+        "mtime_ns": 1784701218829471194,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3gkj_A/pb_states_R1.h5",
+        "size_bytes": 194668
+      },
+      {
+        "mtime_ns": 1784701272897050128,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3gkj_A/pb_states_R2.h5",
+        "size_bytes": 186406
+      },
+      {
+        "mtime_ns": 1784701327084641190,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3gkj_A/pb_states_R3.h5",
+        "size_bytes": 186279
+      },
+      {
+        "mtime_ns": 1784701576386894190,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3gnu_P/pb_states_R1.h5",
+        "size_bytes": 195379
+      },
+      {
+        "mtime_ns": 1784701625254572323,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3gnu_P/pb_states_R2.h5",
+        "size_bytes": 198266
+      },
+      {
+        "mtime_ns": 1784701673930257031,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3gnu_P/pb_states_R3.h5",
+        "size_bytes": 200419
+      },
+      {
+        "mtime_ns": 1784701875884995665,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3gqh_A/pb_states_R1.h5",
+        "size_bytes": 137898
+      },
+      {
+        "mtime_ns": 1784701915124757823,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3gqh_A/pb_states_R2.h5",
+        "size_bytes": 133850
+      },
+      {
+        "mtime_ns": 1784701954520520999,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3gqh_A/pb_states_R3.h5",
+        "size_bytes": 132921
+      },
+      {
+        "mtime_ns": 1784702140779423814,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3h2d_B/pb_states_R1.h5",
+        "size_bytes": 76564
+      },
+      {
+        "mtime_ns": 1784702178123207609,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3h2d_B/pb_states_R2.h5",
+        "size_bytes": 76086
+      },
+      {
+        "mtime_ns": 1784702215366993036,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3h2d_B/pb_states_R3.h5",
+        "size_bytes": 79661
+      },
+      {
+        "mtime_ns": 1784702533189195495,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3hlz_B/pb_states_R1.h5",
+        "size_bytes": 166932
+      },
+      {
+        "mtime_ns": 1784702597304838410,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3hlz_B/pb_states_R2.h5",
+        "size_bytes": 167961
+      },
+      {
+        "mtime_ns": 1784702661708481106,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3hlz_B/pb_states_R3.h5",
+        "size_bytes": 162087
+      },
+      {
+        "mtime_ns": 1784702964698814367,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3i94_A/pb_states_R1.h5",
+        "size_bytes": 191330
+      },
+      {
+        "mtime_ns": 1784703024506487460,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3i94_A/pb_states_R2.h5",
+        "size_bytes": 188367
+      },
+      {
+        "mtime_ns": 1784703084378160723,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3i94_A/pb_states_R3.h5",
+        "size_bytes": 189832
+      },
+      {
+        "mtime_ns": 1784703235101331511,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ic3_B/pb_states_R1.h5",
+        "size_bytes": 70354
+      },
+      {
+        "mtime_ns": 1784703259369192510,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ic3_B/pb_states_R2.h5",
+        "size_bytes": 67744
+      },
+      {
+        "mtime_ns": 1784703283825052775,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ic3_B/pb_states_R3.h5",
+        "size_bytes": 76896
+      },
+      {
+        "mtime_ns": 1784703966941239606,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3igz_B/pb_states_R1.h5",
+        "size_bytes": 412398
+      },
+      {
+        "mtime_ns": 1784704097848520581,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3igz_B/pb_states_R2.h5",
+        "size_bytes": 412273
+      },
+      {
+        "mtime_ns": 1784704228179806620,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3igz_B/pb_states_R3.h5",
+        "size_bytes": 399020
+      },
+      {
+        "mtime_ns": 1784704436302669439,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ino_A/pb_states_R1.h5",
+        "size_bytes": 113085
+      },
+      {
+        "mtime_ns": 1784704470682481854,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ino_A/pb_states_R2.h5",
+        "size_bytes": 117382
+      },
+      {
+        "mtime_ns": 1784704505106294094,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ino_A/pb_states_R3.h5",
+        "size_bytes": 116403
+      },
+      {
+        "mtime_ns": 1784704628769620037,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ipj_A/pb_states_R1.h5",
+        "size_bytes": 58223
+      },
+      {
+        "mtime_ns": 1784704650849499754,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ipj_A/pb_states_R2.h5",
+        "size_bytes": 58471
+      },
+      {
+        "mtime_ns": 1784704673021378991,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ipj_A/pb_states_R3.h5",
+        "size_bytes": 56785
+      },
+      {
+        "mtime_ns": 1784705272146065719,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3jsz_A/pb_states_R1.h5",
+        "size_bytes": 406026
+      },
+      {
+        "mtime_ns": 1784705400004988344,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3jsz_A/pb_states_R2.h5",
+        "size_bytes": 397505
+      },
+      {
+        "mtime_ns": 1784705527491983407,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3jsz_A/pb_states_R3.h5",
+        "size_bytes": 383842
+      },
+      {
+        "mtime_ns": 1784705694010750082,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ju3_A/pb_states_R1.h5",
+        "size_bytes": 74939
+      },
+      {
+        "mtime_ns": 1784705722562545904,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ju3_A/pb_states_R2.h5",
+        "size_bytes": 79763
+      },
+      {
+        "mtime_ns": 1784705751154343281,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ju3_A/pb_states_R3.h5",
+        "size_bytes": 73305
+      },
+      {
+        "mtime_ns": 1784705936929065219,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3jub_A/pb_states_R1.h5",
+        "size_bytes": 113082
+      },
+      {
+        "mtime_ns": 1784705973596819651,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3jub_A/pb_states_R2.h5",
+        "size_bytes": 122790
+      },
+      {
+        "mtime_ns": 1784706010572573900,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3jub_A/pb_states_R3.h5",
+        "size_bytes": 110280
+      },
+      {
+        "mtime_ns": 1784706883743089953,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3l84_A/pb_states_R1.h5",
+        "size_bytes": 482832
+      },
+      {
+        "mtime_ns": 1784707037206158689,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3l84_A/pb_states_R2.h5",
+        "size_bytes": 468977
+      },
+      {
+        "mtime_ns": 1784707190017235449,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3l84_A/pb_states_R3.h5",
+        "size_bytes": 478054
+      },
+      {
+        "mtime_ns": 1784707335256469529,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3lbl_A/pb_states_R1.h5",
+        "size_bytes": 57474
+      },
+      {
+        "mtime_ns": 1784707357516409500,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3lbl_A/pb_states_R2.h5",
+        "size_bytes": 58276
+      },
+      {
+        "mtime_ns": 1784707379748346826,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3lbl_A/pb_states_R3.h5",
+        "size_bytes": 56369
+      },
+      {
+        "mtime_ns": 1784707727543088325,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3lti_A/pb_states_R1.h5",
+        "size_bytes": 211862
+      },
+      {
+        "mtime_ns": 1784707798370783819,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3lti_A/pb_states_R2.h5",
+        "size_bytes": 215086
+      },
+      {
+        "mtime_ns": 1784707869242467429,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3lti_A/pb_states_R3.h5",
+        "size_bytes": 210645
+      },
+      {
+        "mtime_ns": 1784708173521008614,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3lvu_D/pb_states_R1.h5",
+        "size_bytes": 182375
+      },
+      {
+        "mtime_ns": 1784708233352707310,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3lvu_D/pb_states_R2.h5",
+        "size_bytes": 193277
+      },
+      {
+        "mtime_ns": 1784708292840404205,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3lvu_D/pb_states_R3.h5",
+        "size_bytes": 187405
+      },
+      {
+        "mtime_ns": 1784708554951035605,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3m4r_A/pb_states_R1.h5",
+        "size_bytes": 186806
+      },
+      {
+        "mtime_ns": 1784708606842759683,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3m4r_A/pb_states_R2.h5",
+        "size_bytes": 176261
+      },
+      {
+        "mtime_ns": 1784708658830481956,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3m4r_A/pb_states_R3.h5",
+        "size_bytes": 192278
+      },
+      {
+        "mtime_ns": 1784708886069255679,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3mol_B/pb_states_R1.h5",
+        "size_bytes": 152209
+      },
+      {
+        "mtime_ns": 1784708930293015142,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3mol_B/pb_states_R2.h5",
+        "size_bytes": 152603
+      },
+      {
+        "mtime_ns": 1784708974572773804,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3mol_B/pb_states_R3.h5",
+        "size_bytes": 148271
+      },
+      {
+        "mtime_ns": 1784709233003357218,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3mqz_A/pb_states_R1.h5",
+        "size_bytes": 193106
+      },
+      {
+        "mtime_ns": 1784709283287080335,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3mqz_A/pb_states_R2.h5",
+        "size_bytes": 190350
+      },
+      {
+        "mtime_ns": 1784709333526803372,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3mqz_A/pb_states_R3.h5",
+        "size_bytes": 187581
+      },
+      {
+        "mtime_ns": 1784709824506239098,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3msu_B/pb_states_R1.h5",
+        "size_bytes": 293618
+      },
+      {
+        "mtime_ns": 1784709928309957467,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3msu_B/pb_states_R2.h5",
+        "size_bytes": 303929
+      },
+      {
+        "mtime_ns": 1784710031457637490,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3msu_B/pb_states_R3.h5",
+        "size_bytes": 291909
+      },
+      {
+        "mtime_ns": 1784710213116998228,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3nuf_A/pb_states_R1.h5",
+        "size_bytes": 62844
+      },
+      {
+        "mtime_ns": 1784710241700890485,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3nuf_A/pb_states_R2.h5",
+        "size_bytes": 59132
+      },
+      {
+        "mtime_ns": 1784710270376780731,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3nuf_A/pb_states_R3.h5",
+        "size_bytes": 62339
+      },
+      {
+        "mtime_ns": 1784710507131821616,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3o3x_A/pb_states_R1.h5",
+        "size_bytes": 108337
+      },
+      {
+        "mtime_ns": 1784710554915618677,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3o3x_A/pb_states_R2.h5",
+        "size_bytes": 106600
+      },
+      {
+        "mtime_ns": 1784710602523413976,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3o3x_A/pb_states_R3.h5",
+        "size_bytes": 105534
+      },
+      {
+        "mtime_ns": 1784710865126249137,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3o6p_A/pb_states_R1.h5",
+        "size_bytes": 151239
+      },
+      {
+        "mtime_ns": 1784710917754009927,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3o6p_A/pb_states_R2.h5",
+        "size_bytes": 159929
+      },
+      {
+        "mtime_ns": 1784710970405769105,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3o6p_A/pb_states_R3.h5",
+        "size_bytes": 152759
+      },
+      {
+        "mtime_ns": 1784711174816822460,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3oi8_A/pb_states_R1.h5",
+        "size_bytes": 98331
+      },
+      {
+        "mtime_ns": 1784711211124652712,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3oi8_A/pb_states_R2.h5",
+        "size_bytes": 105535
+      },
+      {
+        "mtime_ns": 1784711247472482374,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3oi8_A/pb_states_R3.h5",
+        "size_bytes": 105834
+      },
+      {
+        "mtime_ns": 1784711389295814391,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3onj_A/pb_states_R1.h5",
+        "size_bytes": 37986
+      },
+      {
+        "mtime_ns": 1784711411967661378,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3onj_A/pb_states_R2.h5",
+        "size_bytes": 41890
+      },
+      {
+        "mtime_ns": 1784711434579470328,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3onj_A/pb_states_R3.h5",
+        "size_bytes": 36287
+      },
+      {
+        "mtime_ns": 1784711737097167262,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ooi_A/pb_states_R1.h5",
+        "size_bytes": 191664
+      },
+      {
+        "mtime_ns": 1784711793188780654,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ooi_A/pb_states_R2.h5",
+        "size_bytes": 196579
+      },
+      {
+        "mtime_ns": 1784711849336403219,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ooi_A/pb_states_R3.h5",
+        "size_bytes": 195443
+      },
+      {
+        "mtime_ns": 1784712313601540106,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ot9_B/pb_states_R1.h5",
+        "size_bytes": 287645
+      },
+      {
+        "mtime_ns": 1784712410868979395,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ot9_B/pb_states_R2.h5",
+        "size_bytes": 300082
+      },
+      {
+        "mtime_ns": 1784712508068427661,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ot9_B/pb_states_R3.h5",
+        "size_bytes": 293832
+      },
+      {
+        "mtime_ns": 1784712715503272487,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3owt_B/pb_states_R1.h5",
+        "size_bytes": 99900
+      },
+      {
+        "mtime_ns": 1784712752299070080,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3owt_B/pb_states_R2.h5",
+        "size_bytes": 107659
+      },
+      {
+        "mtime_ns": 1784712788978868939,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3owt_B/pb_states_R3.h5",
+        "size_bytes": 99032
+      },
+      {
+        "mtime_ns": 1784712969677885824,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3oxp_A/pb_states_R1.h5",
+        "size_bytes": 115739
+      },
+      {
+        "mtime_ns": 1784713005505692193,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3oxp_A/pb_states_R2.h5",
+        "size_bytes": 121333
+      },
+      {
+        "mtime_ns": 1784713041453498282,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3oxp_A/pb_states_R3.h5",
+        "size_bytes": 120752
+      },
+      {
+        "mtime_ns": 1784713498799115064,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3oyv_A/pb_states_R1.h5",
+        "size_bytes": 233353
+      },
+      {
+        "mtime_ns": 1784713586258746109,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3oyv_A/pb_states_R2.h5",
+        "size_bytes": 245914
+      },
+      {
+        "mtime_ns": 1784713673590366091,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3oyv_A/pb_states_R3.h5",
+        "size_bytes": 256194
+      },
+      {
+        "mtime_ns": 1784714122240289232,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3q0i_A/pb_states_R1.h5",
+        "size_bytes": 242517
+      },
+      {
+        "mtime_ns": 1784714198767920996,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3q0i_A/pb_states_R2.h5",
+        "size_bytes": 236275
+      },
+      {
+        "mtime_ns": 1784714275407549530,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3q0i_A/pb_states_R3.h5",
+        "size_bytes": 228375
+      },
+      {
+        "mtime_ns": 1784714591073998471,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3rkg_A/pb_states_R1.h5",
+        "size_bytes": 142223
+      },
+      {
+        "mtime_ns": 1784714653857686934,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3rkg_A/pb_states_R2.h5",
+        "size_bytes": 159133
+      },
+      {
+        "mtime_ns": 1784714716449375612,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3rkg_A/pb_states_R3.h5",
+        "size_bytes": 136204
+      },
+      {
+        "mtime_ns": 1784714971000103521,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3st1_A/pb_states_R1.h5",
+        "size_bytes": 183734
+      },
+      {
+        "mtime_ns": 1784715022503845222,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3st1_A/pb_states_R2.h5",
+        "size_bytes": 184361
+      },
+      {
+        "mtime_ns": 1784715074139586015,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3st1_A/pb_states_R3.h5",
+        "size_bytes": 175477
+      },
+      {
+        "mtime_ns": 1784715195662975141,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3tbn_A/pb_states_R1.h5",
+        "size_bytes": 82859
+      },
+      {
+        "mtime_ns": 1784715216550870039,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3tbn_A/pb_states_R2.h5",
+        "size_bytes": 90555
+      },
+      {
+        "mtime_ns": 1784715237474764728,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3tbn_A/pb_states_R3.h5",
+        "size_bytes": 88179
+      },
+      {
+        "mtime_ns": 1784715500029444763,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ti2_A/pb_states_R1.h5",
+        "size_bytes": 146831
+      },
+      {
+        "mtime_ns": 1784715555153225321,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ti2_A/pb_states_R2.h5",
+        "size_bytes": 143392
+      },
+      {
+        "mtime_ns": 1784715609965001777,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3ti2_A/pb_states_R3.h5",
+        "size_bytes": 145153
+      },
+      {
+        "mtime_ns": 1784716078122939866,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3twz_A/pb_states_R1.h5",
+        "size_bytes": 291386
+      },
+      {
+        "mtime_ns": 1784716174966490447,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3twz_A/pb_states_R2.h5",
+        "size_bytes": 311357
+      },
+      {
+        "mtime_ns": 1784716271862035823,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3twz_A/pb_states_R3.h5",
+        "size_bytes": 293101
+      },
+      {
+        "mtime_ns": 1784716470181093301,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3vnb_A/pb_states_R1.h5",
+        "size_bytes": 72660
+      },
+      {
+        "mtime_ns": 1784716506348920007,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3vnb_A/pb_states_R2.h5",
+        "size_bytes": 67758
+      },
+      {
+        "mtime_ns": 1784716542548746198,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/3vnb_A/pb_states_R3.h5",
+        "size_bytes": 64899
+      },
+      {
+        "mtime_ns": 1784716812627440261,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4adn_B/pb_states_R1.h5",
+        "size_bytes": 156285
+      },
+      {
+        "mtime_ns": 1784716866255179415,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4adn_B/pb_states_R2.h5",
+        "size_bytes": 166945
+      },
+      {
+        "mtime_ns": 1784716919926917962,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4adn_B/pb_states_R3.h5",
+        "size_bytes": 159740
+      },
+      {
+        "mtime_ns": 1784717192161587079,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4cbe_A/pb_states_R1.h5",
+        "size_bytes": 112078
+      },
+      {
+        "mtime_ns": 1784717244717329422,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4cbe_A/pb_states_R2.h5",
+        "size_bytes": 125979
+      },
+      {
+        "mtime_ns": 1784717297381071055,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4cbe_A/pb_states_R3.h5",
+        "size_bytes": 109459
+      },
+      {
+        "mtime_ns": 1784717591231809352,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4cfi_A/pb_states_R1.h5",
+        "size_bytes": 198950
+      },
+      {
+        "mtime_ns": 1784717652847727831,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4cfi_A/pb_states_R2.h5",
+        "size_bytes": 196021
+      },
+      {
+        "mtime_ns": 1784717714903623427,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4cfi_A/pb_states_R3.h5",
+        "size_bytes": 202757
+      },
+      {
+        "mtime_ns": 1784718150882442312,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4ezi_A/pb_states_R1.h5",
+        "size_bytes": 285199
+      },
+      {
+        "mtime_ns": 1784718241894128146,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4ezi_A/pb_states_R2.h5",
+        "size_bytes": 279033
+      },
+      {
+        "mtime_ns": 1784718332157801495,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4ezi_A/pb_states_R3.h5",
+        "size_bytes": 287825
+      },
+      {
+        "mtime_ns": 1784718961699266411,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4fc2_B/pb_states_R1.h5",
+        "size_bytes": 381635
+      },
+      {
+        "mtime_ns": 1784719088146725723,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4fc2_B/pb_states_R2.h5",
+        "size_bytes": 406036
+      },
+      {
+        "mtime_ns": 1784719214734178789,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4fc2_B/pb_states_R3.h5",
+        "size_bytes": 400413
+      },
+      {
+        "mtime_ns": 1784719532000790650,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4geh_A/pb_states_R1.h5",
+        "size_bytes": 110160
+      },
+      {
+        "mtime_ns": 1784719581600572025,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4geh_A/pb_states_R2.h5",
+        "size_bytes": 110915
+      },
+      {
+        "mtime_ns": 1784719631252278572,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4geh_A/pb_states_R3.h5",
+        "size_bytes": 108122
+      },
+      {
+        "mtime_ns": 1784720094149617831,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4ghn_A/pb_states_R1.h5",
+        "size_bytes": 332818
+      },
+      {
+        "mtime_ns": 1784720189537113643,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4ghn_A/pb_states_R2.h5",
+        "size_bytes": 308408
+      },
+      {
+        "mtime_ns": 1784720284660620399,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4ghn_A/pb_states_R3.h5",
+        "size_bytes": 332072
+      },
+      {
+        "mtime_ns": 1784720405408005509,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4gip_A/pb_states_R1.h5",
+        "size_bytes": 58612
+      },
+      {
+        "mtime_ns": 1784720424787907819,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4gip_A/pb_states_R2.h5",
+        "size_bytes": 51078
+      },
+      {
+        "mtime_ns": 1784720444223810099,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4gip_A/pb_states_R3.h5",
+        "size_bytes": 62180
+      },
+      {
+        "mtime_ns": 1784720645262811911,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4m62_S/pb_states_R1.h5",
+        "size_bytes": 104679
+      },
+      {
+        "mtime_ns": 1784720682698628193,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4m62_S/pb_states_R2.h5",
+        "size_bytes": 105679
+      },
+      {
+        "mtime_ns": 1784720720070445347,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4m62_S/pb_states_R3.h5",
+        "size_bytes": 103013
+      },
+      {
+        "mtime_ns": 1784721388343236807,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4na5_A/pb_states_R1.h5",
+        "size_bytes": 387101
+      },
+      {
+        "mtime_ns": 1784721514982636448,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4na5_A/pb_states_R2.h5",
+        "size_bytes": 395070
+      },
+      {
+        "mtime_ns": 1784721641010040252,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4na5_A/pb_states_R3.h5",
+        "size_bytes": 400734
+      },
+      {
+        "mtime_ns": 1784721878095085170,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4o6q_A/pb_states_R1.h5",
+        "size_bytes": 144576
+      },
+      {
+        "mtime_ns": 1784721922462599974,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4o6q_A/pb_states_R2.h5",
+        "size_bytes": 150866
+      },
+      {
+        "mtime_ns": 1784721966722133455,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4o6q_A/pb_states_R3.h5",
+        "size_bytes": 152750
+      },
+      {
+        "mtime_ns": 1784722120368630084,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4oxw_A/pb_states_R1.h5",
+        "size_bytes": 90699
+      },
+      {
+        "mtime_ns": 1784722148200374405,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4oxw_A/pb_states_R2.h5",
+        "size_bytes": 90569
+      },
+      {
+        "mtime_ns": 1784722175884124493,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4oxw_A/pb_states_R3.h5",
+        "size_bytes": 95268
+      },
+      {
+        "mtime_ns": 1784722416398106765,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4qxo_A/pb_states_R1.h5",
+        "size_bytes": 132426
+      },
+      {
+        "mtime_ns": 1784722461665752139,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4qxo_A/pb_states_R2.h5",
+        "size_bytes": 135247
+      },
+      {
+        "mtime_ns": 1784722506817404765,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4qxo_A/pb_states_R3.h5",
+        "size_bytes": 137948
+      },
+      {
+        "mtime_ns": 1784722621176549791,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4v1g_B/pb_states_R1.h5",
+        "size_bytes": 32226
+      },
+      {
+        "mtime_ns": 1784722641756399293,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4v1g_B/pb_states_R2.h5",
+        "size_bytes": 40497
+      },
+      {
+        "mtime_ns": 1784722662384249375,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4v1g_B/pb_states_R3.h5",
+        "size_bytes": 61963
+      },
+      {
+        "mtime_ns": 1784722920490438694,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4wzg_A/pb_states_R1.h5",
+        "size_bytes": 118290
+      },
+      {
+        "mtime_ns": 1784722973030082033,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4wzg_A/pb_states_R2.h5",
+        "size_bytes": 125167
+      },
+      {
+        "mtime_ns": 1784723025633728103,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4wzg_A/pb_states_R3.h5",
+        "size_bytes": 122680
+      },
+      {
+        "mtime_ns": 1784723568306201912,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4y93_A/pb_states_R1.h5",
+        "size_bytes": 401484
+      },
+      {
+        "mtime_ns": 1784723676549515953,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4y93_A/pb_states_R2.h5",
+        "size_bytes": 417255
+      },
+      {
+        "mtime_ns": 1784723784692834019,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4y93_A/pb_states_R3.h5",
+        "size_bytes": 405053
+      },
+      {
+        "mtime_ns": 1784723909452050655,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4ytw_C/pb_states_R1.h5",
+        "size_bytes": 57125
+      },
+      {
+        "mtime_ns": 1784723928251932882,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4ytw_C/pb_states_R2.h5",
+        "size_bytes": 46844
+      },
+      {
+        "mtime_ns": 1784723947063815093,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4ytw_C/pb_states_R3.h5",
+        "size_bytes": 56618
+      },
+      {
+        "mtime_ns": 1784724068299057306,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4zmk_A/pb_states_R1.h5",
+        "size_bytes": 45009
+      },
+      {
+        "mtime_ns": 1784724085338950974,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4zmk_A/pb_states_R2.h5",
+        "size_bytes": 41447
+      },
+      {
+        "mtime_ns": 1784724102350844854,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/4zmk_A/pb_states_R3.h5",
+        "size_bytes": 42880
+      },
+      {
+        "mtime_ns": 1784724255565890635,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5bs1_B/pb_states_R1.h5",
+        "size_bytes": 83774
+      },
+      {
+        "mtime_ns": 1784724285101706953,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5bs1_B/pb_states_R2.h5",
+        "size_bytes": 86325
+      },
+      {
+        "mtime_ns": 1784724314953521385,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5bs1_B/pb_states_R3.h5",
+        "size_bytes": 86312
+      },
+      {
+        "mtime_ns": 1784724558752008227,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5cfl_A/pb_states_R1.h5",
+        "size_bytes": 134137
+      },
+      {
+        "mtime_ns": 1784724602247738647,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5cfl_A/pb_states_R2.h5",
+        "size_bytes": 138695
+      },
+      {
+        "mtime_ns": 1784724645791468855,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5cfl_A/pb_states_R3.h5",
+        "size_bytes": 137184
+      },
+      {
+        "mtime_ns": 1784724798258524840,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5dpo_A/pb_states_R1.h5",
+        "size_bytes": 75295
+      },
+      {
+        "mtime_ns": 1784724826070352722,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5dpo_A/pb_states_R2.h5",
+        "size_bytes": 75929
+      },
+      {
+        "mtime_ns": 1784724853882180628,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5dpo_A/pb_states_R3.h5",
+        "size_bytes": 77322
+      },
+      {
+        "mtime_ns": 1784725312131347548,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5erq_A/pb_states_R1.h5",
+        "size_bytes": 289828
+      },
+      {
+        "mtime_ns": 1784725409282747334,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5erq_A/pb_states_R2.h5",
+        "size_bytes": 302781
+      },
+      {
+        "mtime_ns": 1784725506174148819,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5erq_A/pb_states_R3.h5",
+        "size_bytes": 313029
+      },
+      {
+        "mtime_ns": 1784725980603881887,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5ert_A/pb_states_R1.h5",
+        "size_bytes": 307060
+      },
+      {
+        "mtime_ns": 1784726079240710037,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5ert_A/pb_states_R2.h5",
+        "size_bytes": 306245
+      },
+      {
+        "mtime_ns": 1784726178073341723,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5ert_A/pb_states_R3.h5",
+        "size_bytes": 298315
+      },
+      {
+        "mtime_ns": 1784726547106469672,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5exe_C/pb_states_R1.h5",
+        "size_bytes": 246836
+      },
+      {
+        "mtime_ns": 1784726622562532552,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5exe_C/pb_states_R2.h5",
+        "size_bytes": 241472
+      },
+      {
+        "mtime_ns": 1784726698090555526,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5exe_C/pb_states_R3.h5",
+        "size_bytes": 243565
+      },
+      {
+        "mtime_ns": 1784727134726142252,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5g68_A/pb_states_R1.h5",
+        "size_bytes": 252285
+      },
+      {
+        "mtime_ns": 1784727222121983672,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5g68_A/pb_states_R2.h5",
+        "size_bytes": 263755
+      },
+      {
+        "mtime_ns": 1784727309321808910,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5g68_A/pb_states_R3.h5",
+        "size_bytes": 256753
+      },
+      {
+        "mtime_ns": 1784727870403150096,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5hz7_A/pb_states_R1.h5",
+        "size_bytes": 339166
+      },
+      {
+        "mtime_ns": 1784727989109307747,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5hz7_A/pb_states_R2.h5",
+        "size_bytes": 334656
+      },
+      {
+        "mtime_ns": 1784728108067726008,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5hz7_A/pb_states_R3.h5",
+        "size_bytes": 335662
+      },
+      {
+        "mtime_ns": 1784728204158603736,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5kko_D/pb_states_R1.h5",
+        "size_bytes": 44561
+      },
+      {
+        "mtime_ns": 1784728217310459425,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5kko_D/pb_states_R2.h5",
+        "size_bytes": 39637
+      },
+      {
+        "mtime_ns": 1784728230426317562,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5kko_D/pb_states_R3.h5",
+        "size_bytes": 39195
+      },
+      {
+        "mtime_ns": 1784728427924396720,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5kvk_A/pb_states_R1.h5",
+        "size_bytes": 95127
+      },
+      {
+        "mtime_ns": 1784728468836041715,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5kvk_A/pb_states_R2.h5",
+        "size_bytes": 101748
+      },
+      {
+        "mtime_ns": 1784728509739698990,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5kvk_A/pb_states_R3.h5",
+        "size_bytes": 98303
+      },
+      {
+        "mtime_ns": 1784728794341583011,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5naz_A/pb_states_R1.h5",
+        "size_bytes": 175859
+      },
+      {
+        "mtime_ns": 1784728849269216895,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5naz_A/pb_states_R2.h5",
+        "size_bytes": 198669
+      },
+      {
+        "mtime_ns": 1784728904208861170,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5naz_A/pb_states_R3.h5",
+        "size_bytes": 188454
+      },
+      {
+        "mtime_ns": 1784729076095804707,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5opz_A/pb_states_R1.h5",
+        "size_bytes": 89325
+      },
+      {
+        "mtime_ns": 1784729107863617373,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5opz_A/pb_states_R2.h5",
+        "size_bytes": 92442
+      },
+      {
+        "mtime_ns": 1784729139655432012,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5opz_A/pb_states_R3.h5",
+        "size_bytes": 93843
+      },
+      {
+        "mtime_ns": 1784729338358314028,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5vu3_B/pb_states_R1.h5",
+        "size_bytes": 115766
+      },
+      {
+        "mtime_ns": 1784729379370090578,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5vu3_B/pb_states_R2.h5",
+        "size_bytes": 117194
+      },
+      {
+        "mtime_ns": 1784729420197870186,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5vu3_B/pb_states_R3.h5",
+        "size_bytes": 115025
+      },
+      {
+        "mtime_ns": 1784729666012578537,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5w2f_A/pb_states_R1.h5",
+        "size_bytes": 128692
+      },
+      {
+        "mtime_ns": 1784729715464324560,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5w2f_A/pb_states_R2.h5",
+        "size_bytes": 126693
+      },
+      {
+        "mtime_ns": 1784729764880072326,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/5w2f_A/pb_states_R3.h5",
+        "size_bytes": 119139
+      },
+      {
+        "mtime_ns": 1784729985321099531,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6a02_A/pb_states_R1.h5",
+        "size_bytes": 108127
+      },
+      {
+        "mtime_ns": 1784730028612424823,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6a02_A/pb_states_R2.h5",
+        "size_bytes": 104817
+      },
+      {
+        "mtime_ns": 1784730071819781377,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6a02_A/pb_states_R3.h5",
+        "size_bytes": 106920
+      },
+      {
+        "mtime_ns": 1784730211909873136,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6as3_A/pb_states_R1.h5",
+        "size_bytes": 42225
+      },
+      {
+        "mtime_ns": 1784730237429551074,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6as3_A/pb_states_R2.h5",
+        "size_bytes": 33811
+      },
+      {
+        "mtime_ns": 1784730263005235264,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6as3_A/pb_states_R3.h5",
+        "size_bytes": 44675
+      },
+      {
+        "mtime_ns": 1784730517986401149,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6atg_C/pb_states_R1.h5",
+        "size_bytes": 120593
+      },
+      {
+        "mtime_ns": 1784730569521884320,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6atg_C/pb_states_R2.h5",
+        "size_bytes": 119238
+      },
+      {
+        "mtime_ns": 1784730621261380319,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6atg_C/pb_states_R3.h5",
+        "size_bytes": 114749
+      },
+      {
+        "mtime_ns": 1784730742476250044,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6avj_B/pb_states_R1.h5",
+        "size_bytes": 88929
+      },
+      {
+        "mtime_ns": 1784730764640050115,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6avj_B/pb_states_R2.h5",
+        "size_bytes": 77355
+      },
+      {
+        "mtime_ns": 1784730786755852481,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6avj_B/pb_states_R3.h5",
+        "size_bytes": 73021
+      },
+      {
+        "mtime_ns": 1784731161472722240,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6bm5_A/pb_states_R1.h5",
+        "size_bytes": 231550
+      },
+      {
+        "mtime_ns": 1784731239304110161,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6bm5_A/pb_states_R2.h5",
+        "size_bytes": 239083
+      },
+      {
+        "mtime_ns": 1784731316495512124,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6bm5_A/pb_states_R3.h5",
+        "size_bytes": 228492
+      },
+      {
+        "mtime_ns": 1784731556013700937,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6fy5_A/pb_states_R1.h5",
+        "size_bytes": 133638
+      },
+      {
+        "mtime_ns": 1784731603729346447,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6fy5_A/pb_states_R2.h5",
+        "size_bytes": 134932
+      },
+      {
+        "mtime_ns": 1784731651412993871,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6fy5_A/pb_states_R3.h5",
+        "size_bytes": 128840
+      },
+      {
+        "mtime_ns": 1784731816059787375,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6j56_A/pb_states_R1.h5",
+        "size_bytes": 92472
+      },
+      {
+        "mtime_ns": 1784731846203568053,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6j56_A/pb_states_R2.h5",
+        "size_bytes": 94025
+      },
+      {
+        "mtime_ns": 1784731876375348942,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6j56_A/pb_states_R3.h5",
+        "size_bytes": 97917
+      },
+      {
+        "mtime_ns": 1784732101549976007,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6kty_A/pb_states_R1.h5",
+        "size_bytes": 179641
+      },
+      {
+        "mtime_ns": 1784732147246357048,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6kty_A/pb_states_R2.h5",
+        "size_bytes": 163298
+      },
+      {
+        "mtime_ns": 1784732192830687311,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6kty_A/pb_states_R3.h5",
+        "size_bytes": 166892
+      },
+      {
+        "mtime_ns": 1784732415835714970,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6ndw_B/pb_states_R1.h5",
+        "size_bytes": 114747
+      },
+      {
+        "mtime_ns": 1784732458599820940,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6ndw_B/pb_states_R2.h5",
+        "size_bytes": 123127
+      },
+      {
+        "mtime_ns": 1784732501331903024,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6ndw_B/pb_states_R3.h5",
+        "size_bytes": 113348
+      },
+      {
+        "mtime_ns": 1784733165043214040,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6nl2_A/pb_states_R1.h5",
+        "size_bytes": 423535
+      },
+      {
+        "mtime_ns": 1784733304398795243,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6nl2_A/pb_states_R2.h5",
+        "size_bytes": 418827
+      },
+      {
+        "mtime_ns": 1784733444002326873,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6nl2_A/pb_states_R3.h5",
+        "size_bytes": 411238
+      },
+      {
+        "mtime_ns": 1784733966068180397,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6o6y_A/pb_states_R1.h5",
+        "size_bytes": 323578
+      },
+      {
+        "mtime_ns": 1784734072423389738,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6o6y_A/pb_states_R2.h5",
+        "size_bytes": 306966
+      },
+      {
+        "mtime_ns": 1784734178566652044,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6o6y_A/pb_states_R3.h5",
+        "size_bytes": 309189
+      },
+      {
+        "mtime_ns": 1784734371925409843,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6q10_A/pb_states_R1.h5",
+        "size_bytes": 121002
+      },
+      {
+        "mtime_ns": 1784734409017183575,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6q10_A/pb_states_R2.h5",
+        "size_bytes": 120601
+      },
+      {
+        "mtime_ns": 1784734445804962357,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6q10_A/pb_states_R3.h5",
+        "size_bytes": 124507
+      },
+      {
+        "mtime_ns": 1784735249568608196,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6sms_A/pb_states_R1.h5",
+        "size_bytes": 532766
+      },
+      {
+        "mtime_ns": 1784735424219726202,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6sms_A/pb_states_R2.h5",
+        "size_bytes": 554006
+      },
+      {
+        "mtime_ns": 1784735599086853091,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6sms_A/pb_states_R3.h5",
+        "size_bytes": 563747
+      },
+      {
+        "mtime_ns": 1784735771841997493,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6uof_A/pb_states_R1.h5",
+        "size_bytes": 69155
+      },
+      {
+        "mtime_ns": 1784735799541860804,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6uof_A/pb_states_R2.h5",
+        "size_bytes": 63742
+      },
+      {
+        "mtime_ns": 1784735827317723861,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6uof_A/pb_states_R3.h5",
+        "size_bytes": 66867
+      },
+      {
+        "mtime_ns": 1784736370689462924,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6xds_A/pb_states_R1.h5",
+        "size_bytes": 341532
+      },
+      {
+        "mtime_ns": 1784736484984598537,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6xds_A/pb_states_R2.h5",
+        "size_bytes": 340128
+      },
+      {
+        "mtime_ns": 1784736598987783901,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6xds_A/pb_states_R3.h5",
+        "size_bytes": 345191
+      },
+      {
+        "mtime_ns": 1784737226327809277,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6xrx_A/pb_states_R1.h5",
+        "size_bytes": 370793
+      },
+      {
+        "mtime_ns": 1784737356291047234,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6xrx_A/pb_states_R2.h5",
+        "size_bytes": 369017
+      },
+      {
+        "mtime_ns": 1784737486798293310,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/6xrx_A/pb_states_R3.h5",
+        "size_bytes": 370442
+      },
+      {
+        "mtime_ns": 1784737936835749473,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/7qsu_A/pb_states_R1.h5",
+        "size_bytes": 271448
+      },
+      {
+        "mtime_ns": 1784738026859247357,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/7qsu_A/pb_states_R2.h5",
+        "size_bytes": 273813
+      },
+      {
+        "mtime_ns": 1784738117294645201,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/7qsu_A/pb_states_R3.h5",
+        "size_bytes": 278698
+      },
+      {
+        "mtime_ns": 1784738705514987164,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/7wab_A/pb_states_R1.h5",
+        "size_bytes": 471677
+      },
+      {
+        "mtime_ns": 1784738822166294633,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/7wab_A/pb_states_R2.h5",
+        "size_bytes": 490903
+      },
+      {
+        "mtime_ns": 1784738938625609334,
+        "path": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test/7wab_A/pb_states_R3.h5",
+        "size_bytes": 495398
+      }
+    ],
+    "method": "sha256(cache_schema_version + canonical path,size_bytes,mtime_ns records)"
+  },
+  "status": "passed",
+  "validity_definition": "at least one non-Z PB frame",
+  "z_excluded": true
+}

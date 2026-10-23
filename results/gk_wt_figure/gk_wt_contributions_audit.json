@@ -1,0 +1,109 @@
+{
+  "protein": "WT",
+  "sequence": "SVGEGPDTKPTARGQPAAVGRVVVLSGPSAVGKSTVVRCLRERIPNLHFSVSATTRAPRPGEVDGVDYHFIDPTRFQQLIDQGELLEWAEIHGGLHRSGTLAQPVRAAAATGVPVLIEVDLAGARAIKKTMPEAVTVFLAPPSWQDLQARLIGRGTETADVIQRRLDTARIELAAQGDFDKVVVNRRLESACAELVSLLVGTAPGSP",
+  "length": 207,
+  "condition": "esm3_top28_bilstm_attn",
+  "split": "gk_wt",
+  "seeds": [
+    1,
+    2,
+    3
+  ],
+  "matrix_definition": "elementwise arithmetic mean of the three saved exact C matrices",
+  "influence_definition": "mean_query(mean_seed(C_ij)); unsmoothed",
+  "seed_checks": [
+    {
+      "seed": 1,
+      "influence_max_abs_error": 0.0,
+      "logit_reconstruction_and_probability_audit": "passed by load_selected_seed"
+    },
+    {
+      "seed": 2,
+      "influence_max_abs_error": 0.0,
+      "logit_reconstruction_and_probability_audit": "passed by load_selected_seed"
+    },
+    {
+      "seed": 3,
+      "influence_max_abs_error": 0.0,
+      "logit_reconstruction_and_probability_audit": "passed by load_selected_seed"
+    }
+  ],
+  "saved_mean_profile_max_abs_error": 8.326672684688674e-17,
+  "band_count": 9,
+  "positive_band_count": 4,
+  "negative_band_count": 5,
+  "band_definition": "saved primary seed-stable intervals, >=2/3 seeds at IoU>=0.5; no redetection",
+  "coordinate_convention": "input sequence positions, 1-based inclusive; not PDB numbering",
+  "mean_matrix_sha256": "c5d64ca239dd235ab7aef1119280948e2dbaa530a68a15eb7fa6c3267540293e",
+  "sources": [
+    {
+      "path": "./esmfluc/visualization/plot_seed_averaged_contributions.py",
+      "sha256": "3ee962afa69f3cd735ddb2702f9c357a9c4576cef3b75b7a820a6de806ade299"
+    },
+    {
+      "path": "./results/guanylate_kinase_inference/exact_contributions_v2/manifest.tsv",
+      "sha256": "4374fecf5c1e68844a80f77849033d05850a40739b22f971e3921cff778b2a5d"
+    },
+    {
+      "path": "./examples/gk_wt/native_wt.fasta",
+      "sha256": "6f0d01a68889e15fa754d7f81c02d20a1ae4ee917e916fdeb65b4936d520f711"
+    },
+    {
+      "path": "./results/gk_wt_figure/analysis/profiles_manifest.tsv",
+      "sha256": "16a8d33618bb14b08d159d9415e6a7f39183c4570cf342f1dbbf1dc80a823289"
+    },
+    {
+      "path": "./results/gk_wt_figure/analysis/reproducibility_interval_iou05/stable_signed_bands.csv",
+      "sha256": "b00ffb90fdc0649032b6dddb43aaac82d76ea4e747c7bb8cbd52e7e7bf42bf6d"
+    },
+    {
+      "path": "./results/guanylate_kinase_inference/exact_contributions_v2/runs/esm3_top28_bilstm_attn/seed_1/attention.json",
+      "sha256": "d74957e9297860ff99879e07dfd80062ffc0acc5e4053b61d34debdefd1bf304"
+    },
+    {
+      "path": "./results/guanylate_kinase_inference/exact_contributions_v2/runs/esm3_top28_bilstm_attn/seed_1/flex_rigid_logit_contributions.npz",
+      "sha256": "637efdea52e35fbe119cabc2f798397334229b7d7e82c660f31b90ba89e7d9ca"
+    },
+    {
+      "path": "./results/gk_wt_figure/analysis/profiles/seed_1/signed_profile.json.gz",
+      "sha256": "3042e027f13d1fd427499dbe0f83be8c1787960d0265d18247772fec92f7f5f6"
+    },
+    {
+      "path": "./results/guanylate_kinase_inference/exact_contributions_v2/runs/esm3_top28_bilstm_attn/seed_2/attention.json",
+      "sha256": "58c37b9498036095c8613395a9a423186a596f07dc2e43e226adac6b083408ee"
+    },
+    {
+      "path": "./results/guanylate_kinase_inference/exact_contributions_v2/runs/esm3_top28_bilstm_attn/seed_2/flex_rigid_logit_contributions.npz",
+      "sha256": "ce5410947a3a171a25ffd408e1534b62fecd06942bac371b3c2c8df176ba8e16"
+    },
+    {
+      "path": "./results/gk_wt_figure/analysis/profiles/seed_2/signed_profile.json.gz",
+      "sha256": "c91efd069f941f6f9caf9af7e2d07bc2f3078805f5f302c5115522991d15e1f0"
+    },
+    {
+      "path": "./results/guanylate_kinase_inference/exact_contributions_v2/runs/esm3_top28_bilstm_attn/seed_3/attention.json",
+      "sha256": "e5647206a90ec430324710e2b7e23b0a3090a3b147d74eea8c1c88a8191daeb5"
+    },
+    {
+      "path": "./results/guanylate_kinase_inference/exact_contributions_v2/runs/esm3_top28_bilstm_attn/seed_3/flex_rigid_logit_contributions.npz",
+      "sha256": "385be57597a5ab423330d6527bd8b4202ab10062c4da2f97e2c78063b05d78ba"
+    },
+    {
+      "path": "./results/gk_wt_figure/analysis/profiles/seed_3/signed_profile.json.gz",
+      "sha256": "2945ca22d93d5e5e248bb79ab62048c52b4efd3ff8987456f75c55db806d60f6"
+    }
+  ],
+  "outputs": [
+    "./results/gk_wt_figure/gk_wt_contributions.pdf",
+    "./results/gk_wt_figure/gk_wt_contributions.svg",
+    "./results/gk_wt_figure/gk_wt_contributions.png",
+    "./results/gk_wt_figure/gk_wt_contributions_audit.json",
+    "./results/gk_wt_figure/gk_wt_contributions_influence.csv",
+    "./results/gk_wt_figure/gk_wt_contributions_bands.csv"
+  ],
+  "color_limit": 0.07664440726240473,
+  "color_quantile": 0.99,
+  "fraction_of_cells_color_clipped": 0.010011902261429671,
+  "preview": "./results/gk_wt_figure/gk_wt_contributions.png",
+  "profile_panel_height_inches": 1.55
+}

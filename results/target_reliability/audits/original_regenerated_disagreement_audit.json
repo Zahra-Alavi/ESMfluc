@@ -1,0 +1,9 @@
+{
+  "binary_disagreements": 10,
+  "disagreements_with_any_z_frames": 0,
+  "disagreements_within_five_residues_of_terminus": 0,
+  "disagreements_within_two_residues_of_terminus": 0,
+  "population": "all three replicates PB-valid",
+  "proteins_with_disagreements": 8,
+  "status": "passed"
+}

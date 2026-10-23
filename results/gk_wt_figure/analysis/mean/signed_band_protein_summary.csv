@@ -1,0 +1,2 @@
+condition,seed,split,json_path,influence_field,protein,protein_length,eligible_start_index_0based,eligible_end_index_0based_exclusive,terminal_exclusion_used,n_flexibility_supporting_bands,n_rigidity_supporting_bands,n_total_bands,profile_identity_max_abs_error
+esm3_top28_bilstm_attn,average,gk_wt,./results/gk_wt_figure/analysis/profiles/seed_1/signed_profile.json.gz,seed_averaged_signed_column_influence,WT,207,1,206,0,4,6,10,4.5952286420458677e-10

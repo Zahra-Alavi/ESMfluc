@@ -1,0 +1,8 @@
+{
+  "flexible_scores_equal_class_probs_column_1_within_tolerance": true,
+  "hard_predictions_equal_probability_argmax": true,
+  "maximum_absolute_difference": 0.0,
+  "scores_in_unit_interval": true,
+  "status": "passed",
+  "tolerance": 1e-06
+}

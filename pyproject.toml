@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "esmfluc"
+version = "1.0.0"
+description = "Residue-level Protein Block variability prediction and signed-influence analysis"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "biopython==1.83",
+    "esm==3.2.1.post1",
+    "h5py==3.12.1",
+    "httpx==0.28.1",
+    "matplotlib==3.9.1",
+    "MDAnalysis==2.4.3",
+    "networkx==3.3",
+    "numpy==1.26.4",
+    "pandas==2.2.2",
+    "pheatmap>=1,<2",
+    "plotly==5.24.1",
+    "psutil==5.9.8",
+    "requests==2.32.2",
+    "remotezip>=0.12,<1",
+    "safetensors==0.4.3",
+    "scikit-learn==1.5.0",
+    "scipy==1.13.1",
+    "torch==2.3.0",
+    "transformers==4.41.1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<9"]
+esm3 = [
+    "esm==3.2.1.post1",
+]
+structure = [
+    "biopython==1.83",
+    "MDAnalysis==2.4.3",
+]
+data = [
+    "remotezip>=0.12,<1",
+]
+visualization = [
+    "pheatmap>=1,<2",
+    "plotly==5.24.1",
+]
+
+[project.scripts]
+esmfluc-train = "esmfluc.training.main:main"
+esmfluc-infer = "esmfluc.inference.get_attn:main"
+esmfluc-bands = "esmfluc.analysis.bands.__main__:main"
+esmfluc-neq-pb = "esmfluc.analysis.endpoint.analyze_neq_pb_reliability:main"
+esmfluc-analyze-seeds = "esmfluc.evaluation.analyze_seed_variance:main"
+esmfluc-extract-contributions = "esmfluc.inference.extract_all_split_signed_contributions:main"
+esmfluc-audit-contributions = "esmfluc.inference.audit_all_split_signed_contributions:main"
+esmfluc-build-contacts = "esmfluc.inference.build_contact_maps_from_pdb:main"
+esmfluc-create-atlas-split = "esmfluc.datasets.create_atlas_grouped_splits:main"
+esmfluc-benchmark-pegasus-mdcath = "esmfluc.benchmarks.benchmark_pegasus_mdcath:main"
+esmfluc-benchmark-mdcath = "esmfluc.benchmarks.benchmark_unified_mdcath:main"
+esmfluc-complete-benchmark-metrics = "esmfluc.benchmarks.benchmark_atlas_mdcath_missing_metrics:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["esmfluc*"]
+namespaces = false
+
+[tool.setuptools.exclude-package-data]
+"*" = ["*.pyc", "__pycache__/*"]

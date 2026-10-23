@@ -1,0 +1,31 @@
+{
+  "bootstrap_seed": 20260730,
+  "cache_source_provenance": "SHA-256 of cache schema version plus canonical path, size_bytes, and mtime_ns records",
+  "dominant_state_minimum_coverage": "at least 10 proteins and at least 20 residues per class",
+  "manifest": "./results/publication_comparable_v2/manifest.tsv",
+  "n_bootstrap": 1000,
+  "output_dir": "./results/publication_comparable_v2/analysis_neq_pb_reliability",
+  "pb_cache_schema_version": "pb-reliability-cache-v2",
+  "pb_root": "external_inputs/MDStrainMapper/results/atlas_grouped_v1_test",
+  "pb_transition_rate_retained": false,
+  "pb_validity": "at least one valid non-Z frame per replicate",
+  "prediction_cache_schema_version": "prediction-residue-cache-v2",
+  "score": "saved flexible_scores = P(class 1: Neq > 1.0)",
+  "secondary_occupancy_thresholds": [
+    0.0,
+    0.001,
+    0.005,
+    0.01,
+    0.02,
+    0.05
+  ],
+  "test_csv": "./data_splits/atlas_grouped_v1/test_grouped_v1.csv",
+  "thresholds": [
+    1.0,
+    1.01,
+    1.05,
+    1.1,
+    1.5,
+    2.0
+  ]
+}
