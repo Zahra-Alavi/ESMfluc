@@ -1,0 +1,9 @@
+protein,disagreement_count,minimum_residue_number_1based,maximum_residue_number_1based,disagreements_with_any_z_frames,disagreements_within_two_residues_of_terminus,disagreements_within_five_residues_of_terminus
+1ouw_C,2,19,20,0,0,0
+1zjc_A,2,343,351,0,0,0
+1iom_A,1,188,188,0,0,0
+2igp_A,1,28,28,0,0,0
+3bpt_A,1,76,76,0,0,0
+3st1_A,1,89,89,0,0,0
+5opz_A,1,21,21,0,0,0
+6uof_A,1,98,98,0,0,0

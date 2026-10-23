@@ -1,0 +1,2 @@
+condition	seed	split	json_gz	source_seeds	influence_field
+esm3_top28_bilstm_attn	average	gk_wt	./results/gk_wt_figure/analysis/profiles/seed_1/signed_profile.json.gz	1,2,3	seed_averaged_signed_column_influence

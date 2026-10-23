@@ -1,0 +1,2 @@
+# Python 3.11; dependency versions are declared in pyproject.toml.
+-e .[test]

@@ -1,0 +1,11 @@
+row_id,protein,residue_index_0based,residue_number_1based,sequence_length,original_neq,original_binary_label,n_valid_replicates,all_three_replicates_pb_valid,n_multi_state_replicates,mean_replicate_neq,minimum_valid_pb_frame_fraction,mean_valid_pb_frame_fraction,regenerated_binary_label,binary_label_agrees,absolute_neq_difference,terminal_distance_0based,within_two_residues_of_terminus,within_five_residues_of_terminus,has_any_z_frames
+2851,1iom_A,187,188,377,1.0,0,3,True,1,1.0003404860922862,1.0,1.0,1,False,0.0003404860922862074,187,False,False,False
+7209,1ouw_C,18,19,152,1.0,0,3,True,1,1.0003404860922862,1.0,1.0,1,False,0.0003404860922862074,18,False,False,False
+7210,1ouw_C,19,20,152,1.0,0,3,True,1,1.0003404860922862,1.0,1.0,1,False,0.0003404860922862074,19,False,False,False
+11725,1zjc_A,342,343,418,1.0,0,3,True,1,1.0006350202132588,1.0,1.0,1,False,0.0006350202132587857,75,False,False,False
+11733,1zjc_A,350,351,418,1.0,0,3,True,1,1.0003404860922862,1.0,1.0,1,False,0.0003404860922862074,67,False,False,False
+15677,2igp_A,27,28,120,1.0,0,3,True,1,1.0003404860922862,1.0,1.0,1,False,0.0003404860922862074,27,False,False,False
+22059,3bpt_A,75,76,363,1.0,0,3,True,1,1.0006350202132588,1.0,1.0,1,False,0.0006350202132587857,75,False,False,False
+33441,3st1_A,88,89,214,1.0,0,3,True,1,1.0003404860922862,1.0,1.0,1,False,0.0003404860922862074,88,False,False,False
+41691,5opz_A,20,21,137,1.0,0,3,True,1,1.0003404860922862,1.0,1.0,1,False,0.0003404860922862074,20,False,False,False
+45825,6uof_A,97,98,119,1.0,0,3,True,1,1.0003404860922862,1.0,1.0,1,False,0.0003404860922862074,21,False,False,False

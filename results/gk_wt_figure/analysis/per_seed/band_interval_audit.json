@@ -1,0 +1,70 @@
+{
+  "detector_version": "phase1_raw_amplitude_half_intensity_v1",
+  "support_method": "half_intensity_merge",
+  "n_protein_profiles": 3,
+  "n_bands": 30,
+  "n_assigned_residues": 146,
+  "n_multiply_assigned_residues": 0,
+  "opposite_sign_support_overlap_fraction": 0.0,
+  "all_support_pair_overlap_fraction": 0.0,
+  "all_invariants_pass": true,
+  "invariants": [
+    "every band interval contains its primary apex",
+    "every band interval contains only influence having its apex sign",
+    "no band-interval pair overlaps",
+    "all band intervals stay inside the eligible interval",
+    "band width equals end - start + 1",
+    "no residue is assigned to more than one band",
+    "overlapping same-sign half-intensity intervals are merged and retain the strongest-amplitude apex"
+  ],
+  "per_protein_audits": [
+    {
+      "condition": "esm3_top28_bilstm_attn",
+      "seed": 1,
+      "split": "gk_wt",
+      "protein": "WT",
+      "n_bands": 10,
+      "n_assigned_residues": 41,
+      "n_multiply_assigned_residues": 0,
+      "all_bands_contain_primary_apex": true,
+      "all_bands_sign_constrained": true,
+      "all_bands_inside_eligible_interval": true,
+      "all_band_widths_exact": true,
+      "apex_positions_unchanged": true,
+      "n_candidate_apices_before_interval_merge": 10,
+      "n_bands_after_interval_merge": 10
+    },
+    {
+      "condition": "esm3_top28_bilstm_attn",
+      "seed": 2,
+      "split": "gk_wt",
+      "protein": "WT",
+      "n_bands": 10,
+      "n_assigned_residues": 54,
+      "n_multiply_assigned_residues": 0,
+      "all_bands_contain_primary_apex": true,
+      "all_bands_sign_constrained": true,
+      "all_bands_inside_eligible_interval": true,
+      "all_band_widths_exact": true,
+      "apex_positions_unchanged": true,
+      "n_candidate_apices_before_interval_merge": 14,
+      "n_bands_after_interval_merge": 10
+    },
+    {
+      "condition": "esm3_top28_bilstm_attn",
+      "seed": 3,
+      "split": "gk_wt",
+      "protein": "WT",
+      "n_bands": 10,
+      "n_assigned_residues": 51,
+      "n_multiply_assigned_residues": 0,
+      "all_bands_contain_primary_apex": true,
+      "all_bands_sign_constrained": true,
+      "all_bands_inside_eligible_interval": true,
+      "all_band_widths_exact": true,
+      "apex_positions_unchanged": true,
+      "n_candidate_apices_before_interval_merge": 10,
+      "n_bands_after_interval_merge": 10
+    }
+  ]
+}

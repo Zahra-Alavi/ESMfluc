@@ -1,0 +1,130 @@
+{
+  "analysis": "seed-stable influence apex / raw component extremum coincidence",
+  "created_utc": "2026-10-23T16:58:26.230289+00:00",
+  "splits": [
+    "test"
+  ],
+  "conditions": [
+    "esm2_frozen_bilstm_attn",
+    "esm2_top28_bilstm_attn",
+    "esm2_top4_bilstm_attn",
+    "esm3_frozen_bilstm_attn",
+    "esm3_top28_bilstm_attn",
+    "esm3_top4_bilstm_attn"
+  ],
+  "catalog_scope": "primary seed-stable bands, at least two of three seeds",
+  "component_profiles": {
+    "evidence": "seed_averaged_intrinsic_signed_evidence",
+    "attention": "seed_averaged_attention_column_mean",
+    "influence": "seed_averaged_observed_signed_influence"
+  },
+  "averaging": "Separate arithmetic means of each saved profile over seeds 1, 2, 3. Mean influence is NOT reconstructed as mean(s) * mean(B).",
+  "extrema": "scipy.signal.find_peaks on the complete raw profile. Positive evidence maxima and negative evidence minima must have the source-band sign; attention uses maxima only. No smoothing, amplitude/prominence threshold, or coordinate tolerance.",
+  "plateaus_and_endpoints": "SciPy default: midpoint of a flat peak, rounded down; sequence endpoints are not extrema.",
+  "categories": [
+    "evidence_only",
+    "attention_only",
+    "both",
+    "neither"
+  ],
+  "reference_groups": {
+    "other_influence_extrema": "Same-sign raw local extrema of the three-seed mean influence profile, excluding retained primary seed-stable apex positions. No amplitude threshold or seed-support criterion is imposed on reference extrema. Entire band intervals are NOT excluded; references can include subthreshold, unstable and merged secondary extrema.",
+    "all_same_sign_residues": "All non-endpoint residues with strictly positive or strictly negative three-seed mean influence, as appropriate. Includes stable apices and other extrema; exact-zero influence residues are excluded."
+  },
+  "denominators": "Stable-apex percent_* columns use n_apices; reference-rate tables use n_positions. Both are pooled within condition/split/sign, not equally weighted by protein. Appended reference columns in the stable summaries carry each group's n_positions, n_evidence_extremum and percent_evidence_extremum. Empty groups have zero counts and missing percentages. Evidence/attention counts each include both.",
+  "coordinate_convention": "Input-sequence indices, not PDB numbering; interval ends are inclusive.",
+  "interpretation": "Descriptive comparisons of stable apices with other influence extrema and same-sign residues. Matching on being an influence extremum addresses one selection difference, but does not remove all algebraic or selection dependencies; this is not an enrichment test or causal intervention.",
+  "command": [
+    "./artifacts/colab/fresh-env/bin/python",
+    "-m",
+    "esmfluc.analysis.bands",
+    "apex-component-localization",
+    "--bands-csv",
+    "./results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/reproducibility_interval_iou05_null_fixed_test/stable_signed_bands.csv",
+    "--profiles-manifest-tsv",
+    "./results/publication_comparable_v2/analysis_uniform_attention_control_upgraded_raw_mad2/seed_averaged_profiles/seed_averaged_profile_manifest.tsv",
+    "--output-dir",
+    "./results/publication_comparable_v2/analysis_apex_component_localization_with_references",
+    "--splits",
+    "test"
+  ],
+  "environment": {
+    "python": "3.11.12",
+    "numpy": "1.26.4",
+    "pandas": "2.2.2",
+    "scipy": "1.13.1"
+  },
+  "inputs": [
+    {
+      "path": "./results/publication_comparable_v2/analysis_phase1_upgraded_raw_mad2/reproducibility_interval_iou05_null_fixed_test/stable_signed_bands.csv",
+      "bytes": 13930098,
+      "sha256": "cb93c9e1829c94258188dab63d9805859a2da79a02054c812e10a240b7c5cf60"
+    },
+    {
+      "path": "./results/publication_comparable_v2/analysis_uniform_attention_control_upgraded_raw_mad2/seed_averaged_profiles/seed_averaged_profile_manifest.tsv",
+      "bytes": 5775,
+      "sha256": "54f0a853a634c307358d44b2fb57a8287ebb90ad91e6fbd231b51920dd855b64"
+    },
+    {
+      "path": "./results/publication_comparable_v2/analysis_uniform_attention_control_upgraded_raw_mad2/seed_averaged_profiles/esm2_frozen_bilstm_attn/test_seed_averaged_profiles.json.gz",
+      "bytes": 2280331,
+      "sha256": "a75ae8e80dc9af61aed638b6822f7e8cfd407651923c64b5a6c1c0d60dc06ba8"
+    },
+    {
+      "path": "./results/publication_comparable_v2/analysis_uniform_attention_control_upgraded_raw_mad2/seed_averaged_profiles/esm2_top28_bilstm_attn/test_seed_averaged_profiles.json.gz",
+      "bytes": 2280602,
+      "sha256": "60e1bdda41996360d3eb5a2241485e13553835f9c4609cd01856f729df86bc60"
+    },
+    {
+      "path": "./results/publication_comparable_v2/analysis_uniform_attention_control_upgraded_raw_mad2/seed_averaged_profiles/esm2_top4_bilstm_attn/test_seed_averaged_profiles.json.gz",
+      "bytes": 2282801,
+      "sha256": "7404dd58383aedd8e83ce3534d7df2f314a666754b25e90ee76190ec3d0b86cf"
+    },
+    {
+      "path": "./results/publication_comparable_v2/analysis_uniform_attention_control_upgraded_raw_mad2/seed_averaged_profiles/esm3_frozen_bilstm_attn/test_seed_averaged_profiles.json.gz",
+      "bytes": 2287925,
+      "sha256": "611e80de312e35b34734b5ea1cd257b41f2731d9c5bb0ecae79e06a75a247209"
+    },
+    {
+      "path": "./results/publication_comparable_v2/analysis_uniform_attention_control_upgraded_raw_mad2/seed_averaged_profiles/esm3_top28_bilstm_attn/test_seed_averaged_profiles.json.gz",
+      "bytes": 2284194,
+      "sha256": "82a6fb706991caaa0283b361462ce342f8de2c4f8c19ed62488d09fedcd1d29f"
+    },
+    {
+      "path": "./results/publication_comparable_v2/analysis_uniform_attention_control_upgraded_raw_mad2/seed_averaged_profiles/esm3_top4_bilstm_attn/test_seed_averaged_profiles.json.gz",
+      "bytes": 2283214,
+      "sha256": "a67e28e7f1d46403abf1cc9dc71e8f9106e05c5e63467badbfaa8f65dfc10e92"
+    }
+  ],
+  "source_sha256": "6fba6d1268eb2210fdf4df998fb49c424f8d22491b8012c173c4242a0ce2f147",
+  "outputs": {
+    "per_apex_component_localization.csv": {
+      "rows": 11039,
+      "sha256": "430a18b2881463c65bcad54238a875c5eb1f07a193fc036ca141dc88ae57cd39"
+    },
+    "component_localization_by_condition_sign.csv": {
+      "rows": 12,
+      "sha256": "b5066c307299fcd4a12583b6ef92bac579dc92b4ac2dd7e779989b75465ddffe"
+    },
+    "component_localization_by_condition.csv": {
+      "rows": 6,
+      "sha256": "c7a45c59b08de25c54893b98c9a348727507d206c4b07168e87b0e4aa163e68d"
+    },
+    "per_reference_influence_extremum.csv": {
+      "rows": 26696,
+      "sha256": "529344a955553a56ad9f9af87350edb0168fad4e96bf81f2d59398d49b9e1c4c"
+    },
+    "component_reference_counts_by_protein.csv": {
+      "rows": 4992,
+      "sha256": "6c493c907c0ac76ea35f90614c1b91719d894ae6ce15bc99222fc2287f45fdc6"
+    },
+    "component_reference_rates_by_condition_sign.csv": {
+      "rows": 24,
+      "sha256": "87061965c4f2246276e9e64fb39f1102e936248bcadfeaaec8b774acfa86ddbb"
+    },
+    "component_reference_rates_by_condition.csv": {
+      "rows": 12,
+      "sha256": "15ab94b897bd9c9162e4a49c35535c9e59c53359eae3bc8a715570002458c861"
+    }
+  }
+}

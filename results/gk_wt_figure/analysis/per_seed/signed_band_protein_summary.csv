@@ -1,0 +1,4 @@
+condition,seed,split,json_path,influence_field,protein,protein_length,eligible_start_index_0based,eligible_end_index_0based_exclusive,terminal_exclusion_used,n_flexibility_supporting_bands,n_rigidity_supporting_bands,n_total_bands,profile_identity_max_abs_error
+esm3_top28_bilstm_attn,1,gk_wt,./results/gk_wt_figure/analysis/profiles/seed_1/signed_profile.json.gz,signed_column_influence,WT,207,1,206,0,5,5,10,4.5952286420458677e-10
+esm3_top28_bilstm_attn,2,gk_wt,./results/gk_wt_figure/analysis/profiles/seed_2/signed_profile.json.gz,signed_column_influence,WT,207,1,206,0,5,5,10,4.021097690931619e-11
+esm3_top28_bilstm_attn,3,gk_wt,./results/gk_wt_figure/analysis/profiles/seed_3/signed_profile.json.gz,signed_column_influence,WT,207,1,206,0,4,6,10,2.1222952562016673e-10

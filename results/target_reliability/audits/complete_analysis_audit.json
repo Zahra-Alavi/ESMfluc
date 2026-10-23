@@ -1,0 +1,22 @@
+{
+  "bootstrap_replicates_per_metric": 1000,
+  "bootstrap_sampling_unit": "protein",
+  "cache_source_provenance_verified": true,
+  "conditions": 7,
+  "cutoff_1_reproduces_original_endpoint": true,
+  "embedded_runtime_self_tests_passed": true,
+  "paired_bootstrap_draws_shared": true,
+  "pb_cache_schema_version": "pb-reliability-cache-v2",
+  "pb_cache_tables_revalidated_on_reuse": true,
+  "pb_hdf5_files": 624,
+  "pb_runtime_invariants_passed": true,
+  "prediction_cache_schema_version": "prediction-residue-cache-v2",
+  "prediction_runtime_invariants_passed": true,
+  "required_output_presence_checks_passed": 28,
+  "runs": 21,
+  "seed_ensembles": 7,
+  "status": "passed",
+  "test_proteins": 208,
+  "test_residues": 47751,
+  "validation_scope": "Detailed runtime invariants plus presence checks for the enumerated required outputs; this field does not claim detailed consistency testing of every generated artifact."
+}

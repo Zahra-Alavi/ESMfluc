@@ -1,0 +1,38 @@
+# Python environments, caches and build products
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+.DS_Store
+
+# Credentials and local tooling
+.env
+.env.*
+.netrc
+*token*
+*secret*
+upload-state.local.json
+*.pem
+*.key
+.aws/
+.ssh/
+.agents/
+
+# Weights, retrieved inputs and regenerable large intermediates
+*.pth
+*.pt
+*.safetensors
+*.npz
+artifacts/
+external_inputs/
+**/runs/
+**/cache/
+**/caches/
+**/prediction_cache/
+**/pegasus_models/
+*.log
+*.partial

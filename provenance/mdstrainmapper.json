@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/Zahra-Alavi/MDStrainMapper",
+  "tag": "v1.0",
+  "commit": "bbe8efcd273596b3fb4a0c1f279b56a0e6c5582a",
+  "description": "MDStrainMapper version used to compute the MD strain annotations reported in the paper."
+}

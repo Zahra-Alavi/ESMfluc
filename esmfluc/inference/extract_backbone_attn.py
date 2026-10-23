@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+"""
+extract_backbone_attn.py
+
+Extract the backbone (ESM2 or ESM3) last-layer attention for each sequence
+in a FASTA file, averaged over all attention heads, and save as a JSON that
+is format-compatible with the bilstm_attn.json produced by get_attn.py.
+
+For ESM2  : uses HuggingFace output_attentions=True → last layer → avg heads.
+For ESM3  : registers a forward hook on the last transformer block's self-
+            attention sub-module to capture post-softmax weights.
+            Falls back to a cosine-similarity proxy if the hook does not return
+            a [H, L, L] tensor (labelled "proxy" in the output).
+
+The checkpoint is always used so that unfrozen (fine-tuned) backbone weights
+are correctly reflected.  For frozen experiments the backbone weights in the
+checkpoint are identical to the pretrained weights, so there is no extra cost.
+
+Usage
+-----
+python -m esmfluc.inference.extract_backbone_attn \
+    --checkpoint  results/runs/esm2_frozen_bilstm_attn/seed_1/best_model.pth \
+    --fasta_file  data/atlas_grouped_v1/test_grouped_v1.fasta \
+    --esm_model   esm2_t33_650M_UR50D \
+    --output      results/runs/esm2_frozen_bilstm_attn/seed_1/backbone_attention.json
+
+For ESM3 replace --esm_model with --is_esm3.
+"""
+
+import os
+import argparse
+import json
+
+import torch
+
+from transformers import EsmModel, EsmTokenizer
+
+# ESM3 optional
+ESM3_INSTALL_MESSAGE = (
+    "ESM3 support requires the optional EvolutionaryScale 'esm' dependency.\n"
+    "From the repository root, install it with: "
+    "python -m pip install -e '.[esm3]'\n"
+    "Then accept the model licence and authenticate with Hugging Face."
+)
+ESM3_sm_open_v0 = None
+EsmSequenceTokenizer = None
+
+try:
+    from esm.pretrained import ESM3_sm_open_v0
+    from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
+
+    # ── Same compatibility patch as in get_attn.py ───────────────────────────
+    _SPECIAL_TOK_NAMES = (
+        'cls_token', 'eos_token', 'mask_token', 'pad_token',
+        'unk_token', 'bos_token', 'sep_token',
+    )
+    def _make_token_setter(private_name):
+        def setter(self, value):
+            object.__setattr__(self, private_name, value)
+        return setter
+
+    for _tok_name in _SPECIAL_TOK_NAMES:
+        _getter = None
+        for _klass in EsmSequenceTokenizer.__mro__:
+            _cls_attr = _klass.__dict__.get(_tok_name)
+            if isinstance(_cls_attr, property):
+                _getter = _cls_attr.fget
+                break
+        if _getter is not None:
+            setattr(EsmSequenceTokenizer, _tok_name, property(
+                _getter,
+                _make_token_setter('_' + _tok_name),
+            ))
+
+    _mro_has_getattr = any(
+        '__getattr__' in klass.__dict__
+        for klass in EsmSequenceTokenizer.__mro__
+        if klass is not EsmSequenceTokenizer
+    )
+    if not _mro_has_getattr:
+        def _esm3_compat_getattr(self, name):
+            try:
+                return object.__getattribute__(self, '_' + name)
+            except AttributeError:
+                pass
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
+        EsmSequenceTokenizer.__getattr__ = _esm3_compat_getattr
+
+    ESM3_AVAILABLE = True
+except Exception:
+    ESM3_AVAILABLE = False
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def parse_fasta(path):
+    """Yield (seq_id, sequence) pairs from a FASTA file."""
+    seq_id, lines = None, []
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                if seq_id is not None:
+                    yield seq_id, "".join(lines)
+                seq_id = line[1:].split()[0]
+                lines = []
+            else:
+                lines.append(line)
+    if seq_id is not None:
+        yield seq_id, "".join(lines)
+
+
+def attn_to_list(attn_2d):
+    """Convert a [L, L] numpy/tensor to a JSON-serialisable list of lists."""
+    if torch.is_tensor(attn_2d):
+        attn_2d = attn_2d.float().cpu().numpy()
+    return attn_2d.tolist()
+
+
+# ── ESM2 backbone attention ────────────────────────────────────────────────────
+
+def build_esm2_from_checkpoint(checkpoint, esm_model_name, device):
+    """
+    Build an EsmModel and optionally load fine-tuned weights from a checkpoint.
+    Falls back to pretrained weights if the checkpoint has no backbone keys.
+    """
+    raw_ckpt = checkpoint
+    # Filter only the embedding_model.* keys and strip the prefix
+    bb_state = {
+        k[len("embedding_model."):]: v
+        for k, v in raw_ckpt.items()
+        if k.startswith("embedding_model.")
+    }
+
+    model = EsmModel.from_pretrained(f"facebook/{esm_model_name}")
+    if bb_state:
+        missing, unexpected = model.load_state_dict(bb_state, strict=False)
+        if missing or unexpected:
+            raise RuntimeError(
+                "Backbone checkpoint does not exactly match the requested ESM2 model: "
+                f"missing={missing[:10]}, unexpected={unexpected[:10]}. "
+                "Refusing to mix checkpointed and pretrained backbone weights."
+            )
+        print(f"  [backbone] Loaded {len(bb_state)} ESM2 keys from checkpoint.")
+    else:
+        raise RuntimeError(
+            "Checkpoint contains no embedding_model.* keys; refusing to substitute a "
+            "fresh pretrained ESM2 backbone."
+        )
+    model.to(device).eval()
+    return model
+
+
+def extract_esm2_attn(esm2_model, tokenizer, seq, device):
+    """
+    Run one sequence through ESM2 with output_attentions=True.
+    Returns a [L, L] numpy array (last layer, averaged over heads).
+    L is the sequence length; special tokens are never added.
+    """
+    # Match the training/get_attn.py input convention exactly. The model was
+    # trained on residue tokens only, without CLS/EOS special tokens.
+    enc = tokenizer(seq, return_tensors="pt", padding=False, add_special_tokens=False)
+    input_ids      = enc["input_ids"].to(device)          # [1, L]
+    attention_mask = enc["attention_mask"].to(device)     # [1, L]
+
+    with torch.no_grad():
+        out = esm2_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=True,
+        )
+    # out.attentions: tuple of (num_layers,) × [1, num_heads, L, L]
+    last_layer = out.attentions[-1][0]          # [H, L, L]
+    core = last_layer.mean(dim=0)                # [L, L]
+    L = len(seq)
+    if core.shape != (L, L):
+        raise RuntimeError(
+            f"ESM2 attention shape {tuple(core.shape)} does not match sequence length {L}."
+        )
+
+    return core.cpu().numpy()
+
+
+# ── ESM3 backbone attention ────────────────────────────────────────────────────
+
+def build_esm3_from_checkpoint(checkpoint, device):
+    """
+    Load the raw ESM3 model and inject fine-tuned backbone weights from checkpoint.
+    Returns the raw ESM3 model (not wrapped).
+    """
+    raw_esm3 = ESM3_sm_open_v0(device)
+
+    # Keys for ESM3 backbone are under "embedding_model.esm3.*"
+    prefix = "embedding_model.esm3."
+    bb_state = {
+        k[len(prefix):]: v
+        for k, v in checkpoint.items()
+        if k.startswith(prefix)
+    }
+    if bb_state:
+        missing, unexpected = raw_esm3.load_state_dict(bb_state, strict=False)
+        print(f"  [backbone] Loaded {len(bb_state)} ESM3 keys from checkpoint.")
+        if missing:
+            print(f"  [backbone] {len(missing)} ESM3 keys not in checkpoint "
+                  "(pretrained kept).")
+    else:
+        # Try alternative prefix (wrapped differently)
+        prefix2 = "embedding_model."
+        bb_state2 = {
+            k[len(prefix2):]: v
+            for k, v in checkpoint.items()
+            if k.startswith(prefix2)
+        }
+        if bb_state2:
+            raw_esm3.load_state_dict(bb_state2, strict=False)
+            print(f"  [backbone] Loaded ESM3 keys via alternative prefix.")
+        else:
+            print("  [backbone] No ESM3 keys found in checkpoint; using pretrained weights.")
+
+    raw_esm3.eval()
+    return raw_esm3
+
+
+def extract_esm3_attn(raw_esm3, tokenizer, seq, device):
+    """
+    Run one sequence through ESM3 with output_attentions=True.
+    Returns a [L, L] numpy array (last layer, averaged over heads).
+    L is the sequence length (BOS/EOS tokens stripped).
+    """
+    enc = tokenizer(seq, return_tensors="pt", add_special_tokens=True)
+    input_ids = enc["input_ids"].to(device)
+    L = len(seq)
+
+    with torch.no_grad():
+        out = raw_esm3(sequence_tokens=input_ids, output_attentions=True)
+
+    # out.attentions: tuple of n_layers tensors, each [1, n_heads, L', L']
+    if not out.attentions:
+        raise RuntimeError(
+            "ESM3 returned an empty attentions tuple. "
+            "output_attentions=True is not supported by this build of the esm library."
+        )
+
+    last_layer = out.attentions[-1][0]      # [n_heads, L', L']
+    avg_heads  = last_layer.mean(dim=0)     # [L', L']
+
+    # Strip BOS/EOS tokens
+    Lp = avg_heads.shape[0]
+    if Lp >= L + 2:
+        core = avg_heads[1:L+1, 1:L+1]
+    elif Lp >= L:
+        core = avg_heads[:L, :L]
+    else:
+        raise RuntimeError(
+            f"Attention shape {tuple(avg_heads.shape)} is smaller than seq len {L}."
+        )
+
+    # Row-normalise (removing BOS/EOS breaks the softmax sum)
+    row_sums = core.sum(dim=-1, keepdim=True).clamp(min=1e-12)
+    core = (core / row_sums).float().cpu().numpy()
+    return core, "official_api"
+
+
+# ── Main ────────────────────────────────────────────────────────────────────────
+
+def parse_args():
+    p = argparse.ArgumentParser(
+        description="Extract backbone (ESM2/ESM3) last-layer attention from a checkpoint."
+    )
+    p.add_argument("--checkpoint",  required=True, help="Path to best_model.pth")
+    p.add_argument("--fasta_file",  required=True, help="Path to FASTA file")
+    p.add_argument("--output",      required=True, help="Output JSON path")
+    p.add_argument("--esm_model",   default="esm2_t33_650M_UR50D",
+                   help="HuggingFace ESM2 model name (ignored when --is_esm3 is set)")
+    p.add_argument("--is_esm3",     action="store_true",
+                   help="Use ESM3 backbone instead of ESM2")
+    p.add_argument("--device",      default=None,
+                   help="Torch device (default: cuda if available, else cpu)")
+    return p.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    if args.is_esm3 and not ESM3_AVAILABLE:
+        raise ImportError(ESM3_INSTALL_MESSAGE)
+
+    if args.device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    else:
+        device = args.device
+    print(f"Device: {device}")
+
+    # Load checkpoint
+    print(f"Loading checkpoint: {args.checkpoint}")
+    checkpoint = torch.load(args.checkpoint, map_location=device)
+
+    records = []
+
+    if not args.is_esm3:
+        # ── ESM2 path ──────────────────────────────────────────────────────
+        print(f"Building ESM2 model: {args.esm_model}")
+        tokenizer  = EsmTokenizer.from_pretrained(f"facebook/{args.esm_model}")
+        esm2_model = build_esm2_from_checkpoint(checkpoint, args.esm_model, device)
+
+        seqs = list(parse_fasta(args.fasta_file))
+        print(f"Sequences to process: {len(seqs)}")
+
+        for idx, (seq_id, seq) in enumerate(seqs):
+            print(f"  [{idx+1}/{len(seqs)}] {seq_id}  (len={len(seq)})")
+            attn = extract_esm2_attn(esm2_model, tokenizer, seq, device)
+            records.append({
+                "name":              seq_id,
+                "sequence":          seq,
+                "attention_weights": attn_to_list(attn),
+                "backbone_type":     "esm2",
+                "attention_source":  "last_layer_avg_heads",
+                "tokenization":      "residue_tokens_only_no_special_tokens",
+            })
+
+    else:
+        # ── ESM3 path ──────────────────────────────────────────────────────
+        if not ESM3_AVAILABLE:
+            raise ImportError(ESM3_INSTALL_MESSAGE)
+        print("Building ESM3 model …")
+        tokenizer = EsmSequenceTokenizer()
+        raw_esm3  = build_esm3_from_checkpoint(checkpoint, device)
+        raw_esm3  = raw_esm3.to(device)
+
+        seqs = list(parse_fasta(args.fasta_file))
+        print(f"Sequences to process: {len(seqs)}")
+
+        for idx, (seq_id, seq) in enumerate(seqs):
+            print(f"  [{idx+1}/{len(seqs)}] {seq_id}  (len={len(seq)})")
+            attn, method = extract_esm3_attn(raw_esm3, tokenizer, seq, device)
+            records.append({
+                "name":              seq_id,
+                "sequence":          seq,
+                "attention_weights": attn_to_list(attn),
+                "backbone_type":     "esm3",
+                "attention_source":  f"last_layer_avg_heads_{method}",
+            })
+
+    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    with open(args.output, "w") as fh:
+        json.dump(records, fh)
+    print(f"\nSaved {len(records)} records → {args.output}")
+
+
+if __name__ == "__main__":
+    main()

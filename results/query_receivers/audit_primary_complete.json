@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "checks": 998281,
+  "failure_count_stored": 0,
+  "failures": [],
+  "feature_partitions": 8208,
+  "band_query_pairs_in_feature_store": 24642897,
+  "receiver_output_dirs_audited": 6
+}

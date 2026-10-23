@@ -1,0 +1,13 @@
+{
+  "all_replicates_invalid": 832,
+  "all_three_replicates_pb_valid": 46919,
+  "not_all_three_replicates_pb_valid": 832,
+  "original_neq_1_all_replicates_invalid": 832,
+  "original_neq_1_invalid_within_five_residues_of_terminus": 832,
+  "original_neq_1_invalid_within_two_residues_of_terminus": 832,
+  "original_neq_1_not_all_replicates_valid": 832,
+  "original_neq_exactly_1": 20421,
+  "residues": 47751,
+  "residues_with_any_z_frames": 832,
+  "status": "passed"
+}

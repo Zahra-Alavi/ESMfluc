@@ -1,0 +1,13 @@
+condition,split,sign,label,n_proteins,observed_consensus_band_count,null_mean_consensus_band_count,null_std_consensus_band_count,consensus_count_empirical_p_upper,consensus_count_null_z,null_inference_mode,consensus_count_empirical_q_bh
+esm2_frozen_bilstm_attn,test,1,flexibility_supporting,208,1103,245.033,15.76389581960663,0.000999000999000999,54.42607651167601,monte_carlo_block_shift,0.000999000999000999
+esm2_frozen_bilstm_attn,test,-1,rigidity_supporting,208,687,124.969,12.04072331789158,0.000999000999000999,46.67751140538754,monte_carlo_block_shift,0.000999000999000999
+esm2_top4_bilstm_attn,test,1,flexibility_supporting,208,1260,282.467,17.49465558317665,0.000999000999000999,55.876092864613064,monte_carlo_block_shift,0.000999000999000999
+esm2_top4_bilstm_attn,test,-1,rigidity_supporting,208,725,158.674,13.183760295740193,0.000999000999000999,42.95633319296512,monte_carlo_block_shift,0.000999000999000999
+esm2_top28_bilstm_attn,test,1,flexibility_supporting,208,1240,291.692,17.422074063229804,0.000999000999000999,54.43140676352958,monte_carlo_block_shift,0.000999000999000999
+esm2_top28_bilstm_attn,test,-1,rigidity_supporting,208,686,140.415,12.608161671740284,0.000999000999000999,43.272367074961046,monte_carlo_block_shift,0.000999000999000999
+esm3_frozen_bilstm_attn,test,1,flexibility_supporting,208,1145,255.359,15.091383928217745,0.000999000999000999,58.95025958067083,monte_carlo_block_shift,0.000999000999000999
+esm3_frozen_bilstm_attn,test,-1,rigidity_supporting,208,797,158.585,13.185470474413556,0.000999000999000999,48.418067541757125,monte_carlo_block_shift,0.000999000999000999
+esm3_top4_bilstm_attn,test,1,flexibility_supporting,208,1155,235.75,15.440981961129413,0.000999000999000999,59.53313087950544,monte_carlo_block_shift,0.000999000999000999
+esm3_top4_bilstm_attn,test,-1,rigidity_supporting,208,749,151.468,12.622452309369297,0.000999000999000999,47.33882017177189,monte_carlo_block_shift,0.000999000999000999
+esm3_top28_bilstm_attn,test,1,flexibility_supporting,208,1190,242.927,15.39307044152068,0.000999000999000999,61.52593165853393,monte_carlo_block_shift,0.000999000999000999
+esm3_top28_bilstm_attn,test,-1,rigidity_supporting,208,798,169.959,13.47801825106258,0.000999000999000999,46.59742911020962,monte_carlo_block_shift,0.000999000999000999

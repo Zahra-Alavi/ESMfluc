@@ -1,0 +1,9 @@
+{
+  "n_total_mdcath": 1069,
+  "n_atlas_pdb_codes": 1371,
+  "n_removed_pdb_overlap": 40,
+  "n_clean": 1029,
+  "filter_criterion": "first-4-char PDB code of mdCATH domain matches any ATLAS protein name",
+  "atlas_splits_dir": "./data_splits/atlas_grouped_v1",
+  "mdcath_test": "external_inputs/original_project/data/mdcath/per_temperature/test_320K.csv"
+}
