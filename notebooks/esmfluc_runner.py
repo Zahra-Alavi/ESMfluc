@@ -20,8 +20,8 @@ import zipfile
 import numpy as np
 import pandas as pd
 
-MANIFEST_SHA256 = "b49842999d976f65175e1c55f21a2cfec89c22593120bdcf6319570affb5a8f8"
-METADATA_SHA256 = "a4a3748a044f7c7f8820f7a29fc78e3ca342a4cc40ff74489521160e6e0ebbf1"
+MANIFEST_SHA256 = "04dcf87f23d58bfe43cac44e6c20e1be5b3e36148992de459406df89c4e65579"
+METADATA_SHA256 = "229c9b1482d990409a41d06ba044ca3832a7c8b2766b811610d49a4b35634454"
 SOURCES = (
     "esmfluc/training/models.py", "esmfluc/inference/get_attn.py",
     "esmfluc/analysis/bands/extract_signed_contribution_bands.py",
