@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "Please cite ESMfluc when using this software."
-title: "ESMfluc: Predicting Flexible Regions with Interpretable Protein Language Models"
+title: "ESMfluc: software for Protein Block variability prediction and contribution analysis"
 type: software
 version: 1.0.0
 license: MIT
@@ -8,11 +8,15 @@ repository-code: "https://github.com/Zahra-Alavi/ESMfluc"
 authors:
   - family-names: Tran
     given-names: Ngoc K.
+    affiliation: "Loyola Marymount University"
   - family-names: Rife
     given-names: Thomas
+    affiliation: "University of California San Diego"
   - family-names: Korpusik
     given-names: Mandy
+    affiliation: "Loyola Marymount University"
     orcid: "https://orcid.org/0000-0002-1721-4473"
   - family-names: Alavi
     given-names: Zara
+    affiliation: "Loyola Marymount University"
     orcid: "https://orcid.org/0000-0001-9760-174X"
