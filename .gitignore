@@ -36,3 +36,5 @@ external_inputs/
 **/pegasus_models/
 *.log
 *.partial
+data/mdcath/*
+!data/mdcath/domains.txt

@@ -141,6 +141,15 @@ Outputs include stricter endpoints, replicate-consensus performance and alignmen
 
 The frozen mdCATH cohort has 989 domains; 985 have length-aligned Neq targets. Its filter removes PDB-code overlap, then MMseqs2 matches at 30% identity and 50% **query (ATLAS)** coverage (`--cov-mode 2`). `filter_provenance.json` and cluster assignments retain the cohort/grouping record. Obtain source trajectories from mdCATH if rerunning cohort construction; do not silently substitute a current database release.
 
+mdCATH Neq targets: for each domain in `data/mdcath/domains.txt`, Protein Blocks are assigned with PBxplore to every saved frame of each replica. Neq is computed per replica and averaged over the five replicas at each temperature. The first and last two residues have no Protein Block and get Neq = 1. Domains are then split by MMseqs2 cluster (seed 42); the 1,069-domain test set at 320 K is the cohort before ATLAS filtering. This downloads every mdCATH trajectory file:
+
+```bash
+pip install -e ".[mdcath]"
+python -m esmfluc.datasets.compute_mdcath_neq --data_root data/mdcath
+MMSEQS_BIN=/path/to/mmseqs python -m esmfluc.datasets.split_mdcath_clusters --data_root data/mdcath
+python -m esmfluc.datasets.split_mdcath_by_temperature
+```
+
 Regenerate PEGASUS models/predictions and DynaMine scores from their providers. The PEGASUS workflow records its download URL and Docker image. The DynaMine client sends sequences to Bio2Byte; inspect inputs before submitting. Remote RMSF extraction can transfer large volumes and requires explicit confirmation:
 
 ```bash

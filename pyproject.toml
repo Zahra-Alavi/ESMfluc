@@ -43,6 +43,11 @@ structure = [
 data = [
     "remotezip>=0.12,<1",
 ]
+mdcath = [
+    "h5py==3.12.1",
+    "mdtraj>=1.9",
+    "pbxplore>=1.4,<2",
+]
 visualization = [
     "pheatmap>=1,<2",
     "plotly==5.24.1",

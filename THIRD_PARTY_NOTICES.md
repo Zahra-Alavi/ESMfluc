@@ -5,7 +5,8 @@ MIT applies to the ESMfluc authors' code and trained weights, not to every depen
 | Source | Use and attribution |
 | --- | --- |
 | [ATLAS](https://www.dsimb.inserm.fr/ATLAS/) | Molecular-dynamics simulations and Protein Block targets; cite the ATLAS paper. This repository supplies identifiers, split assignments and derived results, not a mirror of the source database. |
-| [mdCATH](https://github.com/compsciencelab/mdCATH) | Independent simulation benchmark. mdCATH-derived tables are included under CC-BY-4.0 with attribution to its authors; retrieve trajectories separately. |
+| [mdCATH](https://github.com/compsciencelab/mdCATH) | Independent simulation benchmark. mdCATH-derived tables and the domain list (`data/mdcath/domains.txt`) are included under CC-BY-4.0 with attribution to its authors; retrieve trajectories separately. `esmfluc/datasets/mdcath_convert.py` is derived from the mdCATH user utilities (MIT, Copyright (c) 2024 The authors). |
+| [PBxplore](https://github.com/pierrepo/PBxplore) | Protein Block assignment for the mdCATH Neq targets. MIT. Installed as a dependency, not bundled. |
 | [Protein Data Bank](https://www.wwpdb.org/about/usage-policies) | Experimental-coordinate-derived features; PDB data are CC0. Cite the relevant structure and PDB resources. The guanylate-kinase example uses 1ZNX, chain A. |
 | [ECOD](http://prodata.swmed.edu/ecod/) | Domain classifications used for grouping and split separation. Retrieve the recorded release; raw domain annotations are not mirrored here. Cite ECOD. |
 | [NetSurfP-3.0](https://services.healthtech.dtu.dk/services/NetSurfP-3.0/) | Secondary structure, solvent exposure and other residue annotations were obtained from the web server. Raw server exports remain private; regeneration and validation are described in the analysis guide. The standalone program is not bundled. |
