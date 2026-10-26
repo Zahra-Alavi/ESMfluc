@@ -24,7 +24,7 @@ python release/checkpoint_bundle.py --bundle models --condition esm3_top28_bilst
 
 The deposit will contain shared backbones, seed-specific tensor overrides, checksums and archived inference code. Checkpoints are restored losslessly; weights are not averaged. The notebook also needs the deposit's `metadata.zip`, whose checksum is pinned in its runner.
 
-The [Colab notebook](notebooks/ESMfluc.ipynb) accepts a sequence alone or a sequence and PDB structure. Clicking a source residue selects its contribution column. Receiving residues above an adjustable absolute-contribution threshold are highlighted in the sequence and, when supplied, the structure. Three-seed mode detects seed-stable bands; single-seed preview does not establish stability.
+The [Colab notebook](https://colab.research.google.com/github/Zahra-Alavi/ESMfluc/blob/main/notebooks/ESMfluc.ipynb) accepts a sequence alone or a sequence and PDB structure. Clicking a source residue selects its contribution column. Receiving residues above an adjustable absolute-contribution threshold are highlighted in the sequence and, when supplied, the structure. Three-seed mode detects seed-stable bands; single-seed preview does not establish stability.
 
 With a complete, matching local deposit bundle, the same viewer can be run locally:
 
