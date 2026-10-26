@@ -18,7 +18,7 @@ import ast
 import hashlib
 import json
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable
 
@@ -92,6 +92,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--random-seed", type=int, default=42)
     ap.add_argument("--require-complete", action="store_true",
                     help="Fail unless all 7 ESMfluc, DynaMine, NetSurfP, and PEGASUS inputs are valid")
+    ap.add_argument("--exclude-ends", type=int, default=0,
+                    help="Drop this many residues at each domain end from the Neq evaluation")
     ap.add_argument("--write-long", action="store_true",
                     help="Write a potentially large residue-level tidy CSV")
     return ap.parse_args()
@@ -748,7 +750,7 @@ def per_protein_metrics(
                 "derived": method.derived,
                 "domain": domain,
                 "cluster": clusters[domain],
-                "n_residues": len(sequence := sequences[domain]),
+                "n_residues": len(target),
                 "spearman": _safe_spearman(target, score),
                 "auroc": float("nan"),
             }
@@ -923,6 +925,12 @@ def main() -> None:
         raise ValueError("--linear-batch-size must be greater than zero")
     if args.force_linear and not args.infer_linear:
         raise ValueError("--force-linear requires --infer-linear")
+    if args.exclude_ends < 0:
+        raise ValueError("--exclude-ends must be zero or positive")
+    if args.exclude_ends and args.rmsf_csv is not None:
+        raise ValueError("--exclude-ends applies to the Neq target only; omit --rmsf-csv")
+    if args.exclude_ends and args.write_long:
+        raise ValueError("--write-long is not supported with --exclude-ends")
     source = args.source_dir
     strict_csv = args.strict_csv or source / "mdcath_320K_strict.csv"
     clusters_tsv = args.clusters_tsv or source / "mdcath_cluster_assignments.tsv"
@@ -933,6 +941,10 @@ def main() -> None:
     clusters = load_clusters(clusters_tsv, set(sequences))
     methods, input_audit = load_methods(args, cohort)
     coverage = validate_method_coverage(methods, sequences, set(neq))
+    if args.exclude_ends:
+        e = args.exclude_ends
+        neq = {d: v[e:-e] for d, v in neq.items()}
+        methods = [replace(m, scores={d: s[e:-e] for d, s in m.scores.items()}) for m in methods]
 
     expected_methods = set(ESM_BILSTM_CONDITIONS) | {
         LINEAR_CONDITION, "dynamine_neg_s2", "netsurfp_disorder", "netsurfp_rsa",
@@ -1026,6 +1038,7 @@ def main() -> None:
         "missing_methods": incomplete,
         "n_bootstrap": args.n_bootstrap,
         "random_seed": args.random_seed,
+        "exclude_ends": args.exclude_ends,
         "primary_metric": "macro mean of within-protein Spearman correlations",
         "ci": "95% percentile bootstrap resampling MMseqs2 clusters",
         "score_orientation": "higher score means more flexible; DynaMine S2 and PEGASUS mean LDDT are negated",

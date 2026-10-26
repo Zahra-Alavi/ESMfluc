@@ -179,6 +179,11 @@ class TestUnifiedBenchmarkValidation(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "greater than zero"):
                 main()
 
+    def test_exclude_ends_rejects_rmsf_target(self):
+        with patch("sys.argv", ["benchmark_unified_mdcath.py", "--exclude-ends", "2", "--rmsf-csv", "x.csv"]):
+            with self.assertRaisesRegex(ValueError, "Neq target only"):
+                main()
+
     def test_force_linear_requires_infer_linear(self):
         with patch("sys.argv", ["benchmark_unified_mdcath.py", "--force-linear"]):
             with self.assertRaisesRegex(ValueError, "requires --infer-linear"):

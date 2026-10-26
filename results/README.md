@@ -1,6 +1,6 @@
 # Saved paper results
 
-The CSV index maps all 69 source records to included files. Final figure PDFs are not included; their entries link to the assembly notes in the analysis guide. Table numbers follow the current S1–S9 supplement.
+The CSV index maps all 70 source records to included files. Final figure PDFs are not included; their entries link to the assembly notes in the analysis guide. Table numbers follow the current S1–S10 supplement.
 
 | Paper item | Included source |
 | --- | --- |
@@ -26,6 +26,7 @@ The CSV index maps all 69 source records to included files. Final figure PDFs ar
 | Table S7 and benchmark Results | [unified_method_summary.csv](../results/benchmark_unified_mdcath/unified_method_summary.csv) |
 | Table S8 and benchmark Results | [unified_method_summary.csv](../results/benchmark_unified_mdcath/unified_method_summary.csv) |
 | Table S9: paired differences | [unified_paired_deltas.csv](../results/benchmark_unified_mdcath/unified_paired_deltas.csv) |
+| Table S10: domain ends excluded | [unified_method_summary.csv](../results/benchmark_unified_mdcath_ends_excluded/unified_method_summary.csv) |
 | Local-property Results and Figure 4a-d | [headline_union_group_inference.csv](../results/local_properties/enrichment_with_test_strain/headline_union_group_inference.csv) |
 | Structural contacts, BH and Figure 4e | [headline_union_group_network_inference.csv](../results/apex_structure/headline_union_group_network_inference.csv) |
 | RSA-matched structural Results | [matched_apex_control_effect_summary.csv](../results/apex_structure/matched_apex_control_effect_summary.csv) |

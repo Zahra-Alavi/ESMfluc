@@ -1,6 +1,6 @@
 # Reproducing the analyses
 
-Run commands from the repository root in the Python 3.11 environment described in the README. Write reruns to new directories rather than overwriting the shipped results. `results/README.md` and its CSV index connect the paper's figures, claims and nine supplementary tables (S1–S9) to their saved sources.
+Run commands from the repository root in the Python 3.11 environment described in the README. Write reruns to new directories rather than overwriting the shipped results. `results/README.md` and its CSV index connect the paper's figures, claims and ten supplementary tables (S1–S10) to their saved sources.
 
 Weights, trajectories, raw server exports and large run arrays are not included. A published model deposit and upstream inputs are needed for a complete rerun. Some saved parameter files store relative paths; `provenance/original_checksums.json` lists the SHA-256 of each file as originally generated.
 
@@ -160,7 +160,7 @@ python -m esmfluc.benchmarks.benchmark_unified_mdcath --help
 python -m esmfluc.benchmarks.benchmark_atlas_mdcath_missing_metrics --help
 ```
 
-Tables S7–S8 and Figure 2c,d use `unified_method_summary.csv`. Table S9 uses `results/benchmark_unified_mdcath/unified_paired_deltas.csv`, with paired-domain differences and cluster-bootstrap intervals. The metric-completion module computes the reported mdCATH AUROC tables.
+Tables S7–S8 and Figure 2c,d use `unified_method_summary.csv`. Table S9 uses `results/benchmark_unified_mdcath/unified_paired_deltas.csv`, with paired-domain differences and cluster-bootstrap intervals. The metric-completion module computes the reported mdCATH AUROC tables. Table S10 repeats the Neq benchmark with `--exclude-ends 2` (without `--rmsf-csv`), written to `results/benchmark_unified_mdcath_ends_excluded/`.
 
 ## 8. Guanylate kinase
 
