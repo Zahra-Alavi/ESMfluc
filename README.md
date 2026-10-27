@@ -22,7 +22,7 @@ python release/download_zenodo.py --record 23580685 --condition esm3_top28_bilst
 python release/checkpoint_bundle.py --bundle models --condition esm3_top28_bilstm_attn --seed 1 --output models/seed_1.pth
 ```
 
-The [Colab notebook](https://colab.research.google.com/github/Zahra-Alavi/ESMfluc/blob/main/notebooks/ESMfluc.ipynb) takes a sequence and, optionally, a PDB structure. Click a residue to highlight the residues it contributes to. Bands are detected only when three seeds are run. Predictions at the first and last two residues lean toward single-PB, because the training labels set N_eq = 1 there by convention.
+The [Colab notebook](https://colab.research.google.com/github/Zahra-Alavi/ESMfluc/blob/main/notebooks/ESMfluc.ipynb) takes a sequence and, optionally, a PDB structure. Click a residue to highlight the residues it contributes to. With three seeds, only bands found by at least two seeds are kept; one seed gives candidate bands. Predictions at the first and last two residues lean toward single-PB, because the training labels set N_eq = 1 there by convention.
 
 To run the same viewer locally, also download `metadata.zip` from the Zenodo record into `models`:
 

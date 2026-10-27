@@ -1,6 +1,6 @@
 # Saved paper results
 
-The CSV index maps all 70 source records to included files. Final figure PDFs are not included; their entries link to the assembly notes in the analysis guide. Table numbers follow the current S1–S10 supplement.
+Each row points to the file behind a table, figure or number in the paper; [paper_to_files.csv](paper_to_files.csv) has the same 70 entries. Figure PDFs are not included; their rows link to the assembly notes in the analysis guide.
 
 | Paper item | Included source |
 | --- | --- |
@@ -74,5 +74,3 @@ The CSV index maps all 70 source records to included files. Final figure PDFs ar
 | Figure plotting/preparation code | [plot_seed_averaged_contributions.py](../esmfluc/visualization/plot_seed_averaged_contributions.py) |
 | Figure plotting/preparation code | [prepare_gk_figure_profiles.py](../examples/gk_wt/prepare_gk_figure_profiles.py) |
 | Figure plotting/preparation code | [plot_local_property_results.py](../esmfluc/analysis/bands/plot_local_property_results.py) |
-
-Use the filters in [paper_to_files.csv](paper_to_files.csv). Numerical inputs, manual assembly instructions and final figure files are different kinds of sources.

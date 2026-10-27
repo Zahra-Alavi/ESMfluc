@@ -1,8 +1,8 @@
 # Guanylate-kinase example: Figure 3
 
-The example uses the supplied 207-residue guanylate-kinase sequence and ESM3 top-28, seeds 1, 2 and 3. The structural panel uses PDB 1ZNX, chain A. The FASTA record is labeled `WT`; this label is only an identifier, not a separate model condition.
+The example uses the supplied 207-residue guanylate-kinase sequence and ESM3 top-28, seeds 1, 2 and 3. The structural panel uses PDB 1ZNX, chain A. The FASTA record is labeled `WT`.
 
-The shipped influence CSV, band CSV and audit are under `results/gk_wt_figure/`. They are compact saved sources, not a replacement for the contribution arrays. Restore matching checkpoints from the published deposit and retain the training run manifest before regenerating the figure inputs:
+The shipped influence CSV, band CSV and audit are under `results/gk_wt_figure/`. To regenerate them, restore the checkpoints from Zenodo and keep the training run manifest:
 
 ```bash
 python -m esmfluc.inference.extract_external_fasta_contributions --fasta_file examples/gk_wt/native_wt.fasta --source_manifest results/manifest.tsv --output_root runs/guanylate_kinase/exact_contributions --conditions esm3_top28_bilstm_attn --seeds 1 2 3
@@ -23,10 +23,10 @@ After detection and matching, export the heatmap and profile:
 python -m esmfluc.visualization.plot_seed_averaged_contributions --manifest-tsv runs/guanylate_kinase/exact_contributions/manifest.tsv --fasta-file examples/gk_wt/native_wt.fasta --profiles-manifest-tsv runs/guanylate_kinase/profiles/averaged_profiles_manifest.tsv --bands-csv runs/guanylate_kinase/bands/reproducibility/stable_signed_bands.csv --condition esm3_top28_bilstm_attn --protein WT --split gk_wt --output-prefix runs/guanylate_kinase/figure
 ```
 
-Write the preceding detector outputs under `runs/guanylate_kinase/bands/per_seed`, `mean` and `reproducibility` to use that command unchanged. The exporter writes PDF, editable SVG, influence and band tables, and a source-hash audit. It consumes saved intervals; it does not silently redetect bands during plotting.
+Write the preceding detector outputs under `runs/guanylate_kinase/bands/per_seed`, `mean` and `reproducibility` to use that command unchanged. The exporter writes PDF, editable SVG, influence and band tables, and a source-hash audit, using the saved bands.
 
-The heatmap is the elementwise mean of the three contribution matrices, not the product of separately averaged attention and evidence. The influence profile is its mean over query rows. Shading shows saved inclusive band intervals; dots show primary peaks. Colors saturate symmetrically at the 99th percentile of absolute contributions for display only.
+The heatmap is the elementwise mean of the three contribution matrices. The influence profile is its mean over query rows. Shading shows saved inclusive band intervals; dots show primary peaks. Colors saturate symmetrically at the 99th percentile of absolute contributions.
 
-The structure panel is rendered separately in ChimeraX. Align the input sequence to 1ZNX chain A before coloring; input positions and PDB numbers are not interchangeable, and unresolved positions remain missing. Color positive bands red and negative bands blue, marking their primary peaks with darker C-alpha spheres. A single view need not expose every peak; do not alter the mapping to improve visibility. Assemble the exported plot and structural view in a vector editor.
+The structure panel is rendered separately in ChimeraX. Align the input sequence to 1ZNX chain A before coloring, since input positions and PDB numbers differ. Color positive bands red and negative bands blue, with darker C-alpha spheres at their primary peaks. Assemble the exported plot and structure view in a vector editor.
 
-For interactive sequence/structure exploration, use the linked notebook viewer. Clicking selects one source residue's column, not an entire band; only receivers above the selected absolute-contribution threshold are highlighted.
+To explore the sequence and structure interactively, use the notebook viewer.
