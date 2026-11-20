@@ -1,6 +1,6 @@
 # Saved paper results
 
-Each row points to the file behind a table, figure or number in the paper; [paper_to_files.csv](paper_to_files.csv) has the same 70 entries. Figure PDFs are not included; their rows link to the assembly notes in the analysis guide.
+Each row points to the file behind a table, figure or number in the paper; [paper_to_files.csv](paper_to_files.csv) has the same 72 entries. Figure PDFs are not included; their rows link to the assembly notes in the analysis guide.
 
 | Paper item | Included source |
 | --- | --- |
@@ -36,6 +36,8 @@ Each row points to the file behind a table, figure or number in the paper; [pape
 | Shifted-control band-mask Jaccard | [band_mask_overlap_summary.csv](../results/shifted_attention_control/final_observed_shifted_comparison/band_mask_overlap_summary.csv) |
 | Interval structural sensitivity | [matched_band_interval_effect_summary.csv](../results/band_interval_structure/matched_band_interval_effect_summary.csv) |
 | Between-/within-condition agreement | [between_vs_within_agreement.csv](../results/atlas_performance/between_vs_within_agreement.csv) |
+| Results 3.1: chain-end AUROC change | [chain_end_metrics_by_seed.csv](../results/atlas_performance/chain_end_metrics_by_seed.csv) |
+| Additional file 1 S4: query dependence | [query_dependence_by_protein.csv](../results/query_receivers/query_dependence_by_protein.csv) |
 | ATLAS seed metrics and Figure 2a,b | [pooled_residue_performance_by_seed.csv](../results/atlas_performance/pooled_residue_performance_by_seed.csv) |
 | Completed mdCATH AUROC | [mdcath_neq_auroc_summary.csv](../results/benchmark_metric_completion/mdcath_neq_auroc_summary.csv) |
 | Band catalog counts | [signed_band_protein_summary.csv](../results/bands_seed_reproducibility/mean/signed_band_protein_summary.csv) |
